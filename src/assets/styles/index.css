@@ -1,0 +1,244 @@
+@import 'tailwindcss';
+
+/* Source globs / plugins live in the JS config; design tokens live below. */
+@config '../../../tailwind.config.js';
+
+/* ---------------------------------------------------------------------------
+   Design tokens — shared with the Alotel Spaces guest frontend, with the
+   admin-specific surfaces the Figma admin screen adds on top.
+--------------------------------------------------------------------------- */
+@theme {
+  /* Brand green — the signature colour of the product */
+  --color-brand-50: #edf7f1;
+  --color-brand-100: #d6ede0;
+  --color-brand-200: #aedbc2;
+  --color-brand-300: #7fc3a0;
+  --color-brand-400: #4ba57c;
+  --color-brand-500: #2a8a60;
+  --color-brand-600: #1b6e4a;
+  --color-brand-700: #12603f;
+  --color-brand-800: #0e4b32;
+  --color-brand-900: #0a3524;
+
+  /* Logo palette — taken from the supplied brand asset */
+  --color-logo: #5aaa40;
+  --color-logo-deep: #2a4a20;
+
+  /* Surfaces.
+     The admin canvas is a lighter wash of the brand tint than the guest site:
+     the dashboard is dense with white cards, and the full-strength #E8F0E0
+     leaves too little separation between card and page. */
+  --color-canvas: #f4f8f1;
+  --color-surface: #ffffff;
+  --color-tint: #e8f0e0;
+  --color-line: #e4ebdd;
+  --color-line-soft: #eef2ea;
+
+  /* Ink */
+  --color-ink: #16211a;
+  --color-ink-soft: #55635a;
+  --color-ink-muted: #8a998f;
+
+  /* Status accents — used by badges, priorities and KPI deltas */
+  --color-gold: #f0a92c;
+  --color-danger: #d14343;
+  --color-danger-soft: #fdeeee;
+  --color-info: #2f6fed;
+  --color-info-soft: #ecf2fe;
+  --color-warn: #c8742a;
+  --color-warn-soft: #fdf1e6;
+  --color-ok: #1f9254;
+  --color-ok-soft: #e8f6ee;
+
+  /* Typography */
+  --font-display: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: Georgia, 'Times New Roman', ui-serif, serif;
+
+  /* Radii + elevation */
+  --radius-card: 0.875rem;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px -14px rgb(16 24 40 / 0.1);
+  --shadow-raised: 0 12px 40px -16px rgb(16 24 40 / 0.24);
+
+  /* Layout */
+  --spacing-sidebar: 15.5rem;
+  --spacing-sidebar-collapsed: 4.25rem;
+  --spacing-topbar: 3.75rem;
+
+  /* Extra breakpoint for small phones */
+  --breakpoint-xs: 26rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Base layer
+--------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--color-ink);
+  }
+
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Components
+--------------------------------------------------------------------------- */
+@layer components {
+  /* Page heading treatment from the Figma admin screen: serif, italic,
+     echoing the "Alotel" wordmark. */
+  .page-title {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--color-ink);
+  }
+
+  /* Dense data table shared by every list screen */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+    background: var(--color-line-soft);
+    border-bottom: 1px solid var(--color-line);
+    white-space: nowrap;
+  }
+
+  .data-table td {
+    padding: 0.6875rem 0.875rem;
+    border-bottom: 1px solid var(--color-line);
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--color-line-soft);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Utilities
+--------------------------------------------------------------------------- */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Thin scrollbar for the sidebar and long panels */
+@utility scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+  &::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 99px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* Wide content (tables, charts) must scroll inside its own box, never the page */
+@utility table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Light type sitting directly on photography. A scrim alone can't be trusted —
+   the image crops differently at every viewport — so the text carries its own
+   shadow and stays readable wherever it lands. */
+@utility text-on-photo {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.45),
+    0 0 12px rgb(0 0 0 / 0.25);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.3s ease-out both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@utility animate-fade-in {
+  animation: fade-in 0.22s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

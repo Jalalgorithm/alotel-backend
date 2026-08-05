@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!--
+    Alotel Spaces Admin favicon.
+    Same mark as the guest site on a deep-forest tile, so the two apps are
+    distinguishable in the tab strip when both are open side by side.
+  -->
+  <rect width="32" height="32" rx="7" fill="#12603F" />
+  <g fill="none" stroke="#FFFFFF" stroke-width="2.6">
+    <path d="M16 6 L26 25 H6 Z" stroke-linejoin="round" />
+    <path d="M13 25 V19 a3 3 0 0 1 6 0 V25" />
+    <line x1="11.2" y1="20.6" x2="20.8" y2="20.6" stroke-linecap="round" />
+  </g>
+</svg>
