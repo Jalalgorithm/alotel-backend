@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
+import { toTemplate, toTemplatePayload } from '@/lib/contractSchema';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
@@ -140,17 +141,52 @@ const mockBookings = {
   },
 
   /* -------------------------------------------------------------- contracts */
+  async contractForBooking() {
+    await delay(200);
+    return null;
+  },
+
+  async sendContract() {
+    await delay(400);
+    return { detail: 'Mock contract sent.' };
+  },
+
+  async listContractTemplates() {
+    await delay(200);
+    return [];
+  },
+
+  async createContractTemplate(values) {
+    await delay(400);
+    return { id: createId('tpl'), ...values, isActive: true };
+  },
+
+  async updateContractTemplate(id, patch) {
+    await delay(300);
+    return { id, ...patch };
+  },
+
+  async deleteContractTemplate() {
+    await delay(250);
+    return { success: true };
+  },
+
   async listContracts() {
     await delay(280);
 
-    return clone(
-      readBookings().map((booking) => ({
-        ...booking,
-        contractType: resolveContractType(booking.nights, booking.country),
-        sentAt: booking.contract === 'Not sent' ? null : '2026-08-01',
-        signedAt: booking.contract === 'Signed' ? '2026-08-02' : null,
-      })),
-    );
+    // Same envelope as the real implementation, so the screen renders
+    // identically whichever backend is in play.
+    return {
+      items: clone(
+        readBookings().map((booking) => ({
+          ...booking,
+          contractType: resolveContractType(booking.nights, booking.country),
+          sentAt: booking.contract === 'Not sent' ? null : '2026-08-01',
+          signedAt: booking.contract === 'Signed' ? '2026-08-02' : null,
+        })),
+      ),
+      total: readBookings().length,
+    };
   },
 
   /* ----------------------------------------------------------- housekeeping */
@@ -276,7 +312,88 @@ const realBookings = {
   listCheckIns: async () => (await apiClient.get('/check-ins')).data,
   listReports: async () => (await apiClient.get('/checkout-reports')).data,
   saveReport: async (id, patch) => (await apiClient.patch(`/checkout-reports/${id}`, patch)).data,
-  listContracts: async () => (await apiClient.get('/contracts')).data,
+  /**
+   * There is no "list contracts" endpoint — a contract is only reachable
+   * through the booking it belongs to. So the screen is built from the admin
+   * booking list, and each row's contract state is fetched on demand rather
+   * than firing one request per row on load.
+   */
+  listContracts: async (params) => {
+    const { data } = await apiClient.get('/bookings/admin/list/', { params });
+    const rows = data?.results ?? data ?? [];
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        guest: row.guest_name || row.guest_email,
+        guestEmail: row.guest_email,
+        property: row.property_name,
+        country: row.country,
+        nights: row.nights,
+        checkIn: row.check_in_date,
+        checkOut: row.check_out_date,
+        status: row.status,
+
+        /**
+         * The list payload carries no contract fields, so the type is derived
+         * from the same nights + country matrix the API uses server-side, and
+         * the issuing state stays unknown until a row is opened — shown as
+         * "Not sent" rather than left blank.
+         */
+        contractType: resolveContractType(row.nights, row.country),
+        contract: 'Not sent',
+        sentAt: null,
+        signedAt: null,
+      })),
+      total: data?.count ?? rows.length,
+    };
+  },
+
+  /** The agreement text and its issuing state, for one booking. */
+  contractForBooking: async (bookingId) => {
+    try {
+      const { data } = await apiClient.get(`/contracts/booking/${bookingId}/text/`);
+      return {
+        contractId: data.contract_id,
+        status: data.status,
+        templateName: data.template_name,
+        templateVersion: data.template_version,
+        content: data.content ?? '',
+      };
+    } catch (error) {
+      // 404 simply means nothing has been issued for this booking yet.
+      if (error?.status === 404 || error?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  sendContract: async ({ bookingId, templateId }) => {
+    const { data } = await apiClient.post('/contracts/send/', {
+      booking_id: bookingId,
+      ...(templateId ? { template_id: templateId } : {}),
+    });
+    return data;
+  },
+
+  listContractTemplates: async () => {
+    const { data } = await apiClient.get('/contracts/templates/');
+    return (data?.results ?? data ?? []).map(toTemplate);
+  },
+
+  createContractTemplate: async (values) => {
+    const { data } = await apiClient.post('/contracts/templates/', toTemplatePayload(values));
+    return toTemplate(data);
+  },
+
+  updateContractTemplate: async (id, patch) => {
+    const { data } = await apiClient.patch(`/contracts/templates/${id}/`, toTemplatePayload(patch));
+    return toTemplate(data);
+  },
+
+  deleteContractTemplate: async (id) => {
+    await apiClient.delete(`/contracts/templates/${id}/`);
+    return { success: true };
+  },
   listHousekeeping: async () => (await apiClient.get('/housekeeping')).data,
   resolveMaintenance: async (id) => (await apiClient.patch(`/maintenance/${id}`, { status: 'Resolved' })).data,
   calendar: async (month) => (await apiClient.get('/calendar', { params: { month } })).data,
@@ -313,7 +430,17 @@ export const bookingService = {
   getCheckoutReports: () => backend.listReports(),
   saveCheckoutReport: (id, patch) => backend.saveReport(id, patch),
 
-  getContracts: () => backend.listContracts(),
+  /*
+   * Contracts follow the bookings flag, not the global one: they are wired to
+   * the real API while the surrounding operations screens are still mocked.
+   */
+  getContracts: (params) => bookingsBackend.listContracts(params),
+  getContractForBooking: (bookingId) => bookingsBackend.contractForBooking(bookingId),
+  sendContract: (payload) => bookingsBackend.sendContract(payload),
+  getContractTemplates: () => bookingsBackend.listContractTemplates(),
+  createContractTemplate: (values) => bookingsBackend.createContractTemplate(values),
+  updateContractTemplate: (id, patch) => bookingsBackend.updateContractTemplate(id, patch),
+  deleteContractTemplate: (id) => bookingsBackend.deleteContractTemplate(id),
 
   getHousekeeping: () => backend.listHousekeeping(),
   resolveMaintenance: (id) => backend.resolveMaintenance(id),

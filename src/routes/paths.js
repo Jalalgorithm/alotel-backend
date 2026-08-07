@@ -28,6 +28,7 @@ export const paths = {
   checkInOut: '/check-in-out',
   checkoutReports: '/checkout-reports',
   contracts: '/contracts',
+  contractTemplates: '/contracts/templates',
   housekeeping: '/housekeeping',
   calendar: '/calendar',
   cancellations: '/cancellations',

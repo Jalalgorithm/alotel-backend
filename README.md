@@ -192,7 +192,19 @@ and on Vercel with nothing to remember:
 |---|---|---|
 | `.env.development` | `npm run dev` | `http://localhost:8000/api/v1` |
 | `.env.production` | `npm run build` (what Vercel runs) | `https://api.alotel.synoloopsolutions.com.ng/api/v1` |
-| `.env.local` | always, and wins | your own overrides — gitignored |
+| `.env.local` | always, but see precedence below | your own overrides — gitignored |
+
+Vite's precedence runs lowest to highest:
+
+```
+.env  <  .env.local  <  .env.[mode]  <  .env.[mode].local
+```
+
+The mode file **beats** `.env.local`, which catches people out: a variable
+declared in `.env.development` — even as an empty string — overrides the same
+variable in `.env.local`. To override a committed value locally, put it in
+`.env.development.local` (or `.env.production.local`), which wins over
+everything and is also gitignored.
 
 Both mode files are committed on purpose: every `VITE_` value is compiled into
 the bundle and served to the browser, so none of it is secret. Anything that

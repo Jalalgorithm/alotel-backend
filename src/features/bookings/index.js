@@ -4,6 +4,7 @@ export { GuestsPage } from './components/GuestsPage';
 export { CheckInOutPage } from './components/CheckInOutPage';
 export { CheckoutReportsPage } from './components/CheckoutReportsPage';
 export { ContractsPage } from './components/ContractsPage';
+export { ContractTemplatesPage } from './components/ContractTemplatesPage';
 export { HousekeepingPage } from './components/HousekeepingPage';
 export { CalendarPage } from './components/CalendarPage';
 export { CancellationsPage } from './components/CancellationsPage';

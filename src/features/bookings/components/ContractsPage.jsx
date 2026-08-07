@@ -6,15 +6,21 @@ import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
+import { Alert } from '@/components/ui/Alert';
 import { AvatarCell } from '@/components/ui/Avatar';
-import { useBookingActions, useContracts } from '../hooks/useBookings';
+import { useBookingActions, useContracts, useContractTemplates, useSendContract } from '../hooks/useBookings';
 import { formatDate } from '@/utils/format';
 import { CONTRACT_MATRIX, CONTRACT_TEMPLATES } from '@/lib/mock/operations';
 import { toast } from '@/stores/uiStore';
 
 /** Contract lifecycle and the jurisdiction matrix that determines the template. */
 export const ContractsPage = () => {
-  const { data = [], isLoading } = useContracts();
+  const { data, isLoading } = useContracts();
+  const rows = data?.items ?? [];
+
+  const { data: templates = [] } = useContractTemplates();
+  const { sendContract, isPending, pendingId } = useSendContract();
+
   const actions = useBookingActions();
   const [template, setTemplate] = useState(null);
 
@@ -77,6 +83,8 @@ export const ContractsPage = () => {
             <Button
               size="xs"
               variant={row.contract === 'Overdue' ? 'dangerSoft' : 'primary'}
+              isLoading={isPending && pendingId === row.id}
+              onClick={() => sendContract({ bookingId: row.id })}
               isLoading={actions.pendingId === row.id}
               onClick={() => actions.sendContract(row.id)}
             >
@@ -139,7 +147,19 @@ export const ContractsPage = () => {
       <Card>
         <CardHeader title="All booking contracts" />
         <div className="border-t border-line">
-          <DataTable columns={columns} rows={data} isLoading={isLoading} emptyTitle="No contracts yet" />
+          {/*
+            Sending resolves a template from the booking's region and stay
+            length. With none configured the API has nothing to send, so say so
+            here rather than letting an admin click Send and get a 400.
+          */}
+          {templates.length === 0 && (
+            <Alert variant="warn" title="No contract templates configured" className="mb-4">
+              Contracts cannot be issued until at least one template exists. Add them under contract templates — the
+              API resolves which one applies from the property region and stay length.
+            </Alert>
+          )}
+
+          <DataTable columns={columns} rows={rows} isLoading={isLoading} emptyTitle="No bookings to contract yet" />
         </div>
       </Card>
 

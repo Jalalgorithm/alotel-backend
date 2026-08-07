@@ -35,6 +35,7 @@ const GuestsPage = load(() => import('@/features/bookings'), 'GuestsPage');
 const CheckInOutPage = load(() => import('@/features/bookings'), 'CheckInOutPage');
 const CheckoutReportsPage = load(() => import('@/features/bookings'), 'CheckoutReportsPage');
 const ContractsPage = load(() => import('@/features/bookings'), 'ContractsPage');
+const ContractTemplatesPage = load(() => import('@/features/bookings'), 'ContractTemplatesPage');
 const HousekeepingPage = load(() => import('@/features/bookings'), 'HousekeepingPage');
 const CalendarPage = load(() => import('@/features/bookings'), 'CalendarPage');
 const CancellationsPage = load(() => import('@/features/bookings'), 'CancellationsPage');
@@ -70,6 +71,7 @@ const SCREENS = [
   { path: paths.checkInOut, element: <CheckInOutPage />, capability: C.checkinManage },
   { path: paths.checkoutReports, element: <CheckoutReportsPage />, capability: C.checkoutReview },
   { path: paths.contracts, element: <ContractsPage />, capability: C.contractsManage },
+  { path: paths.contractTemplates, element: <ContractTemplatesPage />, capability: C.contractsManage },
   { path: paths.housekeeping, element: <HousekeepingPage />, capability: C.housekeepingView },
   { path: paths.calendar, element: <CalendarPage />, capability: C.calendarView },
   { path: paths.cancellations, element: <CancellationsPage />, capability: C.cancellationsManage },

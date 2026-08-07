@@ -38,6 +38,7 @@ export const NAV_GROUPS = [
       { id: 'check-in-out', label: 'Check-ins / Check-outs', to: paths.checkInOut, icon: 'LogIn', capability: C.checkinManage, badge: 'checkins' },
       { id: 'checkout-reports', label: 'Check-out Reports', to: paths.checkoutReports, icon: 'ClipboardCheck', capability: C.checkoutReview, badge: 'checkoutReports' },
       { id: 'contracts', label: 'Contracts & E-Sign', to: paths.contracts, icon: 'FileSignature', capability: C.contractsManage, badge: 'contracts' },
+      { id: 'contract-templates', label: 'Contract Templates', to: paths.contractTemplates, icon: 'FileText', capability: C.contractsManage },
       { id: 'housekeeping', label: 'Housekeeping', to: paths.housekeeping, icon: 'BrushCleaning', capability: C.housekeepingView, badge: 'housekeeping' },
       { id: 'calendar', label: 'Calendar', to: paths.calendar, icon: 'CalendarDays', capability: C.calendarView },
       { id: 'cancellations', label: 'Cancellations', to: paths.cancellations, icon: 'CalendarX', capability: C.cancellationsManage },

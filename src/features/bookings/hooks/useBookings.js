@@ -104,11 +104,89 @@ export const useCheckIns = () =>
     queryFn: bookingService.getCheckIns,
   });
 
-export const useContracts = () =>
+export const useContracts = (params = {}) =>
   useQuery({
-    queryKey: queryKeys.bookings.contracts(),
-    queryFn: bookingService.getContracts,
+    queryKey: queryKeys.bookings.contracts(params),
+    queryFn: () => bookingService.getContracts(params),
+    placeholderData: keepPreviousData,
   });
+
+/** Contract state for one booking, fetched only when a row is opened. */
+export const useContractForBooking = (bookingId) =>
+  useQuery({
+    queryKey: queryKeys.bookings.contractDetail(bookingId),
+    queryFn: () => bookingService.getContractForBooking(bookingId),
+    enabled: Boolean(bookingId),
+  });
+
+export const useContractTemplates = () =>
+  useQuery({
+    queryKey: queryKeys.bookings.contractTemplates(),
+    queryFn: bookingService.getContractTemplates,
+    staleTime: 1000 * 60 * 10,
+  });
+
+/** Create, edit, activate or remove a contract template. */
+export const useContractTemplateMutations = () => {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.bookings.contractTemplates() });
+
+  const create = useMutation({
+    mutationFn: bookingService.createContractTemplate,
+    onSuccess: (template) => {
+      invalidate();
+      toast.success('Template created', `${template.name} is ready to be issued.`);
+    },
+    onError: (error) => toast.error('Could not create the template', getErrorMessage(error)),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, patch }) => bookingService.updateContractTemplate(id, patch),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Template updated');
+    },
+    onError: (error) => toast.error('Could not update the template', getErrorMessage(error)),
+  });
+
+  const remove = useMutation({
+    mutationFn: bookingService.deleteContractTemplate,
+    onSuccess: () => {
+      invalidate();
+      toast.success('Template deleted');
+    },
+    onError: (error) => toast.error('Could not delete the template', getErrorMessage(error)),
+  });
+
+  return {
+    createTemplate: create.mutateAsync,
+    isCreating: create.isPending,
+    updateTemplate: update.mutate,
+    updateTemplateAsync: update.mutateAsync,
+    isUpdating: update.isPending,
+    deleteTemplate: remove.mutate,
+    isDeleting: remove.isPending,
+    pendingId: update.variables?.id ?? remove.variables,
+  };
+};
+
+/** Issue a contract for a booking through Dropbox Sign. */
+export const useSendContract = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: bookingService.sendContract,
+    onSuccess: (_data, { bookingId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.contractDetail(bookingId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all });
+      toast.success('Contract sent', 'The guest has been emailed a signing link.');
+    },
+    onError: (error) => toast.error('Could not send the contract', getErrorMessage(error)),
+  });
+
+  return { sendContract: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.bookingId };
+};
 
 export const useCalendar = (month) =>
   useQuery({
