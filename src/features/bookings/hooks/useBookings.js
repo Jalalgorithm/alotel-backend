@@ -98,12 +98,6 @@ export const useGuests = (params = {}) =>
     placeholderData: keepPreviousData,
   });
 
-export const useCheckIns = () =>
-  useQuery({
-    queryKey: [...queryKeys.bookings.all, 'check-ins'],
-    queryFn: bookingService.getCheckIns,
-  });
-
 export const useContracts = (params = {}) =>
   useQuery({
     queryKey: queryKeys.bookings.contracts(params),
@@ -194,6 +188,64 @@ export const useSendContract = () => {
   });
 
   return { sendContract: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.bookingId };
+};
+
+/* ------------------------------------------------------------- inspections */
+
+/** Which rooms already have photos for this booking's check-in/check-out. */
+export const useInspectionState = (bookingId) =>
+  useQuery({
+    queryKey: queryKeys.bookings.inspection(bookingId),
+    queryFn: () => bookingService.getInspectionState(bookingId),
+    enabled: Boolean(bookingId),
+  });
+
+export const useUploadInspectionPhoto = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: bookingService.uploadInspectionPhoto,
+    onSuccess: (_data, { bookingId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.inspection(bookingId) });
+    },
+    onError: (error) => toast.error('Could not upload the photo', getErrorMessage(error)),
+  });
+
+  return { uploadPhoto: mutation.mutate, isPending: mutation.isPending, pendingVariables: mutation.variables };
+};
+
+/** Transitions a booking `confirmed`/`active` → `active`. */
+export const useCompleteCheckIn = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: bookingService.completeCheckIn,
+    onSuccess: (result, { bookingId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.detail(bookingId) });
+      toast.success('Check-in completed', result?.detail);
+    },
+    onError: (error) => toast.error('Could not complete check-in', getErrorMessage(error)),
+  });
+
+  return { completeCheckIn: mutation.mutate, isPending: mutation.isPending };
+};
+
+/** Transitions a booking `active`/`completed` → `completed`. */
+export const useCompleteCheckOut = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: bookingService.completeCheckOut,
+    onSuccess: (result, { bookingId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.detail(bookingId) });
+      toast.success('Check-out completed', result?.detail);
+    },
+    onError: (error) => toast.error('Could not complete check-out', getErrorMessage(error)),
+  });
+
+  return { completeCheckOut: mutation.mutate, isPending: mutation.isPending };
 };
 
 export const useCalendar = (month) =>

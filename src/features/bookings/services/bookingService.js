@@ -7,7 +7,6 @@ import { jsonStorage } from '@/lib/storage';
 import {
   bookings,
   cancellations,
-  checkInsToday,
   checkoutReports,
   guests,
   maintenanceRequests,
@@ -111,17 +110,6 @@ const mockBookings = {
     });
   },
 
-  /* -------------------------------------------------------------- check-ins */
-  async listCheckIns() {
-    await delay(220);
-
-    const rows = readBookings();
-    return clone({
-      arrivals: checkInsToday,
-      departures: rows.filter((booking) => booking.status === 'Active').slice(0, 3),
-    });
-  },
-
   /* -------------------------------------------------------- check-out reports */
   async listReports() {
     await delay(260);
@@ -174,6 +162,27 @@ const mockBookings = {
   async deleteContractTemplate() {
     await delay(250);
     return { success: true };
+  },
+
+  /* ------------------------------------------------------------ inspections */
+  async uploadInspectionPhoto() {
+    await delay(400);
+    return { id: createId('insp'), photos: [] };
+  },
+
+  async getInspectionState() {
+    await delay(200);
+    return { checkin: null, checkout: null };
+  },
+
+  async completeCheckIn() {
+    await delay(400);
+    return { detail: 'Mock check-in completed.', status: 'active' };
+  },
+
+  async completeCheckOut() {
+    await delay(400);
+    return { detail: 'Mock check-out completed.', status: 'completed' };
   },
 
   async listContracts() {
@@ -314,7 +323,6 @@ const realBookings = {
   },
 
   listGuests: async (params) => (await apiClient.get('/guests', { params })).data,
-  listCheckIns: async () => (await apiClient.get('/check-ins')).data,
   listReports: async () => (await apiClient.get('/checkout-reports')).data,
   saveReport: async (id, patch) => (await apiClient.patch(`/checkout-reports/${id}`, patch)).data,
   /**
@@ -411,6 +419,47 @@ const realBookings = {
     await apiClient.delete(`/contracts/templates/${id}/`);
     return { success: true };
   },
+
+  /** One photo per call — the API has no bulk-upload variant. */
+  uploadInspectionPhoto: async ({ bookingId, stage, roomArea, file, caption }) => {
+    const form = new FormData();
+    form.append('room_area', roomArea);
+    form.append('file', file);
+    if (caption) form.append('caption', caption);
+
+    const { data } = await apiClient.post(`/inspections/${bookingId}/${stage}/`, form);
+    return data;
+  },
+
+  /**
+   * Which rooms already have photos for this booking, so re-opening one an
+   * admin (or a colleague) already started doesn't look like a blank slate —
+   * the backend's `Inspection` row is `get_or_create`d per (booking, stage),
+   * so progress genuinely persists server-side.
+   */
+  getInspectionState: async (bookingId) => {
+    const { data } = await apiClient.get(`/inspections/${bookingId}/compare/`);
+    return {
+      checkin: data?.checkin?.photos_by_area ?? {},
+      checkout: data?.checkout?.photos_by_area ?? {},
+    };
+  },
+
+  completeCheckIn: async ({ bookingId, notes, contractId }) => {
+    const { data } = await apiClient.post(`/inspections/${bookingId}/checkin/complete/`, {
+      ...(notes ? { notes } : {}),
+      ...(contractId ? { contract_id: contractId } : {}),
+    });
+    return data;
+  },
+
+  completeCheckOut: async ({ bookingId, notes }) => {
+    const { data } = await apiClient.post(`/inspections/${bookingId}/checkout/complete/`, {
+      ...(notes ? { notes } : {}),
+    });
+    return data;
+  },
+
   listHousekeeping: async () => (await apiClient.get('/housekeeping')).data,
   resolveMaintenance: async (id) => (await apiClient.patch(`/maintenance/${id}`, { status: 'Resolved' })).data,
   calendar: async (month) => (await apiClient.get('/calendar', { params: { month } })).data,
@@ -419,9 +468,10 @@ const realBookings = {
 };
 
 /**
- * Reservations are wired to the real API; the surrounding operations features
- * (guests, check-in/out, contracts, housekeeping, calendar) are still mocked,
- * so each half picks its own backend.
+ * Reservations, contracts and inspections (check-in/out) are wired to the
+ * real API via `bookingsBackend`; the surrounding operations features
+ * (guests, housekeeping, calendar, checkout reports) are still mocked and
+ * stay on the global `backend` flag.
  */
 const bookingsBackend = env.useMockBookings ? mockBookings : realBookings;
 const backend = env.useMock ? mockBookings : realBookings;
@@ -442,7 +492,6 @@ export const bookingService = {
   updateBooking: (id, patch) => mockBookings.update(id, patch),
 
   getGuests: (params) => backend.listGuests(params),
-  getCheckIns: () => backend.listCheckIns(),
 
   getCheckoutReports: () => backend.listReports(),
   saveCheckoutReport: (id, patch) => backend.saveReport(id, patch),
@@ -459,6 +508,11 @@ export const bookingService = {
   createContractTemplate: (values) => bookingsBackend.createContractTemplate(values),
   updateContractTemplate: (id, patch) => bookingsBackend.updateContractTemplate(id, patch),
   deleteContractTemplate: (id) => bookingsBackend.deleteContractTemplate(id),
+
+  uploadInspectionPhoto: (payload) => bookingsBackend.uploadInspectionPhoto(payload),
+  getInspectionState: (bookingId) => bookingsBackend.getInspectionState(bookingId),
+  completeCheckIn: (payload) => bookingsBackend.completeCheckIn(payload),
+  completeCheckOut: (payload) => bookingsBackend.completeCheckOut(payload),
 
   getHousekeeping: () => backend.listHousekeeping(),
   resolveMaintenance: (id) => backend.resolveMaintenance(id),

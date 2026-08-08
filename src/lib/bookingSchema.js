@@ -163,13 +163,14 @@ export const toReceipt = (raw) => {
  * Anything left at "All" is omitted — the endpoint treats an unrecognised
  * value as a real filter and would return nothing.
  */
-export const toAdminListParams = ({ query, status, checkInFrom, checkInTo, page = 1 } = {}) => {
+export const toAdminListParams = ({ query, status, checkInFrom, checkInTo, page = 1, pageSize } = {}) => {
   const params = { page };
 
   if (query?.trim()) params.q = query.trim();
   if (status && status !== 'All') params.status = status;
   if (checkInFrom) params.check_in_from = checkInFrom;
   if (checkInTo) params.check_in_to = checkInTo;
+  if (pageSize) params.page_size = pageSize;
 
   return params;
 };

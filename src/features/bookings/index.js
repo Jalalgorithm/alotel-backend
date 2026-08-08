@@ -14,7 +14,6 @@ export {
   useBooking,
   useBookingActions,
   useGuests,
-  useCheckIns,
   useContracts,
   useCalendar,
   useCancellations,
