@@ -5,6 +5,7 @@ import { clone, createId, delay, paginate } from '@/lib/mock/utils';
 import { jsonStorage } from '@/lib/storage';
 import { auditLog, ROLES, staff } from '@/lib/mock/people';
 import { getInitials } from '@/utils/format';
+import { toApiPayload, toUiStaff } from '../utils/staffMapping';
 
 /**
  * Staff administration, role reference and the audit trail.
@@ -57,15 +58,22 @@ const mockPeople = {
     }
 
     const role = ROLES.find((entry) => entry.id === payload.role) ?? ROLES[1];
+    const name = [payload.firstName, payload.lastName].filter(Boolean).join(' ').trim();
     const member = {
       id: createId('stf'),
-      initials: getInitials(payload.name),
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      otherName: payload.otherName ?? '',
+      name,
+      initials: getInitials(name),
       color: role.color,
+      role: payload.role,
+      email: payload.email,
+      password: payload.password,
+      assignedProperties: payload.assignedProperties ?? [],
       status: 'Active',
-      password: 'Admin123',
       joinedAt: new Date().toISOString(),
       lastActive: null,
-      ...payload,
     };
 
     jsonStorage.write(STAFF_KEY, [...rows, member]);
@@ -81,7 +89,12 @@ const mockPeople = {
     const index = rows.findIndex((member) => member.id === id);
     if (index < 0) throw new ApiError('Staff member not found.', 404);
 
-    rows[index] = { ...rows[index], ...patch };
+    const updated = { ...rows[index], ...patch };
+    if (patch.firstName !== undefined || patch.lastName !== undefined) {
+      updated.name = [updated.firstName, updated.lastName].filter(Boolean).join(' ').trim();
+      updated.initials = getInitials(updated.name);
+    }
+    rows[index] = updated;
     jsonStorage.write(STAFF_KEY, rows);
 
     if (patch.status) {
@@ -111,19 +124,28 @@ const mockPeople = {
 };
 
 const realPeople = {
-  listStaff: async () => (await apiClient.get('/staff')).data,
-  createStaff: async (payload) => (await apiClient.post('/staff', payload)).data,
-  updateStaff: async (id, patch) => (await apiClient.patch(`/staff/${id}`, patch)).data,
-  listRoles: async () => (await apiClient.get('/roles')).data,
-  listAudit: async (params) => (await apiClient.get('/audit-log', { params })).data,
+  listStaff: async () => {
+    const { data } = await apiClient.get('/admin/staff/', { params: { page_size: 100 } });
+    return (data.results ?? []).map(toUiStaff);
+  },
+  createStaff: async (payload) => {
+    const { data } = await apiClient.post('/admin/staff/', toApiPayload(payload, 'create'));
+    return toUiStaff(data);
+  },
+  updateStaff: async (id, patch) => {
+    const { data } = await apiClient.patch(`/admin/staff/${id}/`, toApiPayload(patch, 'edit'));
+    return toUiStaff(data);
+  },
 };
 
-const backend = env.useMock ? mockPeople : realPeople;
+const staffBackend = env.useMockPeople ? mockPeople : realPeople;
 
 export const peopleService = {
-  getStaff: () => backend.listStaff(),
-  createStaff: (payload) => backend.createStaff(payload),
-  updateStaff: (id, patch) => backend.updateStaff(id, patch),
-  getRoles: () => backend.listRoles(),
-  getAuditLog: (params) => backend.listAudit(params),
+  getStaff: () => staffBackend.listStaff(),
+  createStaff: (payload) => staffBackend.createStaff(payload),
+  updateStaff: (id, patch) => staffBackend.updateStaff(id, patch),
+  // Roles are this app's own capability matrix, not backend data — never fetched over the network.
+  getRoles: () => mockPeople.listRoles(),
+  // Audit log has no wired endpoint yet — stays on mock data regardless of useMockPeople.
+  getAuditLog: (params) => mockPeople.listAudit(params),
 };

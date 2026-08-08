@@ -31,6 +31,12 @@ export const env = {
   useMockProperties: toBool(import.meta.env.VITE_USE_MOCK_PROPERTIES, useMock),
 
   /**
+   * Staff (Facility Manager / Housekeeper) accounts. Roles and the audit log
+   * stay on mock data even when this is false.
+   */
+  useMockPeople: toBool(import.meta.env.VITE_USE_MOCK_PEOPLE, useMock),
+
+  /**
    * Reservations and payments. Separate from the surrounding operations
    * features (check-in/out, housekeeping, contracts), which are still mocked.
    */

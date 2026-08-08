@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { propertyService } from '../services/propertyService';
 import { queryKeys } from '@/lib/queryKeys';
@@ -24,6 +24,21 @@ export const useProperty = (id) =>
     queryKey: queryKeys.properties.detail(id),
     queryFn: () => propertyService.getProperty(id),
     enabled: Boolean(id),
+  });
+
+/**
+ * Resolve a handful of properties by id, independent of pagination/search —
+ * for rendering something already chosen elsewhere (e.g. a staff member's
+ * assigned-properties list) even when it isn't on the current results page.
+ */
+export const usePropertiesByIds = (ids = []) =>
+  useQueries({
+    queries: ids.map((id) => ({
+      queryKey: queryKeys.properties.detail(id),
+      queryFn: () => propertyService.getProperty(id),
+      enabled: Boolean(id),
+      staleTime: Infinity,
+    })),
   });
 
 /**

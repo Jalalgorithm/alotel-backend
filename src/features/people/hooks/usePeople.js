@@ -40,7 +40,7 @@ export const useStaffMutations = () => {
     mutationFn: peopleService.createStaff,
     onSuccess: (member) => {
       invalidate();
-      toast.success('Invitation sent', `${member.name} will receive an email to set up 2FA.`);
+      toast.success('Staff member created', member.name);
     },
     onError: (error) => toast.error('Could not add staff member', getErrorMessage(error)),
   });
@@ -56,6 +56,9 @@ export const useStaffMutations = () => {
 
   return {
     createStaff: create.mutate,
+    // Lets the caller await the response to show the just-set password once —
+    // the backend never returns it again after this call.
+    createStaffAsync: create.mutateAsync,
     isCreating: create.isPending,
     updateStaff: (id, patch, message) => update.mutate({ id, patch, message }),
     isUpdating: update.isPending,

@@ -16,13 +16,23 @@ export const loginSchema = z.object({
   remember: z.boolean().optional().default(true),
 });
 
-export const staffSchema = z.object({
-  name: z.string().min(2, 'Full name is required'),
+const staffBaseFields = {
+  firstName: z.string().min(1, 'First name is required'),
+  lastName: z.string().min(1, 'Last name is required'),
+  otherName: z.string().optional().default(''),
+  role: z.enum(['L2', 'L3'], { message: 'Select a role level' }),
+  assignedProperties: z.array(z.string()).optional().default([]),
+};
+
+/** New staff members also need a login — the backend requires an 8+ char password. */
+export const createStaffSchema = z.object({
+  ...staffBaseFields,
   email: emailField,
-  phone: phoneField,
-  role: z.string().min(1, 'Select a role level'),
-  regions: z.string().min(2, 'Assign at least one region'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
+
+/** Role and email can't change once the account exists. */
+export const editStaffSchema = z.object(staffBaseFields);
 
 /**
  * Only `name`, `country` and `value` reach the API — it stores one percentage

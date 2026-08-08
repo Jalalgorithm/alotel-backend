@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m venv .venv)",
+      "Bash(\".venv/Scripts/python.exe\" -m pip install -q -r requirements.txt)",
+      "Bash(\".venv/Scripts/python.exe\" manage.py check)",
+      "Bash(\".venv/Scripts/python.exe\" -c \"import secrets; print\\(secrets.token_urlsafe\\(50\\)\\)\")",
+      "Bash(\".venv/Scripts/python.exe\" manage.py migrate)",
+      "Bash(.venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(\".venv/Scripts/python.exe\" manage.py runserver 8000)",
+      "Bash(chromium-cli --help)",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(mkdir -p \"C:/Users/dell/AppData/Local/Temp/claude/c--Users-dell-Desktop-works-Syntechtic-Alotel-New-folder-alotel/ef64c253-14cf-4391-9c1e-58cb3b5786b7/scratchpad/pw-test\")",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(node \"C:/Users/dell/AppData/Local/Temp/claude/c--Users-dell-Desktop-works-Syntechtic-Alotel-New-folder-alotel/ef64c253-14cf-4391-9c1e-58cb3b5786b7/scratchpad/staff-e2e.mjs\")",
+      "Bash(\".venv/Scripts/python.exe\" disable_admin_2fa.py --email super@aotel.test)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\dell\\Desktop\\works\\Syntechtic\\Alotel\\New folder\\aotel-backend\\aotel"
+    ]
+  }
+}
