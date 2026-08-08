@@ -40,6 +40,7 @@ export const queryKeys = {
     checkouts: () => ['bookings', 'checkout-reports'],
     contracts: (filters = {}) => ['bookings', 'contracts', filters],
     contractDetail: (id) => ['bookings', 'contract', id],
+    contractStatus: (contractId) => ['bookings', 'contract-status', contractId],
     contractTemplates: () => ['bookings', 'contract-templates'],
     housekeeping: () => ['bookings', 'housekeeping'],
     verifications: () => ['bookings', 'verifications'],

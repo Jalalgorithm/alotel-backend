@@ -151,6 +151,11 @@ const mockBookings = {
     return { detail: 'Mock contract sent.' };
   },
 
+  async getContractStatus() {
+    await delay(200);
+    return null;
+  },
+
   async listContractTemplates() {
     await delay(200);
     return [];
@@ -375,6 +380,18 @@ const realBookings = {
     return data;
   },
 
+  /** The signed-document link only lives on the status endpoint, not the text one. */
+  getContractStatus: async (contractId) => {
+    const { data } = await apiClient.get(`/contracts/${contractId}/status/`);
+    return {
+      contractId: data.contract_id,
+      status: data.status,
+      signedDocumentUrl: data.signed_document_url || '',
+      sentAt: data.sent_at,
+      signedAt: data.signed_at,
+    };
+  },
+
   listContractTemplates: async () => {
     const { data } = await apiClient.get('/contracts/templates/');
     return (data?.results ?? data ?? []).map(toTemplate);
@@ -436,6 +453,7 @@ export const bookingService = {
    */
   getContracts: (params) => bookingsBackend.listContracts(params),
   getContractForBooking: (bookingId) => bookingsBackend.contractForBooking(bookingId),
+  getContractStatus: (contractId) => bookingsBackend.getContractStatus(contractId),
   sendContract: (payload) => bookingsBackend.sendContract(payload),
   getContractTemplates: () => bookingsBackend.listContractTemplates(),
   createContractTemplate: (values) => bookingsBackend.createContractTemplate(values),

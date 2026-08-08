@@ -40,6 +40,25 @@ export const regionLabel = (value) =>
 export const stayTypeLabel = (value) =>
   TEMPLATE_STAY_TYPES.find((type) => type.value === value)?.label ?? value;
 
+/**
+ * A booking only gets a signed contract via Dropbox Sign once it's at or
+ * beyond this length — shorter stays use the `agreement_accepted` checkbox
+ * flow instead (`POST /bookings/<id>/accept-agreement/`), and `ContractSendView`
+ * rejects anything shorter with a 400. Mirrors the backend's default
+ * `BOOKING_CONTRACT_REQUIRED_MIN_NIGHTS` (~6 months); the admin bookings list
+ * doesn't return `contract_required` directly, so this is re-derived from nights.
+ */
+export const CONTRACT_REQUIRED_MIN_NIGHTS = 183;
+
+/** `BookingContract.status` (API, snake_case) → the table/badge label. */
+export const CONTRACT_STATUS_LABEL = {
+  not_sent: 'Not sent',
+  sent: 'Sent',
+  signed: 'Signed',
+  declined: 'Declined',
+  expired: 'Expired',
+};
+
 /** Normalise one template from the API. */
 export const toTemplate = (raw) => ({
   id: raw.id,

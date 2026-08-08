@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Download, FileText } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Download, FileText, Loader2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
@@ -8,21 +8,36 @@ import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { Alert } from '@/components/ui/Alert';
 import { AvatarCell } from '@/components/ui/Avatar';
-import { useBookingActions, useContracts, useContractTemplates, useSendContract } from '../hooks/useBookings';
+import {
+  useContractForBooking,
+  useContracts,
+  useContractStatus,
+  useContractTemplates,
+  useSendContract,
+} from '../hooks/useBookings';
 import { formatDate } from '@/utils/format';
-import { CONTRACT_MATRIX, CONTRACT_TEMPLATES } from '@/lib/mock/operations';
-import { toast } from '@/stores/uiStore';
+import { CONTRACT_MATRIX } from '@/lib/mock/operations';
+import { CONTRACT_REQUIRED_MIN_NIGHTS, CONTRACT_STATUS_LABEL } from '@/lib/contractSchema';
 
 /** Contract lifecycle and the jurisdiction matrix that determines the template. */
 export const ContractsPage = () => {
   const { data, isLoading } = useContracts();
-  const rows = data?.items ?? [];
-
   const { data: templates = [] } = useContractTemplates();
   const { sendContract, isPending, pendingId } = useSendContract();
 
-  const actions = useBookingActions();
-  const [template, setTemplate] = useState(null);
+  /**
+   * The admin list endpoint carries no contract field, so every row starts
+   * as "Not sent" (see `listContracts` in bookingService.js). Right after a
+   * successful send, this reflects that one row's real result immediately —
+   * it's deliberately session-local, not a fix for the missing bulk status.
+   */
+  const [sentOverrides, setSentOverrides] = useState({});
+  const rows = useMemo(
+    () => (data?.items ?? []).map((row) => (sentOverrides[row.id] ? { ...row, ...sentOverrides[row.id] } : row)),
+    [data, sentOverrides],
+  );
+
+  const [activeRow, setActiveRow] = useState(null);
 
   const columns = [
     {
@@ -60,39 +75,58 @@ export const ContractsPage = () => {
         <span className="whitespace-nowrap text-ink-muted">{row.signedAt ? formatDate(row.signedAt) : '—'}</span>
       ),
     },
-    { key: 'contract', header: 'Status', render: (row) => <StatusBadge status={row.contract} /> },
+    {
+      key: 'contract',
+      header: (
+        <span title="Reflects actions taken this session, not a live poll — open a booking's contract to see its confirmed status.">
+          Status
+        </span>
+      ),
+      render: (row) => <StatusBadge status={row.contract} />,
+    },
     {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (row) => (
-        <div className="flex justify-end gap-1.5">
-          <Button size="xs" onClick={() => setTemplate(row.contractType)}>
-            Template
-          </Button>
-          {row.contract === 'Signed' ? (
-            <Button
-              size="xs"
-              variant="ghost"
-              leftIcon={<Download className="size-3" aria-hidden="true" />}
-              onClick={() => toast.success('Download started', `${row.contractType} · #${row.id}`)}
-            >
-              PDF
+      render: (row) => {
+        const eligible = row.nights >= CONTRACT_REQUIRED_MIN_NIGHTS;
+
+        return (
+          <div className="flex justify-end gap-1.5">
+            <Button size="xs" onClick={() => setActiveRow(row)}>
+              Contract
             </Button>
-          ) : (
-            <Button
-              size="xs"
-              variant={row.contract === 'Overdue' ? 'dangerSoft' : 'primary'}
-              isLoading={isPending && pendingId === row.id}
-              onClick={() => sendContract({ bookingId: row.id })}
-              isLoading={actions.pendingId === row.id}
-              onClick={() => actions.sendContract(row.id)}
-            >
-              {row.contract === 'Overdue' ? 'Re-send' : 'Send'}
-            </Button>
-          )}
-        </div>
-      ),
+            {!eligible ? (
+              <Badge variant="neutral" title="Stays under ~6 months use the booking-agreement checkbox instead of a signed contract.">
+                Uses booking agreement
+              </Badge>
+            ) : row.contract !== 'Signed' ? (
+              <Button
+                size="xs"
+                variant={row.contract === 'Declined' || row.contract === 'Expired' ? 'dangerSoft' : 'primary'}
+                isLoading={isPending && pendingId === row.id}
+                onClick={() =>
+                  sendContract(
+                    { bookingId: row.id },
+                    {
+                      onSuccess: (result) =>
+                        setSentOverrides((current) => ({
+                          ...current,
+                          [row.id]: {
+                            contract: CONTRACT_STATUS_LABEL[result.status] ?? 'Sent',
+                            sentAt: result.sent_at,
+                          },
+                        })),
+                    },
+                  )
+                }
+              >
+                {row.contract === 'Not sent' ? 'Send' : 'Re-send'}
+              </Button>
+            ) : null}
+          </div>
+        );
+      },
     },
   ];
 
@@ -163,40 +197,96 @@ export const ContractsPage = () => {
         </div>
       </Card>
 
-      <Modal
-        isOpen={Boolean(template)}
-        onClose={() => setTemplate(null)}
-        size="lg"
-        title={`Template — ${template ?? ''}`}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setTemplate(null)}>Close</Button>
+      <ContractModal
+        row={activeRow}
+        onClose={() => setActiveRow(null)}
+        onSent={(result) =>
+          setSentOverrides((current) => ({
+            ...current,
+            [activeRow.id]: { contract: CONTRACT_STATUS_LABEL[result.status] ?? 'Sent', sentAt: result.sent_at },
+          }))
+        }
+        isSending={isPending}
+        sendContract={sendContract}
+      />
+    </div>
+  );
+};
+
+/**
+ * The actual contract for one booking, fetched on open rather than for every
+ * row on load — the API only exposes this per-booking, not in bulk.
+ */
+const ContractModal = ({ row, onClose, onSent, isSending, sendContract }) => {
+  const isOpen = Boolean(row);
+  const { data: contract, isLoading } = useContractForBooking(row?.id);
+  const { data: status } = useContractStatus(contract?.contractId, { enabled: contract?.status === 'signed' });
+  const eligible = row ? row.nights >= CONTRACT_REQUIRED_MIN_NIGHTS : false;
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      size="lg"
+      title={row ? `Contract — ${row.guest}` : ''}
+      description={row ? `#${row.id} · ${row.contractType}` : ''}
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button onClick={onClose}>Close</Button>
+          {status?.signedDocumentUrl && (
             <Button
               variant="primary"
+              as="a"
+              href={status.signedDocumentUrl}
+              target="_blank"
+              rel="noreferrer"
               leftIcon={<Download className="size-3.5" aria-hidden="true" />}
-              onClick={() => {
-                toast.success('Template downloaded', template);
-                setTemplate(null);
-              }}
             >
-              Download
+              View signed PDF
             </Button>
+          )}
+        </div>
+      }
+    >
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-[12.5px] text-ink-muted">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          Loading contract…
+        </div>
+      ) : contract ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <StatusBadge status={CONTRACT_STATUS_LABEL[contract.status] ?? contract.status} />
+            {contract.templateName && (
+              <span className="text-[11px] text-ink-muted">
+                {contract.templateName} · v{contract.templateVersion}
+              </span>
+            )}
           </div>
-        }
-      >
-        {CONTRACT_TEMPLATES[template] ? (
           <pre className="whitespace-pre-wrap rounded-lg bg-line-soft p-4 font-sans text-[11.5px] leading-6 text-ink-soft">
-            {CONTRACT_TEMPLATES[template]}
+            {contract.content || 'This contract has no body on record.'}
           </pre>
-        ) : (
-          <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <FileText className="size-6 text-ink-muted" aria-hidden="true" />
-            <p className="text-[12.5px] text-ink-soft">
-              The full text for <strong>{template}</strong> is held by the legal team.
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <FileText className="size-6 text-ink-muted" aria-hidden="true" />
+          <p className="text-[12.5px] text-ink-soft">No contract has been issued for this booking yet.</p>
+          {eligible ? (
+            <Button
+              size="sm"
+              variant="primary"
+              isLoading={isSending}
+              onClick={() => sendContract({ bookingId: row.id }, { onSuccess: onSent })}
+            >
+              Send now
+            </Button>
+          ) : (
+            <p className="text-[11px] text-ink-muted">
+              This stay is under {CONTRACT_REQUIRED_MIN_NIGHTS} nights — it uses the booking-agreement checkbox instead.
             </p>
-          </div>
-        )}
-      </Modal>
-    </div>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 };

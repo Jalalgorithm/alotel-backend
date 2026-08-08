@@ -51,7 +51,7 @@ export const NAV_GROUPS = [
       { id: 'payments', label: 'Payments', to: paths.payments, icon: 'CreditCard', capability: C.financeView, badge: 'payments' },
       { id: 'payouts', label: 'Payouts', to: paths.payouts, icon: 'Banknote', capability: C.financeView },
       { id: 'revenue', label: 'Revenue & Invoice', to: paths.revenue, icon: 'ReceiptText', capability: C.financeView },
-      { id: 'tax', label: 'Tax Management', to: paths.tax, icon: 'Landmark', capability: C.taxManage },
+      { id: 'tax', label: 'Tax Builder', to: paths.tax, icon: 'Landmark', capability: C.taxManage },
     ],
   },
   {

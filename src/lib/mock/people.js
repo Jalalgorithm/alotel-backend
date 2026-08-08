@@ -255,22 +255,3 @@ export const staff = [
     joinedAt: '2025-09-01T09:00:00.000Z',
   },
 ];
-
-/* -------------------------------------------------------------------------- */
-/* Audit log                                                                   */
-/* -------------------------------------------------------------------------- */
-
-export const auditLog = [
-  { id: 'log_01', at: '2026-08-04T09:12:00.000Z', actor: 'Michael Davies', role: 'L1', action: 'Published property', target: '3-Bedroom Penthouse · Lekki', ip: '102.89.45.12' },
-  { id: 'log_02', at: '2026-08-04T08:55:00.000Z', actor: 'Michael Davies', role: 'L1', action: 'Tax rule created', target: 'Barcelona City Tax €6/night', ip: '102.89.45.12' },
-  { id: 'log_03', at: '2026-08-04T08:40:00.000Z', actor: 'Nnamdi Achebe', role: 'L2', action: 'Booking approved', target: '#AS-8821 · J. Amara', ip: '197.210.12.88' },
-  { id: 'log_04', at: '2026-08-04T07:20:00.000Z', actor: 'Kwame Asante', role: 'L3', action: 'Room cleaned', target: 'Unit 2B · Garden Studio', ip: '197.210.55.91' },
-  { id: 'log_05', at: '2026-08-03T18:05:00.000Z', actor: 'Nnamdi Achebe', role: 'L2', action: 'Contract re-sent', target: '#AS-8823 · S. Khan', ip: '197.210.12.88' },
-  { id: 'log_06', at: '2026-08-03T17:05:00.000Z', actor: 'Amira Mohammed', role: 'L2', action: 'Verification approved', target: 'Aisha Mohammed · NIN', ip: '94.204.11.7' },
-  { id: 'log_07', at: '2026-08-03T14:10:00.000Z', actor: 'Michael Davies', role: 'L1', action: 'Discount updated', target: 'Monthly → 12%', ip: '102.89.45.12' },
-  { id: 'log_08', at: '2026-08-03T11:32:00.000Z', actor: 'Michael Davies', role: 'L1', action: 'Payout released', target: '₦4,820,000 · Lagos portfolio', ip: '102.89.45.12' },
-  { id: 'log_09', at: '2026-08-02T16:44:00.000Z', actor: 'Michael Davies', role: 'L1', action: 'Staff created', target: 'Thelma Kingston · Level 3', ip: '102.89.45.12' },
-  { id: 'log_10', at: '2026-08-02T09:45:00.000Z', actor: 'Michael Davies', role: 'L1', action: 'Staff deactivated', target: 'Rosa Sanchez', ip: '102.89.45.12' },
-  { id: 'log_11', at: '2026-08-01T15:12:00.000Z', actor: 'Nnamdi Achebe', role: 'L2', action: 'Deposit released', target: '#AS-8817 · ₦45,000', ip: '197.210.12.88' },
-  { id: 'log_12', at: '2026-08-01T10:03:00.000Z', actor: 'Amira Mohammed', role: 'L2', action: 'Unit blocked', target: 'Unit 4A · leaking tap', ip: '94.204.11.7' },
-];

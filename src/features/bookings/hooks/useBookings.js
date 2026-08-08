@@ -119,6 +119,14 @@ export const useContractForBooking = (bookingId) =>
     enabled: Boolean(bookingId),
   });
 
+/** The signed-document link, fetched only once a contract has actually been signed. */
+export const useContractStatus = (contractId, { enabled = true } = {}) =>
+  useQuery({
+    queryKey: queryKeys.bookings.contractStatus(contractId),
+    queryFn: () => bookingService.getContractStatus(contractId),
+    enabled: Boolean(contractId) && enabled,
+  });
+
 export const useContractTemplates = () =>
   useQuery({
     queryKey: queryKeys.bookings.contractTemplates(),
