@@ -40,6 +40,9 @@ export const env = {
   /** Country tax rules — the builder writes straight to the API. */
   useMockTaxes: toBool(import.meta.env.VITE_USE_MOCK_TAXES, useMock),
 
+  /** Discounts, country fee configs and global deposit/seasonal rules — writes straight to the API. */
+  useMockPricing: toBool(import.meta.env.VITE_USE_MOCK_PRICING, useMock),
+
   mockLatency: Number(import.meta.env.VITE_MOCK_LATENCY ?? 500),
   appName: import.meta.env.VITE_APP_NAME || 'Alotel Spaces Admin',
   isDev: import.meta.env.DEV,

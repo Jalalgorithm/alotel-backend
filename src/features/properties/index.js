@@ -23,8 +23,12 @@ export {
   useToggleAmenity,
   usePropertyReviews,
   useModerateReview,
-  usePricing,
-  useSavePricing,
+  useDiscountRules,
+  useDiscountRuleMutations,
+  usePricingConfigs,
+  usePricingConfigMutations,
+  usePricingRules,
+  useUpsertPricingRule,
 } from './hooks/useCatalogue';
 
 export { propertyService } from './services/propertyService';

@@ -1,161 +1,150 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Toggle } from '@/components/ui/Toggle';
-import { Badge } from '@/components/ui/Badge';
+import { Tabs } from '@/components/ui/Tabs';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { usePricing, useSavePricing } from '../hooks/useCatalogue';
+import {
+  useDiscountRules,
+  useDiscountRuleMutations,
+  usePricingConfigs,
+  usePricingConfigMutations,
+  usePricingRules,
+  useUpsertPricingRule,
+} from '../hooks/useCatalogue';
+import { availableDiscountCountries, availableConfigCountries, PRICING_COUNTRIES } from '@/lib/pricingSchema';
+import { DiscountCard } from './PricingBuilder/DiscountCard';
+import { DiscountPanel } from './PricingBuilder/DiscountPanel';
+import { FeeConfigCard } from './PricingBuilder/FeeConfigCard';
+import { FeeConfigPanel } from './PricingBuilder/FeeConfigPanel';
+import { GlobalRulesPanel } from './PricingBuilder/GlobalRulesPanel';
+
+const TABS = [
+  { id: 'discounts', label: 'Country Discounts' },
+  { id: 'fees', label: 'Country Fees & Currency' },
+  { id: 'global', label: 'Global Deposit & Seasonal Rules' },
+];
+
+const DiscountsTab = () => {
+  const { data: rules = [], isLoading } = useDiscountRules();
+  const { createRule, isCreating, updateRule, deleteRule, pendingId } = useDiscountRuleMutations();
+  const [selectedCountry, setSelectedCountry] = useState(null);
+
+  const ruleByCountry = useMemo(() => new Map(rules.map((rule) => [rule.country, rule])), [rules]);
+  const openCountries = availableDiscountCountries(rules);
+  const activeRule = selectedCountry ? ruleByCountry.get(selectedCountry) : undefined;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px] lg:items-start">
+      <Card>
+        <CardHeader title="Markets" subtitle="Select a country to configure its promotional discount." />
+        <div className="grid grid-cols-1 gap-2.5 border-t border-line p-4 sm:grid-cols-2">
+          {isLoading
+            ? Array.from({ length: PRICING_COUNTRIES.length }, (_, index) => <Skeleton key={index} className="h-20" />)
+            : PRICING_COUNTRIES.map((country) => (
+                <DiscountCard
+                  key={country}
+                  country={country}
+                  rule={ruleByCountry.get(country)}
+                  isSelected={country === selectedCountry}
+                  isDeleting={pendingId === ruleByCountry.get(country)?.id}
+                  onSelect={setSelectedCountry}
+                  onDelete={(id) => {
+                    deleteRule(id);
+                    if (selectedCountry === country) setSelectedCountry(null);
+                  }}
+                />
+              ))}
+        </div>
+      </Card>
+
+      <DiscountPanel
+        country={selectedCountry}
+        rule={activeRule}
+        openCountries={openCountries}
+        onPickCountry={setSelectedCountry}
+        onClose={() => setSelectedCountry(null)}
+        createRule={(values) => createRule(values, { onSuccess: () => setSelectedCountry(null) })}
+        updateRule={updateRule}
+        isSaving={isCreating || pendingId === activeRule?.id}
+      />
+    </div>
+  );
+};
+
+const FeesTab = () => {
+  const { data: configs = [], isLoading } = usePricingConfigs();
+  const { createConfig, isCreating, updateConfig, deleteConfig, pendingId } = usePricingConfigMutations();
+  const [selectedCountry, setSelectedCountry] = useState(null);
+
+  const configByCountry = useMemo(() => new Map(configs.map((config) => [config.country, config])), [configs]);
+  const openCountries = availableConfigCountries(configs);
+  const activeConfig = selectedCountry ? configByCountry.get(selectedCountry) : undefined;
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px] lg:items-start">
+      <Card>
+        <CardHeader title="Markets" subtitle="Select a country to set its cleaning fee and security deposit." />
+        <div className="grid grid-cols-1 gap-2.5 border-t border-line p-4 sm:grid-cols-2">
+          {isLoading
+            ? Array.from({ length: PRICING_COUNTRIES.length }, (_, index) => <Skeleton key={index} className="h-20" />)
+            : PRICING_COUNTRIES.map((country) => (
+                <FeeConfigCard
+                  key={country}
+                  country={country}
+                  config={configByCountry.get(country)}
+                  isSelected={country === selectedCountry}
+                  isDeleting={pendingId === configByCountry.get(country)?.id}
+                  onSelect={setSelectedCountry}
+                  onDelete={(id) => {
+                    deleteConfig(id);
+                    if (selectedCountry === country) setSelectedCountry(null);
+                  }}
+                />
+              ))}
+        </div>
+      </Card>
+
+      <FeeConfigPanel
+        country={selectedCountry}
+        config={activeConfig}
+        openCountries={openCountries}
+        onPickCountry={setSelectedCountry}
+        onClose={() => setSelectedCountry(null)}
+        createConfig={(values) => createConfig(values, { onSuccess: () => setSelectedCountry(null) })}
+        updateConfig={updateConfig}
+        isSaving={isCreating || pendingId === activeConfig?.id}
+      />
+    </div>
+  );
+};
+
+const GlobalTab = () => {
+  const { data: rules = [], isLoading } = usePricingRules();
+  const { upsertRule, isPending } = useUpsertPricingRule();
+
+  return <GlobalRulesPanel rules={rules} isLoading={isLoading} upsertRule={upsertRule} isSaving={isPending} />;
+};
 
 /**
- * Corporate discount ladder, deposit defaults and seasonal adjustments.
- *
- * Local edits are held in component state and committed on Save, so a partly
- * typed percentage never briefly becomes the live rate.
+ * Pricing & Availability: country discounts, country fee/currency defaults,
+ * and global deposit/seasonal rules — three independent backend resources,
+ * each tab saving directly against its own endpoint.
  */
 export const PricingPage = () => {
-  const { data, isLoading } = usePricing();
-  const { savePricing, isPending } = useSavePricing();
-
-  const [discounts, setDiscounts] = useState([]);
-  const [deposits, setDeposits] = useState([]);
-  const [seasonal, setSeasonal] = useState([]);
-
-  useEffect(() => {
-    if (!data) return;
-    setDiscounts(data.discounts);
-    setDeposits(data.deposits);
-    setSeasonal(data.seasonal);
-  }, [data]);
-
-  const patchRow = (setter) => (id, key, value) =>
-    setter((rows) => rows.map((row) => (row.id === id ? { ...row, [key]: value } : row)));
-
-  const patchDiscount = patchRow(setDiscounts);
-  const patchDeposit = patchRow(setDeposits);
-  const patchSeasonal = patchRow(setSeasonal);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <PageHeader title="Pricing & Availability" />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Skeleton className="h-80 rounded-card" />
-          <Skeleton className="h-80 rounded-card" />
-        </div>
-      </div>
-    );
-  }
+  const [tab, setTab] = useState('discounts');
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Pricing & Availability"
-        subtitle="Long-stay discounts, deposit defaults and seasonal adjustments."
-        actions={
-          <Button
-            variant="primary"
-            isLoading={isPending}
-            onClick={() => savePricing({ discounts, deposits, seasonal })}
-          >
-            Save changes
-          </Button>
-        }
+        subtitle="Country discounts, fee defaults and global deposit/seasonal rules."
       />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Corporate discount ladder"
-            subtitle="Applied automatically once a booking reaches the night threshold."
-          />
+      <Tabs tabs={TABS} value={tab} onChange={setTab} />
 
-          <div className="table-scroll border-t border-line">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Period</th>
-                  <th className="text-right">Nights</th>
-                  <th className="text-right">Discount</th>
-                  <th>Effective rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {discounts.map((tier) => (
-                  <tr key={tier.id}>
-                    <td className="font-semibold">{tier.period}</td>
-                    <td className="text-right tabular-nums text-ink-soft">{tier.nights}</td>
-                    <td>
-                      <div className="flex items-center justify-end gap-1.5">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={90}
-                          value={tier.percent}
-                          onChange={(event) => patchDiscount(tier.id, 'percent', Number(event.target.value))}
-                          className="h-8 w-16 text-right"
-                          aria-label={`${tier.period} discount percent`}
-                        />
-                        <span className="text-[11px] text-ink-muted">%</span>
-                      </div>
-                    </td>
-                    <td>
-                      <code className="rounded bg-line-soft px-2 py-1 text-[10.5px] text-ink-soft">
-                        DR × {tier.nights} × {(1 - tier.percent / 100).toFixed(2)}
-                      </code>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <CardHeader title="Default security deposits" subtitle="Per property tier, in the listing's own currency." />
-
-            <ul className="divide-y divide-line border-t border-line">
-              {deposits.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between gap-4 px-4 py-2.5">
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{entry.tier}</span>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={entry.amount}
-                    onChange={(event) => patchDeposit(entry.id, 'amount', Number(event.target.value))}
-                    className="h-8 w-24 text-right"
-                    aria-label={`${entry.tier} deposit`}
-                    containerClassName="w-auto"
-                  />
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <Card>
-            <CardHeader title="Seasonal adjustments" subtitle="Applied on top of the nightly rate for the dated window." />
-
-            <ul className="divide-y divide-line border-t border-line">
-              {seasonal.map((rule) => (
-                <li key={rule.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <Toggle
-                    checked={rule.active}
-                    onChange={(value) => patchSeasonal(rule.id, 'active', value)}
-                    label={rule.label}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{rule.label}</span>
-                  <Badge variant={rule.adjustment >= 0 ? 'warn' : 'info'}>
-                    {rule.adjustment >= 0 ? '+' : ''}
-                    {rule.adjustment}%
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </div>
-      </div>
+      {tab === 'discounts' && <DiscountsTab />}
+      {tab === 'fees' && <FeesTab />}
+      {tab === 'global' && <GlobalTab />}
     </div>
   );
 };

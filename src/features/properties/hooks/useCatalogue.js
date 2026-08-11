@@ -87,25 +87,124 @@ export const useModerateReview = () => {
   };
 };
 
-/* ---------------------------------------------------------------- pricing -- */
+/* ------------------------------------------------------ country discounts -- */
 
-export const usePricing = () =>
+export const useDiscountRules = () =>
   useQuery({
-    queryKey: queryKeys.properties.pricing(),
-    queryFn: propertyService.getPricing,
+    queryKey: queryKeys.properties.discounts(),
+    queryFn: propertyService.getDiscounts,
   });
 
-export const useSavePricing = () => {
+/** Create / update / delete country discounts. All three invalidate the same list. */
+export const useDiscountRuleMutations = () => {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.properties.discounts() });
+
+  const create = useMutation({
+    mutationFn: propertyService.createDiscount,
+    onSuccess: (rule) => {
+      invalidate();
+      toast.success('Discount saved', `${rule.country} · ${rule.percentage}%`);
+    },
+    onError: (error) => toast.error('Could not save discount', getErrorMessage(error)),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, patch }) => propertyService.updateDiscount(id, patch),
+    onSuccess: (rule) => {
+      invalidate();
+      toast.success('Discount updated', `${rule.country} · ${rule.percentage}%`);
+    },
+    onError: (error) => toast.error('Could not update discount', getErrorMessage(error)),
+  });
+
+  const remove = useMutation({
+    mutationFn: propertyService.deleteDiscount,
+    onSuccess: () => {
+      invalidate();
+      toast.info('Discount deleted');
+    },
+    onError: (error) => toast.error('Could not delete discount', getErrorMessage(error)),
+  });
+
+  return {
+    createRule: create.mutate,
+    isCreating: create.isPending,
+    updateRule: (id, patch) => update.mutate({ id, patch }),
+    deleteRule: remove.mutate,
+    pendingId: update.variables?.id ?? remove.variables,
+  };
+};
+
+/* -------------------------------------------------- country fee configs -- */
+
+export const usePricingConfigs = () =>
+  useQuery({
+    queryKey: queryKeys.properties.pricingConfigs(),
+    queryFn: propertyService.getPricingConfigs,
+  });
+
+/** Create / update / delete a country's cleaning fee & security deposit defaults. */
+export const usePricingConfigMutations = () => {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.properties.pricingConfigs() });
+
+  const create = useMutation({
+    mutationFn: propertyService.createPricingConfig,
+    onSuccess: (config) => {
+      invalidate();
+      toast.success('Pricing config saved', `${config.country} · ${config.currency}`);
+    },
+    onError: (error) => toast.error('Could not save pricing config', getErrorMessage(error)),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, patch }) => propertyService.updatePricingConfig(id, patch),
+    onSuccess: (config) => {
+      invalidate();
+      toast.success('Pricing config updated', `${config.country} · ${config.currency}`);
+    },
+    onError: (error) => toast.error('Could not update pricing config', getErrorMessage(error)),
+  });
+
+  const remove = useMutation({
+    mutationFn: propertyService.deletePricingConfig,
+    onSuccess: () => {
+      invalidate();
+      toast.info('Pricing config deleted');
+    },
+    onError: (error) => toast.error('Could not delete pricing config', getErrorMessage(error)),
+  });
+
+  return {
+    createConfig: create.mutate,
+    isCreating: create.isPending,
+    updateConfig: (id, patch) => update.mutate({ id, patch }),
+    deleteConfig: remove.mutate,
+    pendingId: update.variables?.id ?? remove.variables,
+  };
+};
+
+/* --------------------------------------------- global deposit/seasonal rules -- */
+
+export const usePricingRules = () =>
+  useQuery({
+    queryKey: queryKeys.properties.pricingRules(),
+    queryFn: propertyService.getPricingRules,
+  });
+
+/** Upsert (by region + property type) — the API has no separate create/delete for this resource. */
+export const useUpsertPricingRule = () => {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: propertyService.savePricing,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.properties.pricing() });
-      toast.success('Pricing saved', 'Changes apply to all future bookings.');
+    mutationFn: propertyService.upsertPricingRule,
+    onSuccess: (rule) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.properties.pricingRules() });
+      toast.success('Pricing rule saved', `${rule.propertyType} · ${rule.region}`);
     },
-    onError: (error) => toast.error('Could not save pricing', getErrorMessage(error)),
+    onError: (error) => toast.error('Could not save pricing rule', getErrorMessage(error)),
   });
 
-  return { savePricing: mutation.mutate, isPending: mutation.isPending };
+  return { upsertRule: mutation.mutate, isPending: mutation.isPending };
 };

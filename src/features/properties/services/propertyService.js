@@ -5,13 +5,21 @@ import { clone, createId, delay, paginate } from '@/lib/mock/utils';
 import { jsonStorage } from '@/lib/storage';
 import { toApiPayload, toPage, toProperty } from '@/lib/propertySchema';
 import {
+  toDiscountRule,
+  toDiscountPayload,
+  toPricingConfig,
+  toPricingConfigPayload,
+  toPricingRule,
+  toPricingRulePayload,
+} from '@/lib/pricingSchema';
+import {
   amenityGroups,
-  depositDefaults,
-  discountTiers,
+  discountRules,
   enabledAmenities,
+  pricingConfigs,
+  pricingRules,
   properties,
   propertyReviews,
-  seasonalRules,
   units,
 } from '@/lib/mock/catalogue';
 
@@ -28,7 +36,9 @@ const KEYS = {
   units: 'alotel.admin.mock.units',
   reviews: 'alotel.admin.mock.reviews',
   amenities: 'alotel.admin.mock.amenities',
-  pricing: 'alotel.admin.mock.pricing',
+  discounts: 'alotel.admin.mock.discounts',
+  pricingConfigs: 'alotel.admin.mock.pricingConfigs',
+  pricingRules: 'alotel.admin.mock.pricingRules',
 };
 
 const seeded = (key, source) => {
@@ -43,8 +53,9 @@ const readProperties = () => seeded(KEYS.properties, properties);
 const readUnits = () => seeded(KEYS.units, units);
 const readReviews = () => seeded(KEYS.reviews, propertyReviews);
 const readAmenities = () => seeded(KEYS.amenities, enabledAmenities);
-const readPricing = () =>
-  seeded(KEYS.pricing, { discounts: discountTiers, deposits: depositDefaults, seasonal: seasonalRules });
+const readDiscounts = () => seeded(KEYS.discounts, discountRules);
+const readPricingConfigs = () => seeded(KEYS.pricingConfigs, pricingConfigs);
+const readPricingRules = () => seeded(KEYS.pricingRules, pricingRules);
 
 /**
  * The fixtures predate the API and use their own field names. Rendering them
@@ -245,17 +256,78 @@ const mockProperties = {
     return clone(rows[index]);
   },
 
-  /* ----------------------------------------------------------------- pricing */
-  async getPricing() {
+  /* --------------------------------------------------------------- discounts */
+  async listDiscounts() {
     await delay(220);
-    return clone(readPricing());
+    return clone(readDiscounts());
   },
 
-  async savePricing(patch) {
-    await delay(500);
+  async createDiscount(payload) {
+    await delay(400);
+    const rule = { id: createId('disc'), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
+    jsonStorage.write(KEYS.discounts, [...readDiscounts(), rule]);
+    return clone(rule);
+  },
 
-    const next = { ...readPricing(), ...patch };
-    jsonStorage.write(KEYS.pricing, next);
+  async updateDiscount(id, patch) {
+    await delay(350);
+    const rows = readDiscounts();
+    const index = rows.findIndex((entry) => entry.id === id);
+    if (index < 0) throw new ApiError('Discount not found.', 404);
+    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
+    jsonStorage.write(KEYS.discounts, rows);
+    return clone(rows[index]);
+  },
+
+  async deleteDiscount(id) {
+    await delay(300);
+    jsonStorage.write(KEYS.discounts, readDiscounts().filter((entry) => entry.id !== id));
+    return { success: true };
+  },
+
+  /* --------------------------------------------------------- pricing configs */
+  async listPricingConfigs() {
+    await delay(220);
+    return clone(readPricingConfigs());
+  },
+
+  async createPricingConfig(payload) {
+    await delay(400);
+    const config = { id: createId('pconf'), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
+    jsonStorage.write(KEYS.pricingConfigs, [...readPricingConfigs(), config]);
+    return clone(config);
+  },
+
+  async updatePricingConfig(id, patch) {
+    await delay(350);
+    const rows = readPricingConfigs();
+    const index = rows.findIndex((entry) => entry.id === id);
+    if (index < 0) throw new ApiError('Pricing configuration not found.', 404);
+    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
+    jsonStorage.write(KEYS.pricingConfigs, rows);
+    return clone(rows[index]);
+  },
+
+  async deletePricingConfig(id) {
+    await delay(300);
+    jsonStorage.write(KEYS.pricingConfigs, readPricingConfigs().filter((entry) => entry.id !== id));
+    return { success: true };
+  },
+
+  /* ----------------------------------------------------------- pricing rules */
+  async listPricingRules() {
+    await delay(220);
+    return clone(readPricingRules());
+  },
+
+  async upsertPricingRule(payload) {
+    await delay(400);
+    const rows = readPricingRules();
+    const index = rows.findIndex((entry) => entry.region === payload.region && entry.property_type === payload.property_type);
+    const next = { id: index >= 0 ? rows[index].id : createId('prule'), updated_at: new Date().toISOString(), ...payload };
+    if (index >= 0) rows[index] = next;
+    else rows.push(next);
+    jsonStorage.write(KEYS.pricingRules, rows);
     return clone(next);
   },
 };
@@ -419,17 +491,82 @@ const realProperties = {
   toggleAmenity: async (name) => (await apiClient.post('/amenities/toggle', { name })).data,
   listReviews: async (params) => (await apiClient.get('/property-reviews', { params })).data,
   moderateReview: async (id, status) => (await apiClient.patch(`/property-reviews/${id}`, { status })).data,
-  getPricing: async () => (await apiClient.get('/pricing')).data,
-  savePricing: async (patch) => (await apiClient.put('/pricing', patch)).data,
+};
+
+/**
+ * Country discounts, country fee configs, and global deposit/seasonal rules.
+ * Public to read, `IsSuperAdmin`-only to write — see `property/views.py`.
+ */
+const realPricing = {
+  async listDiscounts() {
+    const { data } = await apiClient.get('/properties/discounts/');
+    return (data?.results ?? data ?? []).map(toDiscountRule);
+  },
+  async createDiscount(values) {
+    const { data } = await apiClient.post('/properties/discounts/', toDiscountPayload(values));
+    return toDiscountRule(data);
+  },
+  async updateDiscount(id, patch) {
+    const { data } = await apiClient.patch(`/properties/discounts/${id}/`, toDiscountPayload(patch));
+    return toDiscountRule(data);
+  },
+  async deleteDiscount(id) {
+    await apiClient.delete(`/properties/discounts/${id}/`);
+    return { success: true };
+  },
+
+  async listPricingConfigs() {
+    const { data } = await apiClient.get('/properties/pricing-configs/');
+    return (data?.results ?? data ?? []).map(toPricingConfig);
+  },
+  async createPricingConfig(values) {
+    const { data } = await apiClient.post('/properties/pricing-configs/', toPricingConfigPayload(values));
+    return toPricingConfig(data);
+  },
+  async updatePricingConfig(id, patch) {
+    const { data } = await apiClient.patch(`/properties/pricing-configs/${id}/`, toPricingConfigPayload(patch));
+    return toPricingConfig(data);
+  },
+  async deletePricingConfig(id) {
+    await apiClient.delete(`/properties/pricing-configs/${id}/`);
+    return { success: true };
+  },
+
+  /** `PricingRuleConfig` has no per-id CRUD — GET lists everything, PUT upserts by (region, property_type). */
+  async listPricingRules() {
+    const { data } = await apiClient.get('/admin/pricing/settings/');
+    return (data ?? []).map(toPricingRule);
+  },
+  async upsertPricingRule(values) {
+    const { data } = await apiClient.put('/admin/pricing/settings/', toPricingRulePayload(values));
+    return toPricingRule(data);
+  },
+};
+
+const mockPricing = {
+  listDiscounts: async () => (await mockProperties.listDiscounts()).map(toDiscountRule),
+  createDiscount: async (values) => toDiscountRule(await mockProperties.createDiscount(toDiscountPayload(values))),
+  updateDiscount: async (id, patch) => toDiscountRule(await mockProperties.updateDiscount(id, toDiscountPayload(patch))),
+  deleteDiscount: (id) => mockProperties.deleteDiscount(id),
+
+  listPricingConfigs: async () => (await mockProperties.listPricingConfigs()).map(toPricingConfig),
+  createPricingConfig: async (values) => toPricingConfig(await mockProperties.createPricingConfig(toPricingConfigPayload(values))),
+  updatePricingConfig: async (id, patch) => toPricingConfig(await mockProperties.updatePricingConfig(id, toPricingConfigPayload(patch))),
+  deletePricingConfig: (id) => mockProperties.deletePricingConfig(id),
+
+  listPricingRules: async () => (await mockProperties.listPricingRules()).map(toPricingRule),
+  upsertPricingRule: async (values) => toPricingRule(await mockProperties.upsertPricingRule(toPricingRulePayload(values))),
 };
 
 /**
  * Properties are wired to the real API; the remaining catalogue features
- * (units, amenities, reviews, pricing) still run on mocks, so each half picks
- * its own backend.
+ * (units, amenities, reviews) still run on mocks, so each half picks its own
+ * backend. Discounts, pricing configs and pricing rules have their own switch,
+ * same reasoning as `useMockTaxes`.
  */
 const propertiesBackend = env.useMockProperties ? mockProperties : realProperties;
 const backend = env.useMock ? mockProperties : realProperties;
+const pricing = env.useMockPricing ? mockPricing : realPricing;
 
 export const propertyService = {
   getProperties: (params) => propertiesBackend.list(params),
@@ -462,8 +599,18 @@ export const propertyService = {
   getReviews: (params) => backend.listReviews(params),
   moderateReview: (id, status) => backend.moderateReview(id, status),
 
-  getPricing: () => backend.getPricing(),
-  savePricing: (patch) => backend.savePricing(patch),
+  getDiscounts: () => pricing.listDiscounts(),
+  createDiscount: (values) => pricing.createDiscount(values),
+  updateDiscount: (id, patch) => pricing.updateDiscount(id, patch),
+  deleteDiscount: (id) => pricing.deleteDiscount(id),
+
+  getPricingConfigs: () => pricing.listPricingConfigs(),
+  createPricingConfig: (values) => pricing.createPricingConfig(values),
+  updatePricingConfig: (id, patch) => pricing.updatePricingConfig(id, patch),
+  deletePricingConfig: (id) => pricing.deletePricingConfig(id),
+
+  getPricingRules: () => pricing.listPricingRules(),
+  upsertPricingRule: (values) => pricing.upsertPricingRule(values),
 
   /** Exposed for the wizard's draft id generation. */
   createDraftId: () => createId('draft'),

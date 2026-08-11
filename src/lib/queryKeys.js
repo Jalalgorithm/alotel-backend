@@ -26,7 +26,9 @@ export const queryKeys = {
     units: (filters = {}) => ['properties', 'units', filters],
     amenities: () => ['properties', 'amenities'],
     reviews: (filters = {}) => ['properties', 'reviews', filters],
-    pricing: () => ['properties', 'pricing'],
+    discounts: () => ['properties', 'discounts'],
+    pricingConfigs: () => ['properties', 'pricing-configs'],
+    pricingRules: () => ['properties', 'pricing-rules'],
   },
   bookings: {
     all: ['bookings'],

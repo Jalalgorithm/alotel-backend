@@ -115,24 +115,82 @@ export const propertyReviews = [
 /* -------------------------------------------------------------------------- */
 
 /** Corporate long-stay discount ladder. `DR` = daily rate. */
-export const discountTiers = [
-  { id: 'weekly', period: 'Weekly', nights: 7, percent: 5 },
-  { id: 'monthly', period: 'Monthly', nights: 30, percent: 12 },
-  { id: 'quarterly', period: '3 Months', nights: 90, percent: 18 },
-  { id: 'biannual', period: '6 Months', nights: 180, percent: 22 },
-  { id: 'annual', period: '12 Months', nights: 365, percent: 28 },
+/**
+ * Fixtures below mirror the real API's wire shape (`DiscountRule`,
+ * `PricingConfiguration`, `PricingRuleConfig`) so the mock and real backends
+ * feed the same normalisers in `@/lib/pricingSchema`.
+ */
+export const discountRules = [
+  {
+    id: 'disc_ng',
+    country: 'Nigeria',
+    name: 'Long-stay promo',
+    percentage: 12,
+    startDate: '2026-06-01',
+    endDate: '2026-12-31',
+    isActive: true,
+    createdAt: '2026-05-20T09:00:00.000Z',
+    updatedAt: '2026-05-20T09:00:00.000Z',
+  },
+  {
+    id: 'disc_uk',
+    country: 'UK',
+    name: 'Winter early-bird',
+    percentage: 8,
+    startDate: '2026-11-01',
+    endDate: '2027-02-28',
+    isActive: false,
+    createdAt: '2026-05-10T09:00:00.000Z',
+    updatedAt: '2026-05-10T09:00:00.000Z',
+  },
 ];
 
-export const depositDefaults = [
-  { id: 'dep_studio', tier: 'Room / Studio', amount: 150 },
-  { id: 'dep_small', tier: '1–2 Bedroom', amount: 250 },
-  { id: 'dep_large', tier: '3+ Bedroom / Premium', amount: 350 },
-  { id: 'dep_lux', tier: 'Luxury / Corporate', amount: 500 },
+export const pricingConfigs = [
+  {
+    id: 'pconf_ng',
+    country: 'Nigeria',
+    currency: 'NGN',
+    cleaningFee: 15000,
+    securityDeposit: 50000,
+    isActive: true,
+    createdAt: '2026-05-01T09:00:00.000Z',
+    updatedAt: '2026-05-01T09:00:00.000Z',
+  },
+  {
+    id: 'pconf_uk',
+    country: 'UK',
+    currency: 'GBP',
+    cleaningFee: 40,
+    securityDeposit: 150,
+    isActive: true,
+    createdAt: '2026-05-01T09:00:00.000Z',
+    updatedAt: '2026-05-01T09:00:00.000Z',
+  },
 ];
 
-export const seasonalRules = [
-  { id: 'season_xmas', label: 'Christmas week (Dec 20 – Jan 2)', adjustment: 20, active: true },
-  { id: 'season_easter', label: 'Easter weekend', adjustment: 15, active: true },
-  { id: 'season_summer', label: 'Summer peak (Jul–Aug)', adjustment: 10, active: false },
-  { id: 'season_ramadan', label: 'Ramadan (UAE portfolio)', adjustment: -8, active: true },
+export const pricingRules = [
+  {
+    id: 'prule_all_studio',
+    region: 'ALL',
+    property_type: 'Studio',
+    default_security_deposit: 150,
+    deposit_currency: 'GBP',
+    default_cleaning_fee: 40,
+    seasonal_price_rules: [{ label: 'Christmas', start: '12-20', end: '01-02', multiplier: 1.2 }],
+    updated_by: null,
+    created_at: '2026-05-01T09:00:00.000Z',
+    updated_at: '2026-05-01T09:00:00.000Z',
+  },
+  {
+    id: 'prule_ae_luxury',
+    region: 'AE',
+    property_type: 'Luxury Suite',
+    default_security_deposit: 500,
+    deposit_currency: 'AED',
+    default_cleaning_fee: 120,
+    seasonal_price_rules: [],
+    updated_by: null,
+    created_at: '2026-05-01T09:00:00.000Z',
+    updated_at: '2026-05-01T09:00:00.000Z',
+  },
 ];
