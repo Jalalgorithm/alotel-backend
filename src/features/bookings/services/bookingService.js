@@ -28,6 +28,22 @@ const KEYS = {
   maintenance: 'alotel.admin.mock.maintenance',
 };
 
+/**
+ * Resolve a bare `/media/...` path against the API's own origin. A no-op for
+ * already-absolute URLs and for a same-origin deployment (relative `apiUrl`,
+ * e.g. `/api/v1` behind a reverse proxy) — there `new URL` throws on the
+ * relative base, which is exactly the case where the path is already correct
+ * as-is.
+ */
+const resolveMediaUrl = (path) => {
+  if (!path || /^https?:\/\//i.test(path)) return path;
+  try {
+    return new URL(path, env.apiUrl).href;
+  } catch {
+    return path;
+  }
+};
+
 const seeded = (key, source) => {
   const rows = jsonStorage.read(key, null);
   if (rows) return rows;
@@ -173,6 +189,16 @@ const mockBookings = {
   async getInspectionState() {
     await delay(200);
     return { checkin: null, checkout: null };
+  },
+
+  async listPendingReviewInspections() {
+    await delay(220);
+    return [];
+  },
+
+  async reviewInspection() {
+    await delay(300);
+    return { review_status: 'approved' };
   },
 
   async completeCheckIn() {
@@ -436,13 +462,56 @@ const realBookings = {
    * admin (or a colleague) already started doesn't look like a blank slate —
    * the backend's `Inspection` row is `get_or_create`d per (booking, stage),
    * so progress genuinely persists server-side.
+   *
+   * Also carries `reviewStatus`/`reviewNote`/`reviewedAt` and the raw `photos`
+   * list (not just grouped by room) — since a guest's self-submitted check-in
+   * or check-out media puts the stage into `pending_review`, which blocks
+   * `completeCheckIn`/`completeCheckOut` below until staff clears it via
+   * `reviewInspection`.
+   *
+   * `file` comes back as a bare `/media/...` path (the `InspectionSerializer`
+   * isn't built with request context, unlike other file fields in this API) —
+   * resolved against the API's own origin so it loads even when the admin
+   * portal is served from a different origin in dev.
    */
   getInspectionState: async (bookingId) => {
     const { data } = await apiClient.get(`/inspections/${bookingId}/compare/`);
-    return {
-      checkin: data?.checkin?.photos_by_area ?? {},
-      checkout: data?.checkout?.photos_by_area ?? {},
-    };
+    const resolveFile = (photo) => ({ ...photo, file: resolveMediaUrl(photo.file) });
+    const stage = (obj) => ({
+      photosByArea: Object.fromEntries(
+        Object.entries(obj?.photos_by_area ?? {}).map(([area, photos]) => [area, photos.map(resolveFile)]),
+      ),
+      photos: (obj?.photos ?? []).map(resolveFile),
+      reviewStatus: obj?.review_status ?? 'not_required',
+      reviewNote: obj?.review_note ?? '',
+      reviewedAt: obj?.reviewed_at ?? null,
+    });
+    return { checkin: stage(data?.checkin), checkout: stage(data?.checkout) };
+  },
+
+  /** Guest-submitted check-in/check-out inspections awaiting staff review, scoped to the caller's assigned properties. */
+  listPendingReviewInspections: async () => {
+    const { data } = await apiClient.get('/inspections/pending-review/');
+    return (data?.results ?? []).map((row) => ({
+      inspectionId: row.inspection_id,
+      bookingId: row.booking_id,
+      propertyId: row.property_id,
+      propertyName: row.property_name,
+      guestName: row.guest_name,
+      stage: row.stage,
+      photoCount: row.photo_count,
+      submittedAt: row.submitted_at,
+      notes: row.notes,
+    }));
+  },
+
+  /** Clears the `pending_review` block — `disposition` is `'approved'` or `'noted'` (a `note` is required for `'noted'`). */
+  reviewInspection: async ({ inspectionId, disposition, note }) => {
+    const { data } = await apiClient.post(`/inspections/${inspectionId}/review/`, {
+      disposition,
+      ...(note ? { note } : {}),
+    });
+    return data;
   },
 
   completeCheckIn: async ({ bookingId, notes, contractId }) => {
@@ -511,6 +580,8 @@ export const bookingService = {
 
   uploadInspectionPhoto: (payload) => bookingsBackend.uploadInspectionPhoto(payload),
   getInspectionState: (bookingId) => bookingsBackend.getInspectionState(bookingId),
+  getPendingReviewInspections: () => bookingsBackend.listPendingReviewInspections(),
+  reviewInspection: (payload) => bookingsBackend.reviewInspection(payload),
   completeCheckIn: (payload) => bookingsBackend.completeCheckIn(payload),
   completeCheckOut: (payload) => bookingsBackend.completeCheckOut(payload),
 

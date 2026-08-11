@@ -214,6 +214,34 @@ export const useUploadInspectionPhoto = () => {
   return { uploadPhoto: mutation.mutate, isPending: mutation.isPending, pendingVariables: mutation.variables };
 };
 
+/** Guest-submitted check-in/check-out inspections awaiting staff review, scoped to the caller's assigned properties. */
+export const usePendingReviewInspections = () =>
+  useQuery({
+    queryKey: queryKeys.bookings.pendingReviewInspections(),
+    queryFn: bookingService.getPendingReviewInspections,
+  });
+
+/**
+ * Clears an inspection's `pending_review` block. Invalidates both the queue
+ * and the booking's own inspection state, so the Arrivals/Departures tab's
+ * "awaiting review" banner clears the moment a review is submitted.
+ */
+export const useReviewInspection = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: bookingService.reviewInspection,
+    onSuccess: (_result, { bookingId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.pendingReviewInspections() });
+      if (bookingId) queryClient.invalidateQueries({ queryKey: queryKeys.bookings.inspection(bookingId) });
+      toast.success('Inspection reviewed');
+    },
+    onError: (error) => toast.error('Could not submit review', getErrorMessage(error)),
+  });
+
+  return { reviewInspection: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.inspectionId };
+};
+
 /** Transitions a booking `confirmed`/`active` → `active`. */
 export const useCompleteCheckIn = () => {
   const queryClient = useQueryClient();

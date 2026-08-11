@@ -17,9 +17,11 @@ import {
   useCompleteCheckOut,
   useContractForBooking,
   useInspectionState,
+  usePendingReviewInspections,
   useUploadInspectionPhoto,
 } from '../hooks/useBookings';
 import { CONTRACT_REQUIRED_MIN_NIGHTS, CONTRACT_STATUS_LABEL } from '@/lib/contractSchema';
+import { PendingReviewPanel } from './PendingReviewPanel';
 
 const ROOMS = [
   { value: 'living_room', label: 'Living Room' },
@@ -118,6 +120,11 @@ export const CheckInOutPage = () => {
   const { uploadPhoto } = useUploadInspectionPhoto();
   const { completeCheckIn, isPending: isCompletingCheckIn } = useCompleteCheckIn();
   const { completeCheckOut, isPending: isCompletingCheckOut } = useCompleteCheckOut();
+  const { data: pendingReviews } = usePendingReviewInspections();
+
+  /** A guest self-submitted photo/video for this stage that staff hasn't cleared yet — blocks completion server-side. */
+  const reviewStatus = inspection?.[stage]?.reviewStatus ?? 'not_required';
+  const isPendingReview = reviewStatus === 'pending_review';
 
   /** Only relevant for check-in — checkout has no contract gate. */
   const nights = selected?.nights ?? 0;
@@ -128,7 +135,7 @@ export const CheckInOutPage = () => {
   /** Re-prime local upload state from what the server already has on open. */
   useEffect(() => {
     if (!selected || !inspection) return;
-    const byArea = inspection[stage] ?? {};
+    const byArea = inspection[stage]?.photosByArea ?? {};
     setPhotoStatus((current) => {
       const next = { ...current };
       Object.keys(byArea).forEach((area) => {
@@ -194,9 +201,13 @@ export const CheckInOutPage = () => {
         tabs={[
           { id: 'checkin', label: 'Arrivals', count: arrivals?.items?.length },
           { id: 'checkout', label: 'Departures', count: departures.items.length },
+          { id: 'review', label: 'Pending Review', count: pendingReviews?.length },
         ]}
       />
 
+      {tab === 'review' ? (
+        <PendingReviewPanel />
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <Card className="h-fit">
           <CardHeader title={tab === 'checkin' ? "Today's arrivals" : 'Current departures'} />
@@ -308,6 +319,25 @@ export const CheckInOutPage = () => {
                           Booking status → {completeResult?.status ?? (stage === 'checkin' ? 'Active' : 'Completed')}
                         </Badge>
                       </>
+                    ) : isPendingReview ? (
+                      <div className="mx-auto max-w-sm text-left">
+                        <Alert variant="warn" title="Guest submission awaiting review">
+                          The guest submitted their own {stage === 'checkin' ? 'check-in' : 'check-out'} photos or
+                          video for this booking, and it hasn&apos;t been reviewed yet — the server won&apos;t allow
+                          completion until it is. Open the <strong>Pending Review</strong> tab to approve or note it,
+                          then come back here.
+                        </Alert>
+                        <Button
+                          variant="secondary"
+                          className="mt-3"
+                          onClick={() => {
+                            setTab('review');
+                            setSelected(null);
+                          }}
+                        >
+                          Go to Pending Review
+                        </Button>
+                      </div>
                     ) : (
                       <>
                         <p className="text-[13px] font-semibold text-ink">
@@ -341,6 +371,7 @@ export const CheckInOutPage = () => {
           )}
         </Card>
       </div>
+      )}
     </div>
   );
 };

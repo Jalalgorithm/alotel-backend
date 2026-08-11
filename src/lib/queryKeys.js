@@ -45,6 +45,7 @@ export const queryKeys = {
     contractStatus: (contractId) => ['bookings', 'contract-status', contractId],
     contractTemplates: () => ['bookings', 'contract-templates'],
     inspection: (bookingId) => ['bookings', 'inspection', bookingId],
+    pendingReviewInspections: () => ['bookings', 'pending-review-inspections'],
     housekeeping: () => ['bookings', 'housekeeping'],
     verifications: () => ['bookings', 'verifications'],
   },
