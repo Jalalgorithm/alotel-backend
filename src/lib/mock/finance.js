@@ -77,18 +77,30 @@ export const costBreakdown = [
 /* Tax rules                                                                   */
 /* -------------------------------------------------------------------------- */
 
+/** Tax Rule Builder v2 shape (mirrors `toTaxRule()` in `@/lib/taxSchema` — see that module for field meaning). */
 export const taxRules = [
-  { id: 'tax_01', name: 'Standard VAT', country: 'Spain', state: '', segment: 'EU Citizen', type: 'Percentage', value: 10, frequency: 'Per Night', label: 'VAT (EU Resident)', active: true },
-  { id: 'tax_02', name: 'Tourist VAT Exempt', country: 'Spain', state: '', segment: 'Non-EU Foreigner', type: 'Percentage', value: 0, frequency: 'Per Night', label: 'VAT (Tourist)', active: true },
-  { id: 'tax_03', name: 'Barcelona City Tax', country: 'Spain', state: 'Barcelona', segment: 'All Guests', type: 'Fixed', value: 6, frequency: 'Per Night', label: 'Barcelona City Tax', active: true },
-  { id: 'tax_04', name: 'Lagos Consumption', country: 'Nigeria', state: 'Lagos', segment: 'All Guests', type: 'Percentage', value: 5, frequency: 'Per Booking', label: 'State Consumption Tax', active: true },
-  { id: 'tax_05', name: 'Tourism Dirham Fee', country: 'UAE', state: 'Dubai', segment: 'All Guests', type: 'Percentage', value: 10, frequency: 'Per Night', label: 'Tourism Fee (Dubai)', active: true },
-  { id: 'tax_06', name: 'UK Tourism Levy', country: 'UK', state: 'London', segment: 'All Guests', type: 'Fixed', value: 4, frequency: 'Per Night', label: 'London Visitor Levy', active: false },
+  {
+    id: 'tax_01', ruleName: 'Spain VAT', country: 'Spain', state: '', county: '', city: '',
+    guestSegment: [], taxType: 'percentage', value: 10, frequency: 'per_night', displayLabel: 'VAT',
+    status: 'active', source: 'manual', aiGenerated: false, sourceUrl: '', confidence: '', caveat: '',
+    lastVerifiedAt: null, approvedBy: null, approvedAt: null, rejectedReason: '',
+    createdAt: '2026-04-01T09:00:00.000Z', updatedAt: '2026-04-01T09:00:00.000Z',
+  },
+  {
+    id: 'tax_03', ruleName: 'Barcelona City Tax', country: 'Spain', state: '', county: '', city: 'Barcelona',
+    guestSegment: [], taxType: 'fixed', value: 6, frequency: 'per_night', displayLabel: 'Barcelona City Tax',
+    status: 'active', source: 'manual', aiGenerated: false, sourceUrl: '', confidence: '', caveat: '',
+    lastVerifiedAt: null, approvedBy: null, approvedAt: null, rejectedReason: '',
+    createdAt: '2026-04-01T09:00:00.000Z', updatedAt: '2026-04-01T09:00:00.000Z',
+  },
+  {
+    id: 'tax_05', ruleName: 'Tourism Dirham Fee', country: 'UAE', state: 'Dubai', county: '', city: '',
+    guestSegment: [], taxType: 'percentage', value: 10, frequency: 'per_night', displayLabel: 'Tourism Fee (Dubai)',
+    status: 'pending_review', source: 'csv_import', aiGenerated: false, sourceUrl: '', confidence: '', caveat: '',
+    lastVerifiedAt: null, approvedBy: null, approvedAt: null, rejectedReason: '',
+    createdAt: '2026-04-01T09:00:00.000Z', updatedAt: '2026-04-01T09:00:00.000Z',
+  },
 ];
-
-export const TAX_SEGMENTS = ['All Guests', 'EU Citizen', 'Non-EU Foreigner', 'Citizens', 'Residents', 'Tourists'];
-export const TAX_TYPES = ['Percentage', 'Fixed'];
-export const TAX_FREQUENCIES = ['Per Night', 'Per Guest', 'Per Booking'];
 
 /**
  * Apply the active rules for a jurisdiction to a quote.

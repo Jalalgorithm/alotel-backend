@@ -35,25 +35,29 @@ export const createStaffSchema = z.object({
 export const editStaffSchema = z.object(staffBaseFields);
 
 /**
- * Only `name`, `country` and `value` reach the API — it stores one percentage
- * per country. The remaining fields stay in the form (they describe where the
- * builder is going) but carry no validation, because nothing is done with them.
+ * Tax Rule Builder v2 — `TaxRuleCreateUpdateSerializer`. A rule applies at
+ * country and/or state/county/city (blank scope fields = "applies broadly at
+ * this level and above"), so only `country` and the type/value/frequency
+ * fields are required; the scope narrowing fields are all optional.
  */
-export const taxRuleSchema = z.object({
-  name: z.string().min(3, 'Rule name is required'),
-  country: z.string().min(1, 'Select a country'),
-  value: z.coerce
-    .number({ message: 'Enter a percentage' })
-    .min(0, 'Cannot be negative')
-    .max(100, 'Cannot exceed 100%'),
-
-  /* Collected but not yet stored server-side. */
-  state: z.string().optional().default(''),
-  segment: z.string().optional().default('All Guests'),
-  type: z.string().optional().default('Percentage'),
-  frequency: z.string().optional().default('Per Booking'),
-  label: z.string().optional().default(''),
-});
+export const taxRuleSchema = z
+  .object({
+    ruleName: z.string().optional().default(''),
+    country: z.string().min(1, 'Select a country'),
+    state: z.string().optional().default(''),
+    county: z.string().optional().default(''),
+    city: z.string().optional().default(''),
+    guestSegment: z.array(z.string()).optional().default([]),
+    taxType: z.enum(['percentage', 'fixed'], { message: 'Select a tax type' }),
+    value: z.coerce.number({ message: 'Enter a value' }).min(0, 'Cannot be negative'),
+    frequency: z.enum(['per_night', 'per_booking'], { message: 'Select a frequency' }),
+    displayLabel: z.string().optional().default(''),
+    status: z.string().optional().default('active'),
+  })
+  .refine((values) => values.taxType !== 'percentage' || values.value <= 100, {
+    message: 'A percentage tax type cannot exceed 100',
+    path: ['value'],
+  });
 
 /** Country promotional discount — `DiscountRule`: one per country, with a date window. */
 export const discountRuleSchema = z

@@ -1,35 +1,98 @@
-import { useState } from 'react';
 import { format } from 'date-fns';
-import { CalendarDays, Clock, Download, FileBarChart } from 'lucide-react';
+import { CalendarDays, Clock } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Card, CardHeader } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Select } from '@/components/ui/Select';
 import { CardSkeleton, Skeleton } from '@/components/ui/Skeleton';
-import { ProgressRow } from '@/components/ui/Progress';
-import { BarChart, DonutChart } from '@/components/charts';
 import { StatCard } from './StatCard';
 import { QuickActions } from './QuickActions';
-import {
-  AlertStrip,
-  AnnouncementsPanel,
-  CheckInsPanel,
-  MaintenancePanel,
-  RecentBookingsPanel,
-  VerificationsPanel,
-} from './DashboardPanels';
+import { AlertStrip, CheckInsPanel, HousekeeperTasksPanel, RecentBookingsPanel } from './DashboardPanels';
 import { useAlerts, useDashboardOverview } from '../hooks/useDashboard';
-import { useVerificationDecision } from '../hooks/useVerificationDecision';
 import { useAuth } from '@/features/auth';
+import { useBookings } from '@/features/bookings';
 
-/** Landing screen — mirrors the Figma "Dashboard Overview". */
+/** Card key → display label, matches `/admin/dashboard/`'s `cards` object exactly. */
+const CARD_LABELS = {
+  active_bookings: 'Active Bookings',
+  occupancy_rate: 'Occupancy Rate',
+  revenue_mtd: 'Revenue (MTD)',
+  pending_checkins: 'Pending Check-ins',
+  pending_checkouts: 'Pending Check-outs',
+  unresolved_issues: 'Unresolved Issues',
+  properties_created: 'Properties Created',
+  staff_count: 'Staff Count',
+  users_count: 'Registered Users',
+};
+
+const CARD_ICONS = {
+  active_bookings: 'calendar',
+  occupancy_rate: 'gauge',
+  revenue_mtd: 'wallet',
+  pending_checkins: 'calendar',
+  pending_checkouts: 'calendar',
+  unresolved_issues: 'building',
+  properties_created: 'building',
+  staff_count: 'building',
+  users_count: 'building',
+};
+
+/** Order the cards render in — the API returns an object, not an array, so the order isn't guaranteed. */
+const CARD_ORDER = [
+  'active_bookings',
+  'occupancy_rate',
+  'revenue_mtd',
+  'pending_checkins',
+  'pending_checkouts',
+  'unresolved_issues',
+  'properties_created',
+  'staff_count',
+  'users_count',
+];
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+const toBookingRow = (booking) => ({
+  id: booking.id,
+  guest: booking.guestName,
+  property: booking.propertyName,
+  status: booking.statusLabel,
+  amount: booking.total,
+  currency: booking.currency,
+  checkIn: booking.checkIn,
+  checkOut: booking.checkOut,
+});
+
+const toCheckInEntry = (booking) => ({
+  id: booking.id,
+  guest: booking.guestName,
+  property: booking.propertyName,
+  time: booking.checkIn,
+});
+
+/**
+ * Landing screen. Renders one of three shapes depending on
+ * `/admin/dashboard/`'s role-based response: Super Admin gets 9 KPI cards,
+ * Facility Manager gets 4 operational cards (no financials), Housekeeper
+ * gets today's task list (no guest PII, so no booking panels for that role).
+ */
 export const DashboardPage = () => {
   const { user } = useAuth();
   const { data, isLoading } = useDashboardOverview();
   const { data: alerts = [] } = useAlerts();
-  const { decide, pendingId } = useVerificationDecision();
 
-  const [revenueRange, setRevenueRange] = useState('Weekly');
+  const role = data?.role;
+  const isHousekeeper = role === 'housekeeper';
+  const cardEntries = data?.cards
+    ? CARD_ORDER.filter((key) => key in data.cards).map((key) => [key, data.cards[key]])
+    : [];
+
+  // Recent bookings / today's arrivals reuse the already-real bookings admin list —
+  // Housekeepers can't call it (IsLevel1Or2), so these stay disabled for that role.
+  const canSeeBookings = !isLoading && !isHousekeeper;
+  const { data: recentBookings } = useBookings({ pageSize: 5 }, { enabled: canSeeBookings });
+  const { data: arrivals } = useBookings(
+    { status: 'confirmed', checkInFrom: today(), checkInTo: today(), pageSize: 5 },
+    { enabled: canSeeBookings },
+  );
+
   const now = new Date();
 
   return (
@@ -49,111 +112,53 @@ export const DashboardPage = () => {
             </span>
           </>
         }
-        actions={
-          <>
-            <Button variant="primary" leftIcon={<FileBarChart className="size-3.5" aria-hidden="true" />}>
-              Generate Report
-            </Button>
-            <Button leftIcon={<Download className="size-3.5" aria-hidden="true" />}>Export Data</Button>
-          </>
-        }
       />
 
       <AlertStrip alerts={alerts} />
 
-      {/* KPI row */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {isLoading
-          ? Array.from({ length: 4 }, (_, index) => <CardSkeleton key={index} />)
-          : data.stats.map((stat) => <StatCard key={stat.id} {...stat} />)}
-      </section>
-
-      <QuickActions />
-
-      {/* Bookings + charts.
-          Three-up only from 2xl: at 1280–1535 the table's columns get squeezed
-          into wrapping, so the donut drops to its own row instead. */}
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,0.95fr)]">
-        {isLoading ? (
-          <>
-            <Skeleton className="h-64 rounded-card xl:col-span-2 2xl:col-span-1" />
-            <Skeleton className="h-64 rounded-card" />
-            <Skeleton className="h-64 rounded-card" />
-          </>
-        ) : (
-          <>
-            {/* Full width until 2xl — six columns need the room to avoid
-                horizontal scrolling inside the card. */}
-            <div className="min-w-0 xl:col-span-2 2xl:col-span-1">
-              <RecentBookingsPanel bookings={data.recentBookings} />
-            </div>
-
-            <Card className="flex flex-col">
-              <CardHeader
-                title="Revenue Overview"
-                action={
-                  <Select
-                    value={revenueRange}
-                    onChange={(event) => setRevenueRange(event.target.value)}
-                    options={['Weekly', 'Monthly', 'Quarterly']}
-                    className="h-8 w-28 text-[11px]"
-                    aria-label="Revenue range"
+      {isHousekeeper ? (
+        <HousekeeperTasksPanel
+          tasks={(data?.tasks ?? []).map((task) => ({
+            id: task.id,
+            taskType: task.task_type,
+            status: task.status,
+            notes: task.notes,
+          }))}
+        />
+      ) : (
+        <>
+          {/* KPI row — 9 cards for Super Admin, 4 for Facility Manager; whichever the API actually returned. */}
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {isLoading
+              ? Array.from({ length: 4 }, (_, index) => <CardSkeleton key={index} />)
+              : cardEntries.map(([key, card]) => (
+                  <StatCard
+                    key={key}
+                    label={CARD_LABELS[key] ?? key}
+                    value={card.unit === '%' ? `${card.value}%` : card.value}
+                    subtext={card.sub_text}
+                    icon={CARD_ICONS[key]}
                   />
-                }
-              />
-              <div className="px-4 pb-4">
-                <BarChart
-                  data={data.revenueByDay}
-                  highlightIndex={3}
-                  formatValue={(value) => `$${value >= 1000 ? `${(value / 1000).toFixed(value % 1000 ? 1 : 0)}k` : value}`}
-                />
-              </div>
-            </Card>
+                ))}
+          </section>
 
-            <Card className="flex flex-col">
-              <CardHeader title="Cost Breakdown" action={<span className="text-[11px] text-ink-muted">This month</span>} />
-              <div className="px-4 pb-4">
-                <DonutChart
-                  data={data.costBreakdown}
-                  centerValue="68%"
-                  centerLabel="Total occupancy"
-                  size={148}
-                />
-              </div>
-            </Card>
-          </>
-        )}
-      </section>
+          <QuickActions />
 
-      {/* Occupancy */}
-      {!isLoading && (
-        <Card>
-          <CardHeader title="Occupancy by Region" subtitle="Share of available nights sold, last 30 days" />
-          <div className="space-y-2.5 px-4 pb-4">
-            {data.occupancyByRegion.map((region) => (
-              <ProgressRow key={region.label} label={region.label} value={region.value} />
-            ))}
-          </div>
-        </Card>
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {isLoading ? (
+              <>
+                <Skeleton className="h-64 rounded-card" />
+                <Skeleton className="h-64 rounded-card" />
+              </>
+            ) : (
+              <>
+                <RecentBookingsPanel bookings={(recentBookings?.items ?? []).map(toBookingRow)} />
+                <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />
+              </>
+            )}
+          </section>
+        </>
       )}
-
-      {/* Operational panels */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-        {isLoading ? (
-          Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-56 rounded-card" />)
-        ) : (
-          <>
-            <CheckInsPanel checkIns={data.checkInsToday} />
-            <VerificationsPanel
-              verifications={data.verifications}
-              onDecision={decide}
-              pendingId={pendingId}
-            />
-            <MaintenancePanel requests={data.maintenance} />
-            <AnnouncementsPanel announcements={data.announcements} />
-          </>
-        )}
-      </section>
     </div>
   );
 };

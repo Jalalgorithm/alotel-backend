@@ -91,16 +91,28 @@ const mockDashboard = {
   },
 };
 
+/**
+ * `GET /admin/dashboard/` — one role-based payload, not three separate
+ * overview/badges/alerts endpoints (those don't exist server-side). Shape:
+ *   Super Admin / Facility Manager: `{ role, cards: { <key>: { value, unit?, sub_text } } }`
+ *   Housekeeper: `{ role, today, tasks: [{ id, property_id, task_type, status, due_date, notes }] }`
+ */
 const realDashboard = {
-  overview: async () => (await apiClient.get('/dashboard/overview')).data,
-  badges: async () => (await apiClient.get('/dashboard/badges')).data,
-  alerts: async () => (await apiClient.get('/dashboard/alerts')).data,
+  overview: async () => (await apiClient.get('/admin/dashboard/')).data,
 };
 
-const backend = env.useMock ? mockDashboard : realDashboard;
+const dashboardBackend = env.useMockDashboard ? mockDashboard : realDashboard;
 
 export const dashboardService = {
-  getOverview: () => backend.overview(),
-  getBadges: () => backend.badges(),
-  getAlerts: () => backend.alerts(),
+  /** Real `/admin/dashboard/` — see `realDashboard.overview` for the exact shape. */
+  getOverview: () => dashboardBackend.overview(),
+
+  /**
+   * Sidebar counters and the alert tray have no backend equivalent yet
+   * (there's no `/dashboard/badges` or `/dashboard/alerts` endpoint) — always
+   * mock, independent of `VITE_USE_MOCK_DASHBOARD`, until each counter has a
+   * real source to derive from.
+   */
+  getBadges: () => mockDashboard.badges(),
+  getAlerts: () => mockDashboard.alerts(),
 };

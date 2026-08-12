@@ -13,7 +13,7 @@ import {
   resolveContractType,
 } from '@/lib/mock/operations';
 import { units } from '@/lib/mock/catalogue';
-import { toAdminListParams, toBookingDetail, toBookingPage, toReceipt } from '@/lib/bookingSchema';
+import { toAdminListParams, toBookingDetail, toBookingPage, toGuest, toGuestPage, toReceipt } from '@/lib/bookingSchema';
 
 /**
  * Booking-operations service: reservations, guests, check-in/out, check-out
@@ -126,6 +126,13 @@ const mockBookings = {
     });
   },
 
+  async updateGuest(id, patch) {
+    await delay(300);
+    const guest = guests.find((entry) => entry.id === id);
+    if (!guest) throw new ApiError('Guest not found.', 404);
+    return clone({ ...guest, ...patch });
+  },
+
   /* -------------------------------------------------------- check-out reports */
   async listReports() {
     await delay(260);
@@ -189,16 +196,6 @@ const mockBookings = {
   async getInspectionState() {
     await delay(200);
     return { checkin: null, checkout: null };
-  },
-
-  async listPendingReviewInspections() {
-    await delay(220);
-    return [];
-  },
-
-  async reviewInspection() {
-    await delay(300);
-    return { review_status: 'approved' };
   },
 
   async completeCheckIn() {
@@ -348,7 +345,30 @@ const realBookings = {
     throw new ApiError('Bookings are changed through confirm/cancel, not a direct update.', 405);
   },
 
-  listGuests: async (params) => (await apiClient.get('/guests', { params })).data,
+  /** `GET /auth/admin/guests/` — no `kyc`/`country` filters exist server-side; only `search`/`is_active`/pagination. */
+  listGuests: async ({ query, isActive, page = 1, pageSize } = {}) => {
+    const params = { page };
+    if (query?.trim()) params.search = query.trim();
+    if (isActive !== undefined && isActive !== 'All') params.is_active = isActive === 'Active';
+    if (pageSize) params.page_size = pageSize;
+
+    const { data } = await apiClient.get('/auth/admin/guests/', { params });
+    return toGuestPage(data, { page });
+  },
+
+  /** `PATCH /auth/admin/guests/<id>/` — only name fields and `is_active` are editable. */
+  updateGuest: async (id, patch) => {
+    const payload = {};
+    if (patch.isActive !== undefined) payload.is_active = patch.isActive;
+    if (patch.name !== undefined) {
+      const [firstName, ...rest] = patch.name.trim().split(' ');
+      payload.first_name = firstName;
+      if (rest.length) payload.last_name = rest.join(' ');
+    }
+    const { data } = await apiClient.patch(`/auth/admin/guests/${id}/`, payload);
+    return toGuest(data);
+  },
+
   listReports: async () => (await apiClient.get('/checkout-reports')).data,
   saveReport: async (id, patch) => (await apiClient.patch(`/checkout-reports/${id}`, patch)).data,
   /**
@@ -463,11 +483,11 @@ const realBookings = {
    * the backend's `Inspection` row is `get_or_create`d per (booking, stage),
    * so progress genuinely persists server-side.
    *
-   * Also carries `reviewStatus`/`reviewNote`/`reviewedAt` and the raw `photos`
-   * list (not just grouped by room) — since a guest's self-submitted check-in
-   * or check-out media puts the stage into `pending_review`, which blocks
-   * `completeCheckIn`/`completeCheckOut` below until staff clears it via
-   * `reviewInspection`.
+   * Also carries `guestAcknowledged`/`guestAcknowledgedAt` and the raw
+   * `photos` list (not just grouped by room) — staff perform the check-in/
+   * check-out itself (photos + Complete), the guest's only role is to
+   * acknowledge it afterward on their own via a guest-facing endpoint this
+   * admin portal doesn't call; this is a read-only status, not an action.
    *
    * `file` comes back as a bare `/media/...` path (the `InspectionSerializer`
    * isn't built with request context, unlike other file fields in this API) —
@@ -482,36 +502,10 @@ const realBookings = {
         Object.entries(obj?.photos_by_area ?? {}).map(([area, photos]) => [area, photos.map(resolveFile)]),
       ),
       photos: (obj?.photos ?? []).map(resolveFile),
-      reviewStatus: obj?.review_status ?? 'not_required',
-      reviewNote: obj?.review_note ?? '',
-      reviewedAt: obj?.reviewed_at ?? null,
+      guestAcknowledged: Boolean(obj?.guest_acknowledged),
+      guestAcknowledgedAt: obj?.guest_acknowledged_at ?? null,
     });
     return { checkin: stage(data?.checkin), checkout: stage(data?.checkout) };
-  },
-
-  /** Guest-submitted check-in/check-out inspections awaiting staff review, scoped to the caller's assigned properties. */
-  listPendingReviewInspections: async () => {
-    const { data } = await apiClient.get('/inspections/pending-review/');
-    return (data?.results ?? []).map((row) => ({
-      inspectionId: row.inspection_id,
-      bookingId: row.booking_id,
-      propertyId: row.property_id,
-      propertyName: row.property_name,
-      guestName: row.guest_name,
-      stage: row.stage,
-      photoCount: row.photo_count,
-      submittedAt: row.submitted_at,
-      notes: row.notes,
-    }));
-  },
-
-  /** Clears the `pending_review` block — `disposition` is `'approved'` or `'noted'` (a `note` is required for `'noted'`). */
-  reviewInspection: async ({ inspectionId, disposition, note }) => {
-    const { data } = await apiClient.post(`/inspections/${inspectionId}/review/`, {
-      disposition,
-      ...(note ? { note } : {}),
-    });
-    return data;
   },
 
   completeCheckIn: async ({ bookingId, notes, contractId }) => {
@@ -560,7 +554,8 @@ export const bookingService = {
    */
   updateBooking: (id, patch) => mockBookings.update(id, patch),
 
-  getGuests: (params) => backend.listGuests(params),
+  getGuests: (params) => bookingsBackend.listGuests(params),
+  updateGuest: (id, patch) => bookingsBackend.updateGuest(id, patch),
 
   getCheckoutReports: () => backend.listReports(),
   saveCheckoutReport: (id, patch) => backend.saveReport(id, patch),
@@ -580,8 +575,6 @@ export const bookingService = {
 
   uploadInspectionPhoto: (payload) => bookingsBackend.uploadInspectionPhoto(payload),
   getInspectionState: (bookingId) => bookingsBackend.getInspectionState(bookingId),
-  getPendingReviewInspections: () => bookingsBackend.listPendingReviewInspections(),
-  reviewInspection: (payload) => bookingsBackend.reviewInspection(payload),
   completeCheckIn: (payload) => bookingsBackend.completeCheckIn(payload),
   completeCheckOut: (payload) => bookingsBackend.completeCheckOut(payload),
 

@@ -3,25 +3,28 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ListToolbar } from '@/components/shared/ListToolbar';
 import { Pagination } from '@/components/shared/Pagination';
 import { Card } from '@/components/ui/Card';
-import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { AvatarCell } from '@/components/ui/Avatar';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useGuests } from '../hooks/useBookings';
-import { formatCurrency, formatDate } from '@/utils/format';
-import { COUNTRIES } from '@/lib/mock/catalogue';
+import { useGuests, useUpdateGuest } from '../hooks/useBookings';
+import { formatDate } from '@/utils/format';
 
-const SEGMENT_VARIANT = { Returning: 'ok', Corporate: 'info', 'Long-stay': 'brand', New: 'neutral' };
-
-/** Guest directory. */
+/**
+ * Guest directory — `GET /auth/admin/guests/` only exposes name, email,
+ * active/inactive and joined date (confirmed via `GuestSerializer`). Phone,
+ * country, KYC status, guest segment and stay stats aren't on this endpoint,
+ * so this table doesn't show columns the API can't back.
+ */
 export const GuestsPage = () => {
   const [search, setSearch] = useState('');
-  const [kyc, setKyc] = useState('All');
-  const [country, setCountry] = useState('All');
+  const [isActive, setIsActive] = useState('All');
   const [page, setPage] = useState(1);
 
   const debouncedSearch = useDebouncedValue(search);
-  const { data, isFetching } = useGuests({ query: debouncedSearch, kyc, country, page, pageSize: 10 });
+  const { data, isFetching } = useGuests({ query: debouncedSearch, isActive, page, pageSize: 10 });
+  const { updateGuest, isPending, pendingId } = useUpdateGuest();
 
   const withReset = (setter) => (value) => {
     setter(value);
@@ -32,59 +35,49 @@ export const GuestsPage = () => {
     {
       key: 'name',
       header: 'Guest',
-      render: (row) => (
-        <AvatarCell
-          name={row.name}
-          initials={row.initials}
-          color={row.color}
-          primary={row.name}
-          secondary={row.email}
-          size="sm"
-        />
-      ),
+      render: (row) => <AvatarCell name={row.name} primary={row.name} secondary={row.email} size="sm" />,
     },
-    { key: 'phone', header: 'Phone', render: (row) => <span className="whitespace-nowrap text-ink-soft">{row.phone}</span> },
-    { key: 'country', header: 'Country', render: (row) => <span className="text-ink-soft">{row.country}</span> },
-    { key: 'kyc', header: 'KYC', render: (row) => <StatusBadge status={row.kyc} /> },
     {
-      key: 'segment',
-      header: 'Segment',
-      render: (row) => <Badge variant={SEGMENT_VARIANT[row.segment] ?? 'neutral'}>{row.segment}</Badge>,
-    },
-    { key: 'stays', header: 'Stays', align: 'right', render: (row) => <span className="tabular-nums">{row.stays}</span> },
-    { key: 'nights', header: 'Nights', align: 'right', render: (row) => <span className="tabular-nums">{row.nights}</span> },
-    {
-      key: 'lifetimeValue',
-      header: 'Lifetime value',
-      align: 'right',
-      render: (row) => (
-        <span className="whitespace-nowrap font-semibold tabular-nums">
-          {formatCurrency(row.lifetimeValue, row.currency, { compact: row.lifetimeValue > 99999 })}
-        </span>
-      ),
+      key: 'isActive',
+      header: 'Status',
+      render: (row) => <Badge variant={row.isActive ? 'ok' : 'neutral'}>{row.isActive ? 'Active' : 'Deactivated'}</Badge>,
     },
     {
       key: 'joinedAt',
       header: 'Joined',
       render: (row) => <span className="whitespace-nowrap text-ink-muted">{formatDate(row.joinedAt, 'MMM yyyy')}</span>,
     },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (row) => (
+        <Button
+          size="xs"
+          variant={row.isActive ? 'dangerSoft' : 'subtle'}
+          isLoading={isPending && pendingId === row.id}
+          onClick={() => updateGuest(row.id, { isActive: !row.isActive })}
+        >
+          {row.isActive ? 'Deactivate' : 'Reactivate'}
+        </Button>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Guests" subtitle="Everyone who has stayed or is booked to stay, with verification state." />
+      <PageHeader title="Guests" subtitle="Every registered guest account." />
 
       <Card>
         <div className="p-4">
           <ListToolbar
             search={search}
             onSearchChange={withReset(setSearch)}
-            searchPlaceholder="Search by name, email or phone…"
+            searchPlaceholder="Search by name or email…"
             total={data?.total}
             noun="guest"
             filters={[
-              { id: 'kyc', value: kyc, onChange: withReset(setKyc), options: ['All', 'Verified', 'Pending', 'Full KYC'], label: 'KYC' },
-              { id: 'country', value: country, onChange: withReset(setCountry), options: ['All', ...COUNTRIES], label: 'Country' },
+              { id: 'isActive', value: isActive, onChange: withReset(setIsActive), options: ['All', 'Active', 'Inactive'], label: 'Status' },
             ]}
           />
         </div>

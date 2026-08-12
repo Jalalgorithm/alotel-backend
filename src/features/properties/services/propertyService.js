@@ -493,6 +493,68 @@ const realProperties = {
   moderateReview: async (id, status) => (await apiClient.patch(`/property-reviews/${id}`, { status })).data,
 };
 
+/** Mapbox-backed address lookup and postal-code verification for the property wizard. Super Admin only. */
+const realGeocoding = {
+  async forwardGeocode({ address, city, state, location }) {
+    const { data } = await apiClient.get('/listings/geocode/forward/', {
+      params: { address, ...(city ? { city } : {}), ...(state ? { state } : {}), ...(location ? { location } : {}) },
+    });
+    return {
+      formattedAddress: data.formatted_address,
+      postalCode: data.postal_code ?? '',
+      city: data.city,
+      state: data.state,
+      country: data.country,
+      coordinates: { lat: data.lat, lng: data.lng },
+    };
+  },
+
+  async verifyPostalCode({ location, postalCode, address, city, state, propertyId }) {
+    const { data } = await apiClient.post('/listings/verify-postal-code/', {
+      location,
+      postal_code: postalCode ?? '',
+      address,
+      ...(city ? { city } : {}),
+      ...(state ? { state } : {}),
+      ...(propertyId ? { property_id: propertyId } : {}),
+    });
+    return {
+      validFormat: data.valid_format,
+      formatError: data.format_error,
+      verified: data.verified,
+      matchedPostalCode: data.matched_postal_code,
+      coordinates: data.coordinates,
+      detail: data.detail,
+    };
+  },
+};
+
+const mockGeocoding = {
+  async forwardGeocode({ address, city, state }) {
+    await delay(300);
+    return {
+      formattedAddress: [address, city, state].filter(Boolean).join(', '),
+      postalCode: '',
+      city: city ?? '',
+      state: state ?? '',
+      country: '',
+      coordinates: { lat: 0, lng: 0 },
+    };
+  },
+
+  async verifyPostalCode({ postalCode }) {
+    await delay(300);
+    return {
+      validFormat: true,
+      formatError: null,
+      verified: Boolean(postalCode),
+      matchedPostalCode: postalCode ?? '',
+      coordinates: null,
+      detail: 'Mock verification — not checked against a real address.',
+    };
+  },
+};
+
 /**
  * Country discounts, country fee configs, and global deposit/seasonal rules.
  * Public to read, `IsSuperAdmin`-only to write — see `property/views.py`.
@@ -567,6 +629,7 @@ const mockPricing = {
 const propertiesBackend = env.useMockProperties ? mockProperties : realProperties;
 const backend = env.useMock ? mockProperties : realProperties;
 const pricing = env.useMockPricing ? mockPricing : realPricing;
+const geocoding = env.useMockProperties ? mockGeocoding : realGeocoding;
 
 export const propertyService = {
   getProperties: (params) => propertiesBackend.list(params),
@@ -611,6 +674,9 @@ export const propertyService = {
 
   getPricingRules: () => pricing.listPricingRules(),
   upsertPricingRule: (values) => pricing.upsertPricingRule(values),
+
+  forwardGeocode: (values) => geocoding.forwardGeocode(values),
+  verifyPostalCode: (values) => geocoding.verifyPostalCode(values),
 
   /** Exposed for the wizard's draft id generation. */
   createDraftId: () => createId('draft'),

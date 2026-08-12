@@ -43,6 +43,12 @@ export const env = {
   /** Discounts, country fee configs and global deposit/seasonal rules — writes straight to the API. */
   useMockPricing: toBool(import.meta.env.VITE_USE_MOCK_PRICING, useMock),
 
+  /** Role-based `/admin/dashboard/` cards. Sidebar badges/alert tray have no backend equivalent yet and stay on the global flag. */
+  useMockDashboard: toBool(import.meta.env.VITE_USE_MOCK_DASHBOARD, useMock),
+
+  /** The `/analytics/*` endpoints and CSV/PDF export. */
+  useMockAnalytics: toBool(import.meta.env.VITE_USE_MOCK_ANALYTICS, useMock),
+
   mockLatency: Number(import.meta.env.VITE_MOCK_LATENCY ?? 500),
   appName: import.meta.env.VITE_APP_NAME || 'Alotel Spaces Admin',
   isDev: import.meta.env.DEV,

@@ -10,7 +10,7 @@ const ICONS = { building: Building2, calendar: CalendarCheck, gauge: Gauge, wall
  * A single headline number with a delta is a stat tile, not a one-bar chart;
  * the icon and delta carry the context that a plot would otherwise supply.
  */
-export const StatCard = ({ label, value, delta, trend = 'up', icon, className }) => {
+export const StatCard = ({ label, value, delta, trend = 'up', subtext, icon, className }) => {
   const Icon = ICONS[icon] ?? Building2;
   const TrendIcon = trend === 'down' ? TrendingDown : TrendingUp;
 
@@ -34,6 +34,8 @@ export const StatCard = ({ label, value, delta, trend = 'up', icon, className })
           {delta}
         </p>
       )}
+      {/* Plain descriptive text (e.g. the API's `sub_text`) — no directional claim, so no trend icon. */}
+      {!delta && subtext && <p className="mt-2 text-[11px] text-ink-muted">{subtext}</p>}
     </Card>
   );
 };

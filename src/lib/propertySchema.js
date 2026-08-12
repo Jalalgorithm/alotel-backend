@@ -144,6 +144,9 @@ export const toProperty = (raw) => {
     address: raw.address,
     coordinates: raw.coordinates ?? null,
     location: raw.location,
+    postalCode: raw.postal_code ?? '',
+    postalCodeVerified: Boolean(raw.postal_code_verified),
+    postalCodeVerifiedAt: raw.postal_code_verified_at ?? null,
 
     type: raw.type,
     bedrooms: raw.bedrooms ?? 0,
@@ -219,6 +222,12 @@ export const toApiPayload = (form, { partial = false } = {}) => {
     minStay: Number(form.minStay) || 1,
     instantBook: Boolean(form.instantBook),
   };
+
+  // The serializer's field is `postal_code` (snake_case, unlike the rest of this payload) —
+  // it's optional everywhere, so only send it when the admin actually typed one.
+  if (form.postalCode?.trim()) {
+    payload.postal_code = form.postalCode.trim();
+  }
 
   if (form.coordinates?.lat && form.coordinates?.lng) {
     payload.coordinates = {

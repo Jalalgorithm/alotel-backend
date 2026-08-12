@@ -41,27 +41,28 @@ export const useRevenue = () =>
 
 /* --------------------------------------------------------------- tax rules */
 
-export const useTaxRules = () =>
+export const useTaxRules = (filters = {}) =>
   useQuery({
-    queryKey: queryKeys.finance.taxRules(),
-    queryFn: financeService.getTaxRules,
+    queryKey: queryKeys.finance.taxRules(filters),
+    queryFn: () => financeService.getTaxRules(filters),
   });
 
 /**
- * Create / toggle / delete tax rules.
+ * Create / update / delete / approve / reject tax rules.
  *
- * All three invalidate the same key, so the live calculation preview on the Tax
- * screen recomputes the moment a rule changes.
+ * All five invalidate the whole `taxRules` prefix (every filter combination),
+ * so the table reflects a change regardless of which filtered view is open.
  */
 export const useTaxRuleMutations = () => {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.finance.taxRules() });
+  // Prefix-match every filtered view of the tax rules list, not just the one currently open.
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['finance', 'tax-rules'] });
 
   const create = useMutation({
     mutationFn: financeService.createTaxRule,
     onSuccess: (rule) => {
       invalidate();
-      toast.success('Tax rule saved', `${rule.name} · ${rule.country}`);
+      toast.success('Tax rule saved', `${rule.ruleName || rule.country} · ${rule.value}${rule.taxType === 'percentage' ? '%' : ''}`);
     },
     onError: (error) => toast.error('Could not save rule', getErrorMessage(error)),
   });
@@ -70,7 +71,7 @@ export const useTaxRuleMutations = () => {
     mutationFn: ({ id, patch }) => financeService.updateTaxRule(id, patch),
     onSuccess: (rule) => {
       invalidate();
-      toast.success('Tax rule updated', `${rule.name} · ${rule.percentage}%`);
+      toast.success('Tax rule updated', `${rule.ruleName || rule.country} · ${rule.value}${rule.taxType === 'percentage' ? '%' : ''}`);
     },
     onError: (error) => toast.error('Could not update rule', getErrorMessage(error)),
   });
@@ -84,14 +85,34 @@ export const useTaxRuleMutations = () => {
     onError: (error) => toast.error('Could not delete rule', getErrorMessage(error)),
   });
 
+  const approve = useMutation({
+    mutationFn: financeService.approveTaxRule,
+    onSuccess: (rule) => {
+      invalidate();
+      toast.success('Rule approved', `${rule.ruleName || rule.country} is now active`);
+    },
+    onError: (error) => toast.error('Could not approve rule', getErrorMessage(error)),
+  });
+
+  const reject = useMutation({
+    mutationFn: ({ id, reason }) => financeService.rejectTaxRule(id, reason),
+    onSuccess: () => {
+      invalidate();
+      toast.info('Rule rejected');
+    },
+    onError: (error) => toast.error('Could not reject rule', getErrorMessage(error)),
+  });
+
   return {
     createRule: create.mutate,
     isCreating: create.isPending,
-    /** Editing a live rule's name or rate. */
+    /** Editing a live rule's fields. */
     updateRule: (id, patch) => update.mutate({ id, patch }),
     isUpdating: update.isPending,
     deleteRule: remove.mutate,
-    pendingId: update.variables?.id ?? remove.variables,
+    approveRule: approve.mutate,
+    rejectRule: (id, reason) => reject.mutate({ id, reason }),
+    pendingId: update.variables?.id ?? remove.variables ?? approve.variables ?? reject.variables?.id,
   };
 };
 

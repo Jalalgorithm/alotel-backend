@@ -1,88 +1,124 @@
-import { LOCATIONS } from './propertySchema';
-
 /**
- * The tax vocabulary the API actually supports, and the translation to and
- * from the builder's form.
+ * The tax vocabulary the API actually supports (Tax Rule Builder v2), and the
+ * translation to and from the builder's form.
  *
- * The backend models one rule per country with a single percentage:
+ * The backend now models tax at country **and/or** state/county/city level —
+ * several rules can stack for one property (e.g. a state sales tax plus a
+ * city occupancy tax both apply in NYC) — behind a status lifecycle so an
+ * AI-sourced or CSV-imported row can never go live without a human looking
+ * at it:
  *
- *   { id, country, name, percentage, createdAt, updatedAt }
+ *   { id, ruleName, country, state, county, city, guestSegment, taxType,
+ *     value, frequency, displayLabel, status, source, aiGenerated,
+ *     sourceUrl, confidence, caveat, lastVerifiedAt, approvedBy, approvedAt,
+ *     rejectedReason, createdAt, updatedAt }
  *
- * The builder collects rather more than that — a jurisdiction sub-region, a
- * guest segment, fixed-amount rules, a charge frequency and a separate
- * guest-facing label. None of those exist server-side yet, so they are kept in
- * the UI (they describe where this is going) but flagged as not applied. This
- * module is the single place that records which is which, so the distinction
- * can't quietly drift.
+ * `TaxRule.COUNTRY_CHOICES` is its **own** enum — distinct from
+ * `propertySchema.js`'s `LOCATIONS` (`US`/`UAE Dubai`) — the backend bridges
+ * the two internally when matching a property to its applicable rules, but
+ * this builder must send/receive exactly this list.
  */
 
-/** Countries the API accepts — its `LOCATION_CHOICES`, not the mock's list. */
-export const TAX_COUNTRIES = LOCATIONS;
+export const TAX_COUNTRIES = ['UK', 'Spain', 'USA', 'UAE', 'Nigeria'];
 
-/**
- * Fields the builder shows that the API cannot store yet.
- * Rendered as read-only with this explanation attached.
- */
-export const UNSUPPORTED_FIELDS = {
-  state: 'Sub-regions are not modelled yet — a rule applies to the whole country.',
-  segment: 'Guest segments are not modelled yet — a rule applies to every guest.',
-  type: 'Only percentage rules are applied. Fixed amounts are not supported yet.',
-  frequency: 'Frequency is not modelled yet — tax is applied once per booking.',
-  label: 'The rule name is what guests see; a separate label is not stored yet.',
-  active: 'There is no on/off switch — a country either has a rule or it does not. Delete the rule to remove the tax.',
+export const TAX_TYPES = [
+  { value: 'percentage', label: 'Percentage' },
+  { value: 'fixed', label: 'Fixed amount' },
+];
+
+export const TAX_FREQUENCIES = [
+  { value: 'per_night', label: 'Per night' },
+  { value: 'per_booking', label: 'Per booking' },
+];
+
+export const TAX_STATUSES = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'csv_import', label: 'CSV Import' },
+  { value: 'pending_review', label: 'Pending Review' },
+  { value: 'ai_suggested', label: 'AI Suggested' },
+  { value: 'active', label: 'Active' },
+  { value: 'needs_reverification', label: 'Needs Reverification' },
+  { value: 'rejected', label: 'Rejected' },
+];
+
+/** Statuses that still need a human decision — these get Approve/Reject actions in the table. */
+export const REVIEWABLE_STATUSES = ['pending_review', 'ai_suggested', 'csv_import'];
+
+/** Badge variant per lifecycle stage. */
+export const STATUS_BADGE_VARIANT = {
+  draft: 'neutral',
+  csv_import: 'info',
+  pending_review: 'warn',
+  ai_suggested: 'warn',
+  active: 'ok',
+  needs_reverification: 'warn',
+  rejected: 'danger',
 };
+
+export const GUEST_SEGMENTS = [
+  { value: 'citizen', label: 'Citizen' },
+  { value: 'resident', label: 'Resident' },
+  { value: 'eu_foreigner', label: 'EU Foreigner' },
+  { value: 'non_eu_foreigner', label: 'Non-EU Foreigner' },
+  { value: 'tourist_all', label: 'Tourist (All)' },
+];
+
+/** Stored, but not yet read by the pricing engine — see `property/pricing.py`'s docstring on the backend. */
+export const GUEST_SEGMENT_NOTE = 'Not yet enforced by pricing — every matched rule currently applies regardless of guest segment.';
 
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-/**
- * Normalise one API tax rule into the shape the table renders.
- *
- * The unsupported columns are filled with honest constants rather than left
- * undefined, so the table reads as "this is what actually happens" instead of
- * showing gaps.
- */
+/** The scope a rule applies to, joined for display — e.g. "New York City, New York, USA". */
+export const scopeLabel = (rule) => [rule.city, rule.state, rule.country].filter(Boolean).join(', ');
+
+/** Normalise one API tax rule into the shape the table/form render. */
 export const toTaxRule = (raw) => ({
   id: raw.id,
+  ruleName: raw.rule_name || '',
   country: raw.country,
-  name: raw.name || `${raw.country} tax`,
-  percentage: toNumber(raw.percentage),
-
-  /* Derived, not stored — see UNSUPPORTED_FIELDS. */
-  state: '',
-  segment: 'All Guests',
-  type: 'Percentage',
-  frequency: 'Per Booking',
-  label: raw.name || `${raw.country} tax`,
-  /** Existing means applied: the API has no inactive state. */
-  active: true,
-
+  state: raw.state || '',
+  county: raw.county || '',
+  city: raw.city || '',
+  guestSegment: Array.isArray(raw.guest_segment) ? raw.guest_segment : [],
+  taxType: raw.tax_type,
+  value: toNumber(raw.value),
+  frequency: raw.frequency,
+  displayLabel: raw.display_label || '',
+  status: raw.status,
+  source: raw.source,
+  aiGenerated: Boolean(raw.ai_generated),
+  sourceUrl: raw.source_url || '',
+  confidence: raw.confidence || '',
+  caveat: raw.caveat || '',
+  lastVerifiedAt: raw.last_verified_at,
+  approvedBy: raw.approved_by,
+  approvedAt: raw.approved_at,
+  rejectedReason: raw.rejected_reason || '',
   createdAt: raw.createdAt,
   updatedAt: raw.updatedAt,
 });
 
 /**
- * Build the create/update payload.
- *
- * Only the three supported fields are sent. `percentage` goes as a string to
- * match the serializer's DecimalField, the same way property rates do.
+ * Build the manual create/update payload — the fields
+ * `TaxRuleCreateUpdateSerializer` accepts from this form. `source` is always
+ * `'manual'`: submitting through this form (even to edit an AI/CSV-sourced
+ * row) is itself the human decision the backend's "AI guides, humans decide"
+ * model expects.
  */
-export const toTaxPayload = ({ country, name, value, percentage }) => {
-  const payload = {};
-
-  if (country !== undefined) payload.country = country;
-  if (name !== undefined) payload.name = name?.trim() ?? '';
-
-  const rate = percentage ?? value;
-  if (rate !== undefined && rate !== '') payload.percentage = String(Number(rate));
-
-  return payload;
-};
-
-/** Countries that do not yet have a rule — the only ones a new rule can use. */
-export const availableCountries = (rules = []) => {
-  const taken = new Set(rules.map((rule) => rule.country));
-  return TAX_COUNTRIES.filter((country) => !taken.has(country));
-};
+export const toTaxRulePayload = ({ ruleName, country, state, county, city, guestSegment, taxType, value, frequency, displayLabel, status }) => ({
+  rule_name: ruleName?.trim() ?? '',
+  country,
+  state: state?.trim() ?? '',
+  county: county?.trim() ?? '',
+  city: city?.trim() ?? '',
+  guest_segment: guestSegment ?? [],
+  tax_type: taxType,
+  value: String(Number(value) || 0),
+  frequency,
+  display_label: displayLabel?.trim() ?? '',
+  status: status || 'active',
+  source: 'manual',
+});

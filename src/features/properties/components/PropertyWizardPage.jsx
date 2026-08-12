@@ -23,8 +23,10 @@ import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/utils/classNames';
 import { formatCurrency } from '@/utils/format';
-import { getFieldErrors } from '@/utils/errors';
+import { getFieldErrors, getErrorMessage } from '@/utils/errors';
+import { toast } from '@/stores/uiStore';
 import { useCreateProperty, usePropertyStatus, useUploadPropertyImages } from '../hooks/useProperties';
+import { propertyService } from '../services/propertyService';
 import { PhotoPicker } from './PhotoPicker';
 import {
   ACCESS_FEATURES,
@@ -57,6 +59,7 @@ const EMPTY_FORM = {
   state: '',
   city: '',
   address: '',
+  postalCode: '',
   coordinates: { lat: '', lng: '' },
   type: 'Studio',
   bedrooms: 0,
@@ -279,6 +282,10 @@ export const PropertyWizardPage = () => {
   const [serverErrors, setServerErrors] = useState({});
   const [showErrors, setShowErrors] = useState(false);
 
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [isVerifyingPostal, setIsVerifyingPostal] = useState(false);
+  const [postalCheck, setPostalCheck] = useState(null);
+
   useEffect(() => {
     try {
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
@@ -301,6 +308,53 @@ export const PropertyWizardPage = () => {
     }));
 
   const currency = useMemo(() => currencyFor(form), [form]);
+
+  /** Forward-geocode the typed address (Mapbox) and fill coordinates — still editable afterward. */
+  const findOnMap = async () => {
+    if (!form.address.trim()) {
+      toast.error('Enter an address first', 'Type the street address before looking it up.');
+      return;
+    }
+    setIsGeocoding(true);
+    try {
+      const result = await propertyService.forwardGeocode({
+        address: form.address,
+        city: form.city,
+        state: form.state,
+        location: form.location,
+      });
+      update({ coordinates: { lat: String(result.coordinates.lat), lng: String(result.coordinates.lng) } });
+      toast.success('Location found', result.formattedAddress);
+    } catch (error) {
+      toast.error('Could not find that address', getErrorMessage(error));
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  /** Format-check + Mapbox-confirm the postal code against the typed address. Never blocks submission. */
+  const verifyPostalCode = async () => {
+    if (!form.address.trim()) {
+      toast.error('Enter an address first', 'Type the street address before verifying the postal code.');
+      return;
+    }
+    setIsVerifyingPostal(true);
+    setPostalCheck(null);
+    try {
+      const result = await propertyService.verifyPostalCode({
+        location: form.location,
+        postalCode: form.postalCode,
+        address: form.address,
+        city: form.city,
+        state: form.state,
+      });
+      setPostalCheck(result);
+    } catch (error) {
+      toast.error('Could not verify postal code', getErrorMessage(error));
+    } finally {
+      setIsVerifyingPostal(false);
+    }
+  };
 
   /** Per-step validation. Returned map is empty when the step is complete. */
   const stepErrors = useMemo(() => {
@@ -457,23 +511,49 @@ export const PropertyWizardPage = () => {
         error={errorFor('address')}
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="flex items-end gap-3">
         <Input
-          label="Latitude (optional)"
-          type="number"
-          step="any"
-          placeholder="6.4253"
-          value={form.coordinates.lat}
-          onChange={(event) => update({ coordinates: { ...form.coordinates, lat: event.target.value } })}
+          label="Postal code (optional)"
+          placeholder="e.g. SW1A 1AA"
+          value={form.postalCode}
+          onChange={(event) => {
+            update({ postalCode: event.target.value });
+            setPostalCheck(null);
+          }}
+          containerClassName="flex-1"
         />
-        <Input
-          label="Longitude (optional)"
-          type="number"
-          step="any"
-          placeholder="3.4419"
-          value={form.coordinates.lng}
-          onChange={(event) => update({ coordinates: { ...form.coordinates, lng: event.target.value } })}
-        />
+        <Button type="button" variant="secondary" isLoading={isVerifyingPostal} onClick={verifyPostalCode}>
+          Verify
+        </Button>
+      </div>
+      {postalCheck && (
+        <Alert variant={postalCheck.verified ? 'success' : postalCheck.formatError ? 'error' : 'warn'}>
+          {postalCheck.formatError ?? postalCheck.detail}
+        </Alert>
+      )}
+
+      <div className="flex items-end gap-3">
+        <div className="grid flex-1 grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input
+            label="Latitude (optional)"
+            type="number"
+            step="any"
+            placeholder="6.4253"
+            value={form.coordinates.lat}
+            onChange={(event) => update({ coordinates: { ...form.coordinates, lat: event.target.value } })}
+          />
+          <Input
+            label="Longitude (optional)"
+            type="number"
+            step="any"
+            placeholder="3.4419"
+            value={form.coordinates.lng}
+            onChange={(event) => update({ coordinates: { ...form.coordinates, lng: event.target.value } })}
+          />
+        </div>
+        <Button type="button" variant="secondary" isLoading={isGeocoding} leftIcon={<MapPin className="size-3.5" aria-hidden="true" />} onClick={findOnMap}>
+          Find on map
+        </Button>
       </div>
     </div>,
 

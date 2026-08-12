@@ -17,11 +17,10 @@ import {
   useCompleteCheckOut,
   useContractForBooking,
   useInspectionState,
-  usePendingReviewInspections,
   useUploadInspectionPhoto,
 } from '../hooks/useBookings';
 import { CONTRACT_REQUIRED_MIN_NIGHTS, CONTRACT_STATUS_LABEL } from '@/lib/contractSchema';
-import { PendingReviewPanel } from './PendingReviewPanel';
+import { formatRelative } from '@/utils/format';
 
 const ROOMS = [
   { value: 'living_room', label: 'Living Room' },
@@ -120,11 +119,10 @@ export const CheckInOutPage = () => {
   const { uploadPhoto } = useUploadInspectionPhoto();
   const { completeCheckIn, isPending: isCompletingCheckIn } = useCompleteCheckIn();
   const { completeCheckOut, isPending: isCompletingCheckOut } = useCompleteCheckOut();
-  const { data: pendingReviews } = usePendingReviewInspections();
 
-  /** A guest self-submitted photo/video for this stage that staff hasn't cleared yet — blocks completion server-side. */
-  const reviewStatus = inspection?.[stage]?.reviewStatus ?? 'not_required';
-  const isPendingReview = reviewStatus === 'pending_review';
+  /** Guest's own acknowledgement of this stage — informational only, nothing for staff to act on. */
+  const guestAcknowledged = inspection?.[stage]?.guestAcknowledged ?? false;
+  const guestAcknowledgedAt = inspection?.[stage]?.guestAcknowledgedAt ?? null;
 
   /** Only relevant for check-in — checkout has no contract gate. */
   const nights = selected?.nights ?? 0;
@@ -201,13 +199,9 @@ export const CheckInOutPage = () => {
         tabs={[
           { id: 'checkin', label: 'Arrivals', count: arrivals?.items?.length },
           { id: 'checkout', label: 'Departures', count: departures.items.length },
-          { id: 'review', label: 'Pending Review', count: pendingReviews?.length },
         ]}
       />
 
-      {tab === 'review' ? (
-        <PendingReviewPanel />
-      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <Card className="h-fit">
           <CardHeader title={tab === 'checkin' ? "Today's arrivals" : 'Current departures'} />
@@ -251,10 +245,18 @@ export const CheckInOutPage = () => {
             />
           ) : (
             <>
-              <h2 className="font-display text-[15px] font-semibold text-ink">
-                {tab === 'checkin' ? 'Check in' : 'Check out'} — {selected.guestName}
-              </h2>
-              <p className="text-[11.5px] text-ink-muted">{selected.propertyName}</p>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-[15px] font-semibold text-ink">
+                    {tab === 'checkin' ? 'Check in' : 'Check out'} — {selected.guestName}
+                  </h2>
+                  <p className="text-[11.5px] text-ink-muted">{selected.propertyName}</p>
+                </div>
+                {/* Read-only — the guest acknowledges their own check-in/out on their own, nothing for staff to action here. */}
+                <Badge variant={guestAcknowledged ? 'ok' : 'neutral'}>
+                  {guestAcknowledged ? `Guest acknowledged · ${formatRelative(guestAcknowledgedAt)}` : 'Awaiting guest acknowledgement'}
+                </Badge>
+              </div>
 
               <Stepper steps={STEPS} current={step} onStepClick={setStep} className="mt-4" />
 
@@ -319,25 +321,6 @@ export const CheckInOutPage = () => {
                           Booking status → {completeResult?.status ?? (stage === 'checkin' ? 'Active' : 'Completed')}
                         </Badge>
                       </>
-                    ) : isPendingReview ? (
-                      <div className="mx-auto max-w-sm text-left">
-                        <Alert variant="warn" title="Guest submission awaiting review">
-                          The guest submitted their own {stage === 'checkin' ? 'check-in' : 'check-out'} photos or
-                          video for this booking, and it hasn&apos;t been reviewed yet — the server won&apos;t allow
-                          completion until it is. Open the <strong>Pending Review</strong> tab to approve or note it,
-                          then come back here.
-                        </Alert>
-                        <Button
-                          variant="secondary"
-                          className="mt-3"
-                          onClick={() => {
-                            setTab('review');
-                            setSelected(null);
-                          }}
-                        >
-                          Go to Pending Review
-                        </Button>
-                      </div>
                     ) : (
                       <>
                         <p className="text-[13px] font-semibold text-ink">
@@ -371,7 +354,6 @@ export const CheckInOutPage = () => {
           )}
         </Card>
       </div>
-      )}
     </div>
   );
 };

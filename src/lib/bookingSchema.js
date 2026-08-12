@@ -6,6 +6,29 @@
  * component has to.
  */
 
+/**
+ * `GuestSerializer` — deliberately thin: id, name, email, active/inactive,
+ * joined date, and an almost-empty `profile` (`enable_2fa`/`preferences`
+ * only). No phone, country, KYC status, guest segment, or stay stats exist
+ * on this endpoint or in the profile — don't invent them.
+ */
+export const toGuest = (raw) => ({
+  id: raw.id,
+  name: [raw.first_name, raw.last_name].filter(Boolean).join(' ').trim() || raw.email,
+  email: raw.email,
+  isActive: Boolean(raw.is_active),
+  joinedAt: raw.date_joined,
+});
+
+/** `GET /auth/admin/guests/`'s pagination envelope (`count`/`page`/`page_size`/`results`), normalised to match every other list screen's `{items, total, page, pageSize, totalPages}`. */
+export const toGuestPage = (raw, { page = 1 } = {}) => ({
+  items: (raw?.results ?? []).map(toGuest),
+  total: raw?.count ?? 0,
+  page: raw?.page ?? page,
+  pageSize: raw?.page_size ?? 20,
+  totalPages: Math.max(1, Math.ceil((raw?.count ?? 0) / (raw?.page_size ?? 20))),
+});
+
 export const BOOKING_STATUSES = [
   'pending_payment',
   'pending_approval',

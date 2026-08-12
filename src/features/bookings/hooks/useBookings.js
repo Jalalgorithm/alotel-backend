@@ -4,11 +4,12 @@ import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
 
-export const useBookings = (params = {}) =>
+export const useBookings = (params = {}, options = {}) =>
   useQuery({
     queryKey: queryKeys.bookings.list(params),
     queryFn: () => bookingService.getBookings(params),
     placeholderData: keepPreviousData,
+    ...options,
   });
 
 export const useBooking = (id) =>
@@ -97,6 +98,23 @@ export const useGuests = (params = {}) =>
     queryFn: () => bookingService.getGuests(params),
     placeholderData: keepPreviousData,
   });
+
+/** Activate / deactivate a guest account, or edit their name — the only fields `PATCH /auth/admin/guests/<id>/` accepts. */
+export const useUpdateGuest = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ id, patch }) => bookingService.updateGuest(id, patch),
+    onSuccess: (guest) => {
+      // Prefix-match every filtered/paginated view of the guest list, not just one filter combination.
+      queryClient.invalidateQueries({ queryKey: ['bookings', 'guests'] });
+      toast.success('Guest updated', `${guest.name} is now ${guest.isActive ? 'active' : 'deactivated'}`);
+    },
+    onError: (error) => toast.error('Could not update guest', getErrorMessage(error)),
+  });
+
+  return { updateGuest: (id, patch) => mutation.mutate({ id, patch }), isPending: mutation.isPending, pendingId: mutation.variables?.id };
+};
 
 export const useContracts = (params = {}) =>
   useQuery({
@@ -212,34 +230,6 @@ export const useUploadInspectionPhoto = () => {
   });
 
   return { uploadPhoto: mutation.mutate, isPending: mutation.isPending, pendingVariables: mutation.variables };
-};
-
-/** Guest-submitted check-in/check-out inspections awaiting staff review, scoped to the caller's assigned properties. */
-export const usePendingReviewInspections = () =>
-  useQuery({
-    queryKey: queryKeys.bookings.pendingReviewInspections(),
-    queryFn: bookingService.getPendingReviewInspections,
-  });
-
-/**
- * Clears an inspection's `pending_review` block. Invalidates both the queue
- * and the booking's own inspection state, so the Arrivals/Departures tab's
- * "awaiting review" banner clears the moment a review is submitted.
- */
-export const useReviewInspection = () => {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: bookingService.reviewInspection,
-    onSuccess: (_result, { bookingId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.pendingReviewInspections() });
-      if (bookingId) queryClient.invalidateQueries({ queryKey: queryKeys.bookings.inspection(bookingId) });
-      toast.success('Inspection reviewed');
-    },
-    onError: (error) => toast.error('Could not submit review', getErrorMessage(error)),
-  });
-
-  return { reviewInspection: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.inspectionId };
 };
 
 /** Transitions a booking `confirmed`/`active` → `active`. */

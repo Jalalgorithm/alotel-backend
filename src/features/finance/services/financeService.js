@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
-import { toTaxPayload, toTaxRule } from '@/lib/taxSchema';
+import { toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
@@ -65,15 +65,23 @@ const mockFinance = {
     return clone({ invoices, revenueByMonth, costBreakdown });
   },
 
-  async listTaxRules() {
+  async listTaxRules(params = {}) {
     await delay(260);
-    return clone(readTaxRules());
+    const rows = readTaxRules();
+    const filtered = rows.filter(
+      (rule) =>
+        (!params.country || rule.country === params.country) &&
+        (!params.state || rule.state === params.state) &&
+        (!params.city || rule.city === params.city) &&
+        (!params.status || rule.status === params.status),
+    );
+    return clone(filtered);
   },
 
   async createTaxRule(payload) {
     await delay(450);
 
-    const rule = { id: createId('tax'), active: true, ...payload };
+    const rule = { id: createId('tax'), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
     jsonStorage.write(KEYS.taxRules, [...readTaxRules(), rule]);
     return clone(rule);
   },
@@ -85,7 +93,7 @@ const mockFinance = {
     const index = rows.findIndex((entry) => entry.id === id);
     if (index < 0) throw new ApiError('Tax rule not found.', 404);
 
-    rows[index] = { ...rows[index], ...patch };
+    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
     jsonStorage.write(KEYS.taxRules, rows);
     return clone(rows[index]);
   },
@@ -94,6 +102,16 @@ const mockFinance = {
     await delay(350);
     jsonStorage.write(KEYS.taxRules, readTaxRules().filter((entry) => entry.id !== id));
     return { success: true };
+  },
+
+  async approveTaxRule(id) {
+    await delay(350);
+    return mockFinance.updateTaxRule(id, { status: 'active' });
+  },
+
+  async rejectTaxRule(id, reason) {
+    await delay(350);
+    return mockFinance.updateTaxRule(id, { status: 'rejected', rejectedReason: reason });
   },
 };
 
@@ -200,28 +218,48 @@ const mockPayments = {
 };
 
 /**
- * Country tax rules. Public to read (the guest quote depends on them) and
- * admin-only to change.
+ * Tax Rule Builder v2. Public to read (the guest quote depends on it) and
+ * Super-Admin-only to change. Rules stack (country + state + city can all
+ * apply to one booking at once), so list supports filtering rather than
+ * assuming one row per market.
  */
 const realTaxes = {
-  async list() {
-    const { data } = await apiClient.get('/properties/taxes/');
+  async list(params = {}) {
+    const query = {};
+    if (params.country) query.country = params.country;
+    if (params.state) query.state = params.state;
+    if (params.city) query.city = params.city;
+    if (params.status) query.status = params.status;
+
+    const { data } = await apiClient.get('/properties/taxes/', { params: query });
     return (data?.results ?? data ?? []).map(toTaxRule);
   },
 
   async create(values) {
-    const { data } = await apiClient.post('/properties/taxes/', toTaxPayload(values));
+    const { data } = await apiClient.post('/properties/taxes/', toTaxRulePayload(values));
     return toTaxRule(data);
   },
 
   async update(id, patch) {
-    const { data } = await apiClient.patch(`/properties/taxes/${id}/`, toTaxPayload(patch));
+    const { data } = await apiClient.patch(`/properties/taxes/${id}/`, toTaxRulePayload(patch));
     return toTaxRule(data);
   },
 
   async remove(id) {
     await apiClient.delete(`/properties/taxes/${id}/`);
     return { success: true };
+  },
+
+  /** Sets `status=active`, stamps `approved_by`/`approved_at`/`last_verified_at`. Empty body. */
+  async approve(id) {
+    const { data } = await apiClient.patch(`/properties/taxes/${id}/approve/`);
+    return toTaxRule(data);
+  },
+
+  /** Sets `status=rejected` — kept, not deleted, for audit history. `reason` is required server-side. */
+  async reject(id, reason) {
+    const { data } = await apiClient.patch(`/properties/taxes/${id}/reject/`, { reason });
+    return toTaxRule(data);
   },
 };
 
@@ -257,8 +295,10 @@ export const financeService = {
   releasePayout: (id) => backend.releasePayout(id),
   getRevenue: () => backend.revenue(),
   /* Tax rules — wired to the real API. */
-  getTaxRules: () => (env.useMockTaxes ? backend.listTaxRules() : taxes.list()),
+  getTaxRules: (params) => (env.useMockTaxes ? backend.listTaxRules(params) : taxes.list(params)),
   createTaxRule: (payload) => (env.useMockTaxes ? backend.createTaxRule(payload) : taxes.create(payload)),
   updateTaxRule: (id, patch) => (env.useMockTaxes ? backend.updateTaxRule(id, patch) : taxes.update(id, patch)),
   deleteTaxRule: (id) => (env.useMockTaxes ? backend.deleteTaxRule(id) : taxes.remove(id)),
+  approveTaxRule: (id) => (env.useMockTaxes ? backend.approveTaxRule(id) : taxes.approve(id)),
+  rejectTaxRule: (id, reason) => (env.useMockTaxes ? backend.rejectTaxRule(id, reason) : taxes.reject(id, reason)),
 };
