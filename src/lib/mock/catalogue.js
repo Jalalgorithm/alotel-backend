@@ -101,13 +101,12 @@ export const enabledAmenities = [
 /* Property reviews (moderation queue)                                         */
 /* -------------------------------------------------------------------------- */
 
+/** Mirrors `Review` — no per-property scoping in the mock (the real endpoint is per-listing); `isFlagged` reviews are excluded, same as the public endpoint. */
 export const propertyReviews = [
-  { id: 'rev_01', guest: 'Eleanor Thompson', initials: 'ET', color: '#2a78d6', property: 'Canary Wharf Studio', rating: 5, comment: 'Immaculate, and the check-in was completely seamless. Would book again without hesitation.', submittedAt: '2026-08-03T19:20:00.000Z', status: 'Pending' },
-  { id: 'rev_02', guest: 'Marcus Chen', initials: 'MC', color: '#eb6834', property: 'Dubai Marina Suite', rating: 4, comment: 'Great location for business. Wifi dropped twice during a call.', submittedAt: '2026-08-03T12:05:00.000Z', status: 'Pending' },
-  { id: 'rev_03', guest: 'Amina Okafor', initials: 'AO', color: '#6D28D9', property: 'VI Luxury Flat', rating: 5, comment: 'Felt like a five-star hotel with the privacy of a home. The concierge was outstanding.', submittedAt: '2026-08-02T16:40:00.000Z', status: 'Approved' },
-  { id: 'rev_04', guest: 'Pierre Martin', initials: 'PM', color: '#1baf7a', property: 'Gothic Quarter 2-Bed', rating: 2, comment: 'Listing said lift access — there was no working lift for the whole stay.', submittedAt: '2026-08-02T09:15:00.000Z', status: 'Pending' },
-  { id: 'rev_05', guest: 'David Chen', initials: 'DC', color: '#0F766E', property: 'Manhattan Studio', rating: 4, comment: 'Compact but well designed. Would have liked a proper desk.', submittedAt: '2026-08-01T21:30:00.000Z', status: 'Approved' },
-  { id: 'rev_06', guest: 'Sofia Reyes', initials: 'SR', color: '#BE185D', property: 'Sevilla Casa', rating: 1, comment: 'Contains contact details and an off-platform booking request.', submittedAt: '2026-08-01T08:00:00.000Z', status: 'Rejected' },
+  { id: 'rev_01', guest: 'Eleanor Thompson', initials: 'ET', color: '#2a78d6', property: 'Canary Wharf Studio', rating: 5, comment: 'Immaculate, and the check-in was completely seamless. Would book again without hesitation.', submittedAt: '2026-08-03T19:20:00.000Z', isFlagged: false, flagReason: '' },
+  { id: 'rev_02', guest: 'Marcus Chen', initials: 'MC', color: '#eb6834', property: 'Dubai Marina Suite', rating: 4, comment: 'Great location for business. Wifi dropped twice during a call.', submittedAt: '2026-08-03T12:05:00.000Z', isFlagged: false, flagReason: '' },
+  { id: 'rev_03', guest: 'Amina Okafor', initials: 'AO', color: '#6D28D9', property: 'VI Luxury Flat', rating: 5, comment: 'Felt like a five-star hotel with the privacy of a home. The concierge was outstanding.', submittedAt: '2026-08-02T16:40:00.000Z', isFlagged: false, flagReason: '' },
+  { id: 'rev_04', guest: 'Pierre Martin', initials: 'PM', color: '#1baf7a', property: 'Gothic Quarter 2-Bed', rating: 2, comment: 'Listing said lift access — there was no working lift for the whole stay.', submittedAt: '2026-08-02T09:15:00.000Z', isFlagged: false, flagReason: '' },
 ];
 
 /* -------------------------------------------------------------------------- */

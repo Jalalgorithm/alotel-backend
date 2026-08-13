@@ -33,24 +33,51 @@ export const useSaveCheckoutReport = () => {
 
 /* ------------------------------------------------------------ housekeeping */
 
-export const useHousekeeping = () =>
+/** Today's room-status board (Occupied / Due Check-out / Needs Cleaning / Ready), scoped server-side to the caller's assigned properties. */
+export const useTodaysRooms = () =>
   useQuery({
     queryKey: queryKeys.bookings.housekeeping(),
-    queryFn: bookingService.getHousekeeping,
+    queryFn: bookingService.getTodaysRooms,
   });
 
-export const useResolveMaintenance = () => {
+/** Housekeeping/maintenance/inspection tasks — a housekeeper only ever sees their own. */
+export const useTasks = (params = {}) =>
+  useQuery({
+    queryKey: [...queryKeys.bookings.housekeeping(), 'tasks', params],
+    queryFn: () => bookingService.getTasks(params),
+  });
+
+/** Advance a task's status (e.g. mark a cleaning task `cleaned`). */
+export const useUpdateTaskStatus = () => {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: bookingService.resolveMaintenance,
-    onSuccess: (request) => {
+    mutationFn: ({ id, patch }) => bookingService.updateTaskStatus(id, patch),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.bookings.housekeeping() });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
-      toast.success('Marked resolved', request.title);
+      toast.success('Task updated');
     },
-    onError: (error) => toast.error('Could not update request', getErrorMessage(error)),
+    onError: (error) => toast.error('Could not update task', getErrorMessage(error)),
   });
 
-  return { resolve: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables };
+  return { updateTaskStatus: (id, patch) => mutation.mutate({ id, patch }), isPending: mutation.isPending, pendingId: mutation.variables?.id };
+};
+
+/** Properties assigned to the current staff member — populates the "report an issue" picker. */
+export const useAssignedProperties = () =>
+  useQuery({
+    queryKey: [...queryKeys.bookings.housekeeping(), 'assigned-properties'],
+    queryFn: bookingService.getAssignedProperties,
+  });
+
+/** Log a maintenance issue. Write-only — there is no list/resolve endpoint for issues yet. */
+export const useReportIssue = () => {
+  const mutation = useMutation({
+    mutationFn: bookingService.reportIssue,
+    onSuccess: () => toast.success('Issue reported', 'Logged for the property team.'),
+    onError: (error) => toast.error('Could not report issue', getErrorMessage(error)),
+  });
+
+  return { reportIssue: mutation.mutate, isPending: mutation.isPending };
 };

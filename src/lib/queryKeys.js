@@ -23,6 +23,8 @@ export const queryKeys = {
     list: (filters = {}) => ['properties', 'list', filters],
     detail: (id) => ['properties', 'detail', id],
     images: (id) => ['properties', 'images', id],
+    videos: (id) => ['properties', 'videos', id],
+    availability: (id) => ['properties', 'availability', id],
     units: (filters = {}) => ['properties', 'units', filters],
     amenities: () => ['properties', 'amenities'],
     reviews: (filters = {}) => ['properties', 'reviews', filters],

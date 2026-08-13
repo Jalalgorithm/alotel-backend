@@ -22,8 +22,11 @@ export {
 export {
   useCheckoutReports,
   useSaveCheckoutReport,
-  useHousekeeping,
-  useResolveMaintenance,
+  useTodaysRooms,
+  useTasks,
+  useUpdateTaskStatus,
+  useAssignedProperties,
+  useReportIssue,
 } from './hooks/useOperations';
 
 export { bookingService } from './services/bookingService';

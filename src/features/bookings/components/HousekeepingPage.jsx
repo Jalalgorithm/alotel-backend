@@ -1,153 +1,227 @@
+import { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { StatusBadge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
+import { Select } from '@/components/ui/Select';
+import { Input, Textarea } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useHousekeeping, useResolveMaintenance } from '../hooks/useOperations';
-import { useUnitStatus } from '@/features/properties';
-import { formatRelative } from '@/utils/format';
-import { UNIT_STATUSES } from '@/lib/mock/catalogue';
+import {
+  useAssignedProperties,
+  useReportIssue,
+  useTasks,
+  useTodaysRooms,
+  useUpdateTaskStatus,
+} from '../hooks/useOperations';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 
-const STATUS_TONE = {
-  Ready: 'border-l-ok',
-  'Needs Cleaning': 'border-l-warn',
-  Occupied: 'border-l-info',
-  Maintenance: 'border-l-danger',
-};
+/** `TodaysRoomStatusView`'s four statuses. */
+const ROOM_STATUSES = ['occupied', 'due_checkout', 'needs_cleaning', 'ready'];
+const ROOM_STATUS_LABELS = { occupied: 'Occupied', due_checkout: 'Due Check-out', needs_cleaning: 'Needs Cleaning', ready: 'Ready' };
+const ROOM_STATUS_TONE = { occupied: 'border-l-info', due_checkout: 'border-l-warn', needs_cleaning: 'border-l-warn', ready: 'border-l-ok' };
+const ROOM_STATUS_BADGE = { occupied: 'info', due_checkout: 'warn', needs_cleaning: 'warn', ready: 'ok' };
+
+/** `OperationTask.STATUS_CHOICES`. */
+const TASK_STATUSES = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'cleaned', label: 'Cleaned' },
+  { value: 'ready', label: 'Ready' },
+  { value: 'blocked', label: 'Blocked' },
+];
+const TASK_STATUS_BADGE = { pending: 'warn', in_progress: 'info', cleaned: 'ok', ready: 'ok', blocked: 'danger' };
+
+const SEVERITIES = ['low', 'medium', 'high', 'critical'];
+
+const emptyIssue = { propertyId: '', title: '', description: '', severity: 'medium' };
 
 /**
- * Room-status board.
- *
- * This is the only operational screen a Level 3 cleaner can open, so it must
- * work standalone — no guest names, no financials, just unit state.
+ * Housekeeping — the only operational screen a Level 3 cleaner can open, so
+ * it works standalone: no guest names, no financials. Backed by
+ * `GET /operations/rooms/today/` (derived room status), `GET /operations/tasks/`
+ * (a housekeeper only ever sees their own), and `POST /operations/issues/report/`
+ * (write-only — there's no list/resolve endpoint for issues yet).
  */
 export const HousekeepingPage = () => {
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.housekeepingManage);
 
-  const { data, isLoading } = useHousekeeping();
-  const { setUnitStatus, pendingId } = useUnitStatus();
-  const { resolve, pendingId: resolvingId } = useResolveMaintenance();
+  const { data: roomsData, isLoading: isLoadingRooms } = useTodaysRooms();
+  const { data: tasks = [], isLoading: isLoadingTasks } = useTasks();
+  const { updateTaskStatus, isPending: isUpdatingTask, pendingId } = useUpdateTaskStatus();
+  const { data: assignedProperties = [] } = useAssignedProperties();
+  const { reportIssue, isPending: isReporting } = useReportIssue();
 
-  const units = data?.units ?? [];
-  const maintenance = (data?.maintenance ?? []).filter((entry) => entry.status !== 'Resolved');
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
+  const [issueDraft, setIssueDraft] = useState(emptyIssue);
+
+  const rooms = roomsData?.rooms ?? [];
+  const propertyNameById = new Map(rooms.map((room) => [room.propertyId, room.propertyName]));
+
+  const submitIssue = () => {
+    reportIssue(issueDraft, {
+      onSuccess: () => {
+        setIsIssueModalOpen(false);
+        setIssueDraft(emptyIssue);
+      },
+    });
+  };
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Housekeeping" subtitle="Live room status across the portfolio." />
+      <PageHeader
+        title="Housekeeping"
+        subtitle="Live room status across the portfolio."
+        actions={
+          canManage && (
+            <Button variant="secondary" leftIcon={<AlertTriangle className="size-3.5" aria-hidden="true" />} onClick={() => setIsIssueModalOpen(true)}>
+              Report an issue
+            </Button>
+          )
+        }
+      />
 
       {/* Status summary */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {UNIT_STATUSES.map((status) => (
+        {ROOM_STATUSES.map((status) => (
           <Card key={status} className="p-3.5">
             <p className="font-display text-[22px] font-bold leading-none text-ink">
-              {units.filter((unit) => unit.status === status).length}
+              {rooms.filter((room) => room.status === status).length}
             </p>
             <div className="mt-2">
-              <StatusBadge status={status} />
+              <Badge variant={ROOM_STATUS_BADGE[status]}>{ROOM_STATUS_LABELS[status]}</Badge>
             </div>
           </Card>
         ))}
       </div>
 
       {/* Room board */}
-      {isLoading ? (
+      {isLoadingRooms ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 8 }, (_, index) => (
-            <Skeleton key={index} className="h-36 rounded-card" />
+            <Skeleton key={index} className="h-28 rounded-card" />
           ))}
         </div>
-      ) : (
+      ) : rooms.length ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {units.map((unit) => (
-            <Card key={unit.id} className={`border-l-[3px] p-4 ${STATUS_TONE[unit.status] ?? 'border-l-line'}`}>
+          {rooms.map((room) => (
+            <Card key={room.propertyId} className={`border-l-[3px] p-4 ${ROOM_STATUS_TONE[room.status] ?? 'border-l-line'}`}>
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[13px] font-bold text-ink">{unit.label}</p>
-                  <p className="truncate text-[10.5px] text-ink-muted">{unit.property}</p>
-                </div>
-                <StatusBadge status={unit.status} />
+                <p className="min-w-0 truncate text-[13px] font-bold text-ink">{room.propertyName}</p>
+                <Badge variant={ROOM_STATUS_BADGE[room.status]}>{ROOM_STATUS_LABELS[room.status] ?? room.status}</Badge>
               </div>
 
-              <p className="mt-2 text-[11px] text-ink-soft">{unit.note}</p>
-              <p className="mt-0.5 text-[10px] text-ink-muted">Cleaned {formatRelative(unit.lastCleaned)}</p>
-
-              {canManage && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {unit.status !== 'Ready' && (
-                    <Button
-                      size="xs"
-                      variant="primary"
-                      isLoading={pendingId === unit.id}
-                      onClick={() => setUnitStatus({ id: unit.id, status: 'Ready' })}
-                    >
-                      Mark cleaned
-                    </Button>
-                  )}
-                  {unit.status === 'Ready' && (
-                    <Button
-                      size="xs"
-                      isLoading={pendingId === unit.id}
-                      onClick={() => setUnitStatus({ id: unit.id, status: 'Needs Cleaning' })}
-                    >
-                      Needs cleaning
-                    </Button>
-                  )}
-                  {unit.status !== 'Maintenance' && (
-                    <Button
-                      size="xs"
-                      variant="dangerSoft"
-                      isLoading={pendingId === unit.id}
-                      onClick={() => setUnitStatus({ id: unit.id, status: 'Maintenance' })}
-                    >
-                      Block
-                    </Button>
-                  )}
+              {canManage && room.status === 'needs_cleaning' && room.cleaningTaskId && (
+                <div className="mt-3">
+                  <Button
+                    size="xs"
+                    variant="primary"
+                    isLoading={isUpdatingTask && pendingId === room.cleaningTaskId}
+                    onClick={() => updateTaskStatus(room.cleaningTaskId, { status: 'cleaned' })}
+                  >
+                    Mark cleaned
+                  </Button>
                 </div>
               )}
             </Card>
           ))}
         </div>
+      ) : (
+        <EmptyState title="Nothing scheduled today" description="No properties assigned, or nothing due." />
       )}
 
-      {/* Maintenance queue */}
+      {/* Task queue */}
       <Card>
-        <CardHeader title="Open maintenance requests" subtitle="Ordered by priority." />
+        <CardHeader title="Tasks" subtitle="Cleaning, maintenance and inspection tasks." />
 
-        {maintenance.length ? (
+        {isLoadingTasks ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 3 }, (_, index) => (
+              <Skeleton key={index} className="h-12" />
+            ))}
+          </div>
+        ) : tasks.length ? (
           <ul className="divide-y divide-line border-t border-line">
-            {maintenance.map((request) => (
-              <li key={request.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+            {tasks.map((task) => (
+              <li key={task.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] font-semibold text-ink">{request.title}</p>
+                  <p className="text-[12.5px] font-semibold capitalize text-ink">{task.taskType} task</p>
                   <p className="truncate text-[10.5px] text-ink-muted">
-                    {request.property} · reported {formatRelative(request.reportedAt)} · {request.assignee}
+                    {propertyNameById.get(task.propertyId) ?? task.propertyId} {task.notes && `· ${task.notes}`}
                   </p>
                 </div>
 
-                <StatusBadge status={request.priority} dot={false} />
-                <StatusBadge status={request.status === 'Open' ? 'Due' : 'Processing'} />
-
-                {canManage && (
-                  <Button
-                    size="xs"
-                    variant="primary"
-                    isLoading={resolvingId === request.id}
-                    onClick={() => resolve(request.id)}
-                  >
-                    Mark resolved
-                  </Button>
+                {canManage ? (
+                  <Select
+                    value={task.status}
+                    onChange={(event) => updateTaskStatus(task.id, { status: event.target.value })}
+                    options={TASK_STATUSES}
+                    aria-label={`Status for ${task.taskType} task`}
+                    className="h-8 w-36 text-[11px]"
+                  />
+                ) : (
+                  <Badge variant={TASK_STATUS_BADGE[task.status]}>{TASK_STATUSES.find((s) => s.value === task.status)?.label ?? task.status}</Badge>
                 )}
               </li>
             ))}
           </ul>
         ) : (
-          <EmptyState title="No open requests" description="Everything reported has been resolved." />
+          <EmptyState title="No tasks" description="Nothing assigned right now." />
         )}
       </Card>
+
+      <Modal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+        title="Report an issue"
+        description="Logs a maintenance issue for the property team to action."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsIssueModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={isReporting}
+              disabled={!issueDraft.propertyId || !issueDraft.title.trim() || !issueDraft.description.trim()}
+              onClick={submitIssue}
+            >
+              Report issue
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3.5">
+          <Select
+            label="Property"
+            placeholder="Select a property"
+            options={assignedProperties.map((property) => ({ value: property.id, label: property.name }))}
+            value={issueDraft.propertyId}
+            onChange={(event) => setIssueDraft((current) => ({ ...current, propertyId: event.target.value }))}
+          />
+          <Input
+            label="Title"
+            placeholder="e.g. Leaking tap in bathroom"
+            value={issueDraft.title}
+            onChange={(event) => setIssueDraft((current) => ({ ...current, title: event.target.value }))}
+          />
+          <Textarea
+            label="Description"
+            value={issueDraft.description}
+            onChange={(event) => setIssueDraft((current) => ({ ...current, description: event.target.value }))}
+          />
+          <Select
+            label="Severity"
+            options={SEVERITIES}
+            value={issueDraft.severity}
+            onChange={(event) => setIssueDraft((current) => ({ ...current, severity: event.target.value }))}
+          />
+        </div>
+      </Modal>
     </div>
   );
 };

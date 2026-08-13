@@ -227,21 +227,63 @@ const mockBookings = {
   },
 
   /* ----------------------------------------------------------- housekeeping */
-  async listHousekeeping() {
+  async todaysRooms() {
     await delay(250);
-    return clone({ units: readUnits(), maintenance: readMaintenance() });
+    return {
+      date: new Date().toISOString().slice(0, 10),
+      rooms: readUnits().map((unit) => ({
+        propertyId: unit.propertyId ?? unit.id,
+        propertyName: unit.property,
+        status: { Ready: 'ready', 'Needs Cleaning': 'needs_cleaning', Occupied: 'occupied', Maintenance: 'needs_cleaning' }[unit.status] ?? 'ready',
+        bookingId: null,
+        cleaningTaskId: unit.status === 'Needs Cleaning' ? unit.id : null,
+      })),
+    };
   },
 
-  async resolveMaintenance(id) {
+  async listTasks() {
+    await delay(250);
+    return clone(
+      readMaintenance().map((entry) => ({
+        id: entry.id,
+        propertyId: null,
+        propertyName: entry.property,
+        taskType: 'maintenance',
+        status: entry.status === 'Resolved' ? 'cleaned' : 'pending',
+        notes: entry.title,
+        dueDate: null,
+      })),
+    );
+  },
+
+  async updateTaskStatus(id, patch) {
     await delay(400);
 
     const rows = readMaintenance();
     const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Request not found.', 404);
+    if (index < 0) throw new ApiError('Task not found.', 404);
 
-    rows[index] = { ...rows[index], status: 'Resolved', resolvedAt: new Date().toISOString() };
+    rows[index] = { ...rows[index], status: patch.status === 'cleaned' || patch.status === 'ready' ? 'Resolved' : 'Open' };
     jsonStorage.write(KEYS.maintenance, rows);
     return clone(rows[index]);
+  },
+
+  async reportIssue(payload) {
+    await delay(400);
+    return { id: createId('issue'), status: 'open', ...payload };
+  },
+
+  async listAssignedProperties() {
+    await delay(200);
+    const seen = new Set();
+    return readUnits()
+      .filter((unit) => {
+        const key = unit.propertyId ?? unit.property;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((unit) => ({ id: unit.propertyId ?? unit.id, name: unit.property }));
   },
 
   /* --------------------------------------------------------------- calendar */
@@ -523,8 +565,69 @@ const realBookings = {
     return data;
   },
 
-  listHousekeeping: async () => (await apiClient.get('/housekeeping')).data,
-  resolveMaintenance: async (id) => (await apiClient.patch(`/maintenance/${id}`, { status: 'Resolved' })).data,
+  /** `GET /operations/rooms/today/` — derived from real bookings + tasks, scoped to the caller's assigned properties server-side. */
+  todaysRooms: async () => {
+    const { data } = await apiClient.get('/operations/rooms/today/');
+    return {
+      date: data?.date,
+      rooms: (data?.rooms ?? []).map((room) => ({
+        propertyId: room.property_id,
+        propertyName: room.property_name,
+        status: room.status,
+        bookingId: room.booking_id,
+        cleaningTaskId: room.cleaning_task_id,
+      })),
+    };
+  },
+
+  /** `GET /operations/tasks/` — housekeepers see only their own assigned tasks (server-side scoping). */
+  listTasks: async (params = {}) => {
+    const query = {};
+    if (params.propertyId) query.property_id = params.propertyId;
+    if (params.status) query.status = params.status;
+    if (params.taskType) query.task_type = params.taskType;
+
+    const { data } = await apiClient.get('/operations/tasks/', { params: query });
+    return (data ?? []).map((task) => ({
+      id: task.id,
+      propertyId: task.property,
+      bookingId: task.booking,
+      assignedTo: task.assigned_to,
+      taskType: task.task_type,
+      status: task.status,
+      dueDate: task.due_date,
+      notes: task.notes,
+      completedAt: task.completed_at,
+    }));
+  },
+
+  /** `PATCH /operations/tasks/<id>/status/` — status is one of pending/in_progress/cleaned/blocked/ready. */
+  updateTaskStatus: async (id, { status, notes }) => {
+    const { data } = await apiClient.patch(`/operations/tasks/${id}/status/`, {
+      status,
+      ...(notes ? { notes } : {}),
+    });
+    return data;
+  },
+
+  /** `POST /operations/issues/report/` — write-only; there is no list/resolve endpoint for issues yet. */
+  reportIssue: async ({ propertyId, bookingId, title, description, severity }) => {
+    const { data } = await apiClient.post('/operations/issues/report/', {
+      property_id: propertyId,
+      ...(bookingId ? { booking_id: bookingId } : {}),
+      title,
+      description,
+      severity,
+    });
+    return data;
+  },
+
+  /** `GET /operations/properties/assigned/` — for the "report an issue" property picker. */
+  listAssignedProperties: async () => {
+    const { data } = await apiClient.get('/operations/properties/assigned/');
+    return (data ?? []).map((property) => ({ id: property.id, name: property.name }));
+  },
+
   calendar: async (month) => (await apiClient.get('/calendar', { params: { month } })).data,
   listCancellations: async (params) => (await apiClient.get('/cancellations', { params })).data,
   processRefund: async (id) => (await apiClient.post(`/cancellations/${id}/refund`)).data,
@@ -578,8 +681,11 @@ export const bookingService = {
   completeCheckIn: (payload) => bookingsBackend.completeCheckIn(payload),
   completeCheckOut: (payload) => bookingsBackend.completeCheckOut(payload),
 
-  getHousekeeping: () => backend.listHousekeeping(),
-  resolveMaintenance: (id) => backend.resolveMaintenance(id),
+  getTodaysRooms: () => bookingsBackend.todaysRooms(),
+  getTasks: (params) => bookingsBackend.listTasks(params),
+  updateTaskStatus: (id, patch) => bookingsBackend.updateTaskStatus(id, patch),
+  reportIssue: (payload) => bookingsBackend.reportIssue(payload),
+  getAssignedProperties: () => bookingsBackend.listAssignedProperties(),
 
   getCalendar: (month) => backend.calendar(month),
 

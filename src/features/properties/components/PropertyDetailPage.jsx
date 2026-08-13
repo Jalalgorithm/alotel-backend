@@ -18,6 +18,7 @@ import {
   Star,
   Trash2,
   Users,
+  VideoOff,
   X,
   Zap,
 } from 'lucide-react';
@@ -52,19 +53,25 @@ import {
 import {
   useDeleteProperty,
   useDeletePropertyImage,
+  useDeletePropertyVideo,
   useProperty,
   usePropertyImages,
   usePropertyStatus,
+  usePropertyVideos,
   useSetCoverPhoto,
   useUpdateProperty,
   useUploadPropertyImages,
+  useUploadPropertyVideos,
 } from '../hooks/useProperties';
 import { PhotoUploadButton } from './PhotoPicker';
+import { VideoUploadButton } from './VideoPicker';
+import { AvailabilityPanel } from './AvailabilityPanel';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'space', label: 'Space & features' },
   { id: 'pricing', label: 'Pricing & rules' },
+  { id: 'availability', label: 'Availability' },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -321,6 +328,60 @@ const Gallery = ({ propertyId, fallback, canManage, coverUrl }) => {
         </div>
       )}
     </div>
+  );
+};
+
+/** Video gallery — walkthroughs and room clips, alongside the photo gallery above. */
+const VideoGallery = ({ propertyId, canManage }) => {
+  const { data: videos, isLoading } = usePropertyVideos(propertyId);
+  const { uploadVideos, isPending: isUploading } = useUploadPropertyVideos();
+  const { deleteVideo, isPending: isDeleting, pendingId } = useDeletePropertyVideo();
+
+  const addVideos = (files) =>
+    uploadVideos({
+      propertyId,
+      videos: files.map((file) => ({ file, roomType: 'Walkthrough', caption: '' })),
+      startOrder: videos?.length ?? 0,
+    });
+
+  if (isLoading) return <Skeleton className="h-32 w-full rounded-card" />;
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-display text-[14px] font-semibold text-ink">Videos</h2>
+        {canManage && <VideoUploadButton onFiles={addVideos} isPending={isUploading} />}
+      </div>
+
+      {videos?.length ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {videos.map((video) => (
+            <div key={video.id} className="space-y-1.5">
+              <video src={video.property_video} controls className="aspect-video w-full rounded-lg bg-black object-cover" />
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[11px] text-ink-muted">{video.caption || video.roomType}</p>
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => deleteVideo({ propertyId, videoId: video.id })}
+                    disabled={isDeleting && pendingId === video.id}
+                    aria-label="Remove video"
+                    className="shrink-0 rounded p-1 text-ink-muted transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-40"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center gap-2 py-6 text-ink-muted">
+          <VideoOff className="size-5" aria-hidden="true" />
+          <p className="text-[12px]">No videos uploaded for this listing yet.</p>
+        </div>
+      )}
+    </Card>
   );
 };
 
@@ -676,6 +737,8 @@ export const PropertyDetailPage = () => {
             canManage={canManage}
           />
 
+          <VideoGallery propertyId={property.id} canManage={canManage} />
+
           <Tabs tabs={TABS} value={tab} onChange={setTab} variant="underline" />
 
           {tab === 'overview' && (
@@ -805,6 +868,10 @@ export const PropertyDetailPage = () => {
                 <PriceBreakdown breakdown={property.priceBreakdown} currency={currency} />
               </Card>
             </div>
+          )}
+
+          {tab === 'availability' && (
+            <AvailabilityPanel propertyId={property.id} currency={currency} canManage={canManage} />
           )}
         </>
       )}

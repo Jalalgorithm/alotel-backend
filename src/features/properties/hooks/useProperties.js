@@ -137,6 +137,110 @@ export const useDeletePropertyImage = () => {
   return { deleteImage: mutation.mutate, isPending: mutation.isPending };
 };
 
+/* -------------------------------------------------------------------- videos */
+
+export const usePropertyVideos = (id) =>
+  useQuery({
+    queryKey: queryKeys.properties.videos(id),
+    queryFn: () => propertyService.getPropertyVideos(id),
+    enabled: Boolean(id),
+    staleTime: 1000 * 60 * 10,
+  });
+
+/** One video per request, same reasoning as photo uploads — sequential, not parallel. */
+export const useUploadPropertyVideos = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async ({ propertyId, videos, startOrder = 0 }) => {
+      const uploaded = [];
+      for (const [index, video] of videos.entries()) {
+        uploaded.push(
+          await propertyService.uploadPropertyVideo({
+            propertyId,
+            file: video.file,
+            roomType: video.roomType ?? 'Walkthrough',
+            caption: video.caption ?? '',
+            order: startOrder + index,
+          }),
+        );
+      }
+      return uploaded;
+    },
+    onSuccess: (_uploaded, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.properties.videos(propertyId) });
+      toast.success('Video uploaded');
+    },
+    onError: (error) => toast.error('Could not upload video', getErrorMessage(error)),
+  });
+
+  return { uploadVideos: mutation.mutate, isPending: mutation.isPending };
+};
+
+export const useDeletePropertyVideo = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ propertyId, videoId }) => propertyService.deletePropertyVideo({ propertyId, videoId }),
+    onSuccess: (_result, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.properties.videos(propertyId) });
+      toast.success('Video removed');
+    },
+    onError: (error) => toast.error('Could not remove video', getErrorMessage(error)),
+  });
+
+  return { deleteVideo: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.videoId };
+};
+
+/* --------------------------------------------------------------- availability */
+
+export const usePropertyAvailability = (id) =>
+  useQuery({
+    queryKey: queryKeys.properties.availability(id),
+    queryFn: () => propertyService.getPropertyAvailability(id),
+    enabled: Boolean(id),
+  });
+
+export const useAvailabilityMutations = (propertyId) => {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.properties.availability(propertyId) });
+
+  const create = useMutation({
+    mutationFn: (payload) => propertyService.createPropertyAvailability({ propertyId, ...payload }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Date range added');
+    },
+    onError: (error) => toast.error('Could not add date range', getErrorMessage(error)),
+  });
+
+  const update = useMutation({
+    mutationFn: ({ id, patch }) => propertyService.updatePropertyAvailability({ propertyId, id, ...patch }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Date range updated');
+    },
+    onError: (error) => toast.error('Could not update date range', getErrorMessage(error)),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => propertyService.deletePropertyAvailability({ propertyId, id }),
+    onSuccess: () => {
+      invalidate();
+      toast.info('Date range removed');
+    },
+    onError: (error) => toast.error('Could not remove date range', getErrorMessage(error)),
+  });
+
+  return {
+    createRange: create.mutate,
+    isCreating: create.isPending,
+    updateRange: (id, patch) => update.mutate({ id, patch }),
+    deleteRange: remove.mutate,
+    pendingId: update.variables?.id ?? remove.variables,
+  };
+};
+
 /** Publish / archive / return-to-draft. */
 export const usePropertyStatus = () => {
   const queryClient = useQueryClient();

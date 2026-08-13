@@ -60,30 +60,55 @@ export const useToggleAmenity = () => {
 
 /* ---------------------------------------------------------------- reviews -- */
 
-export const usePropertyReviews = (params = {}) =>
+/** `GET /reviews/<listing_id>/` — reviews are per-property; there is no cross-property admin feed. */
+export const usePropertyReviews = (propertyId) =>
   useQuery({
-    queryKey: queryKeys.properties.reviews(params),
-    queryFn: () => propertyService.getReviews(params),
-    placeholderData: keepPreviousData,
+    queryKey: queryKeys.properties.reviews(propertyId),
+    queryFn: () => propertyService.getPropertyReviews(propertyId),
+    enabled: Boolean(propertyId),
   });
 
-export const useModerateReview = () => {
+/** One official admin response per review — the backend 400s on a second attempt, surfaced as a toast. */
+export const useRespondToReview = () => {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: ({ id, status }) => propertyService.moderateReview(id, status),
-    onSuccess: (review) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.properties.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
-      toast.success(`Review ${review.status.toLowerCase()}`, `${review.guest} · ${review.property}`);
+    mutationFn: ({ id, body }) => propertyService.respondToReview(id, body),
+    onSuccess: (_response, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.properties.reviews(propertyId) });
+      toast.success('Response posted');
     },
-    onError: (error) => toast.error('Could not moderate review', getErrorMessage(error)),
+    onError: (error) => toast.error('Could not post response', getErrorMessage(error)),
   });
 
   return {
-    moderate: mutation.mutate,
+    respond: (id, body, propertyId, options) => mutation.mutate({ id, body, propertyId }, options),
     isPending: mutation.isPending,
-    pendingId: mutation.variables ? `${mutation.variables.id}:${mutation.variables.status}` : null,
+    pendingId: mutation.variables?.id,
+  };
+};
+
+/**
+ * Flags a review, which hides it from the public listing (and from this
+ * screen, since both read the same endpoint) on the next fetch — there is no
+ * unflag action.
+ */
+export const useFlagReview = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ id, reason }) => propertyService.flagReview(id, reason),
+    onSuccess: (_review, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.properties.reviews(propertyId) });
+      toast.info('Review flagged', 'Hidden from the public listing.');
+    },
+    onError: (error) => toast.error('Could not flag review', getErrorMessage(error)),
+  });
+
+  return {
+    flag: (id, reason, propertyId, options) => mutation.mutate({ id, reason, propertyId }, options),
+    isPending: mutation.isPending,
+    pendingId: mutation.variables?.id,
   };
 };
 

@@ -176,6 +176,77 @@ const mockProperties = {
     return { success: true };
   },
 
+  async videos(id) {
+    await delay(200);
+    const property = readProperties().find((entry) => entry.id === id);
+    return property?.videos ?? [];
+  },
+
+  async uploadVideo({ file }) {
+    await delay(500);
+    return {
+      id: createId('vid'),
+      property_video: URL.createObjectURL(file),
+      roomType: 'Walkthrough',
+      caption: '',
+      order: 0,
+      duration: null,
+    };
+  },
+
+  async deleteVideo() {
+    await delay(250);
+    return { success: true };
+  },
+
+  async availability(id) {
+    await delay(250);
+    const property = readProperties().find((entry) => entry.id === id);
+    const rows = jsonStorage.read(`alotel.admin.mock.availability.${id}`, null);
+    if (rows) return clone(rows);
+    const today = new Date().toISOString().slice(0, 10);
+    const oneYear = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+    return [
+      {
+        id: null,
+        startDate: today,
+        endDate: oneYear,
+        basePrice: Number(property?.rate ?? property?.baseRate ?? 0),
+        isAvailable: true,
+        blockedDates: [],
+        corporateDiscounts: [],
+      },
+    ];
+  },
+
+  async createAvailability({ propertyId, ...payload }) {
+    await delay(350);
+    const key = `alotel.admin.mock.availability.${propertyId}`;
+    const rows = jsonStorage.read(key, []);
+    const row = { id: createId('avail'), blockedDates: [], corporateDiscounts: [], ...payload };
+    jsonStorage.write(key, [...rows.filter((entry) => entry.id), row]);
+    return row;
+  },
+
+  async updateAvailability({ propertyId, id, ...patch }) {
+    await delay(300);
+    const key = `alotel.admin.mock.availability.${propertyId}`;
+    const rows = jsonStorage.read(key, []);
+    const index = rows.findIndex((entry) => entry.id === id);
+    if (index < 0) throw new ApiError('Availability row not found.', 404);
+    rows[index] = { ...rows[index], ...patch };
+    jsonStorage.write(key, rows);
+    return rows[index];
+  },
+
+  async deleteAvailability({ propertyId, id }) {
+    await delay(300);
+    const key = `alotel.admin.mock.availability.${propertyId}`;
+    const rows = jsonStorage.read(key, []);
+    jsonStorage.write(key, rows.filter((entry) => entry.id !== id));
+    return { success: true };
+  },
+
   async setThumbnail({ propertyId }) {
     await delay(250);
     return mockProperties.detail(propertyId);
@@ -236,22 +307,22 @@ const mockProperties = {
   },
 
   /* ----------------------------------------------------------------- reviews */
-  async listReviews(params) {
+  async listPropertyReviews() {
     await delay(280);
-    return paginate(readReviews(), params, {
-      searchFields: ['guest', 'property', 'comment'],
-      filterFields: ['status'],
-    });
+    return readReviews().filter((entry) => !entry.isFlagged);
   },
 
-  async moderateReview(id, status) {
-    await delay(400);
+  async respondToReview(id, body) {
+    await delay(350);
+    return { id: createId('resp'), review: id, body, respondedByEmail: 'admin@aotel.test' };
+  },
 
+  async flagReview(id, reason) {
+    await delay(350);
     const rows = readReviews();
     const index = rows.findIndex((entry) => entry.id === id);
     if (index < 0) throw new ApiError('Review not found.', 404);
-
-    rows[index] = { ...rows[index], status, moderatedAt: new Date().toISOString() };
+    rows[index] = { ...rows[index], isFlagged: true, flagReason: reason };
     jsonStorage.write(KEYS.reviews, rows);
     return clone(rows[index]);
   },
@@ -442,6 +513,55 @@ const realProperties = {
     return { success: true };
   },
 
+  async videos(id) {
+    const { data } = await apiClient.get(`/properties/${id}/videos/`);
+    return (data?.results ?? data ?? []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  },
+
+  /** Upload field is `property_video`, not `property_image` — the rest mirrors the photo upload shape. */
+  async uploadVideo({ propertyId, file, roomType = 'Walkthrough', caption = '', order = 0 }) {
+    const form = new FormData();
+    form.append('property_video', file);
+    form.append('roomType', roomType);
+    form.append('caption', caption);
+    form.append('order', String(order));
+
+    const { data } = await apiClient.post(`/properties/${propertyId}/videos/`, form);
+    return data;
+  },
+
+  async deleteVideo({ propertyId, videoId }) {
+    await apiClient.delete(`/properties/${propertyId}/videos/${videoId}/`);
+    return { success: true };
+  },
+
+  /**
+   * `GET /properties/<id>/availability/` — when no `BookingPricing` rows
+   * exist yet, the API synthesizes a single unsaved default row (full year,
+   * the property's own base rate) instead of an empty list, so `id` may be
+   * `null` — that row can't be edited/deleted directly, only used as the
+   * starting point for "Add a date range".
+   */
+  async availability(id) {
+    const { data } = await apiClient.get(`/properties/${id}/availability/`);
+    return data ?? [];
+  },
+
+  async createAvailability({ propertyId, ...payload }) {
+    const { data } = await apiClient.post(`/properties/${propertyId}/availability/`, payload);
+    return data;
+  },
+
+  async updateAvailability({ propertyId, id, ...patch }) {
+    const { data } = await apiClient.patch(`/properties/${propertyId}/availability/${id}/`, patch);
+    return data;
+  },
+
+  async deleteAvailability({ propertyId, id }) {
+    await apiClient.delete(`/properties/${propertyId}/availability/${id}/`);
+    return { success: true };
+  },
+
   /**
    * `thumbNail` lives on the property itself rather than in the gallery, so it
    * is a multipart PATCH. It is what the card grids and the guest listing show,
@@ -489,8 +609,23 @@ const realProperties = {
   setUnitStatus: async (id, status) => (await apiClient.patch(`/units/${id}`, { status })).data,
   getAmenities: async () => (await apiClient.get('/amenities')).data,
   toggleAmenity: async (name) => (await apiClient.post('/amenities/toggle', { name })).data,
-  listReviews: async (params) => (await apiClient.get('/property-reviews', { params })).data,
-  moderateReview: async (id, status) => (await apiClient.patch(`/property-reviews/${id}`, { status })).data,
+  /** `GET /reviews/<listing_id>/` — public, per-property, already excludes flagged reviews. No cross-property admin list exists. */
+  listPropertyReviews: async (propertyId) => {
+    const { data } = await apiClient.get(`/reviews/${propertyId}/`);
+    return data ?? [];
+  },
+
+  /** `POST /reviews/<id>/response/` — one official response per review; 400s if one already exists. */
+  respondToReview: async (id, body) => {
+    const { data } = await apiClient.post(`/reviews/${id}/response/`, { body });
+    return data;
+  },
+
+  /** `POST /reviews/<id>/flag/` — hides the review from the public (and this) list on next fetch. No unflag. */
+  flagReview: async (id, reason) => {
+    const { data } = await apiClient.post(`/reviews/${id}/flag/`, { reason });
+    return data;
+  },
 };
 
 /** Mapbox-backed address lookup and postal-code verification for the property wizard. Super Admin only. */
@@ -648,6 +783,15 @@ export const propertyService = {
   getPropertyImages: (id) => propertiesBackend.images(id),
   uploadPropertyImage: (payload) => propertiesBackend.uploadImage(payload),
   deletePropertyImage: (payload) => propertiesBackend.deleteImage(payload),
+
+  getPropertyVideos: (id) => propertiesBackend.videos(id),
+  uploadPropertyVideo: (payload) => propertiesBackend.uploadVideo(payload),
+  deletePropertyVideo: (payload) => propertiesBackend.deleteVideo(payload),
+
+  getPropertyAvailability: (id) => propertiesBackend.availability(id),
+  createPropertyAvailability: (payload) => propertiesBackend.createAvailability(payload),
+  updatePropertyAvailability: (payload) => propertiesBackend.updateAvailability(payload),
+  deletePropertyAvailability: (payload) => propertiesBackend.deleteAvailability(payload),
   setPropertyThumbnail: (payload) => propertiesBackend.setThumbnail(payload),
   updateProperty: (id, patch) => propertiesBackend.update(id, patch),
   deleteProperty: (id) => propertiesBackend.remove(id),
@@ -659,8 +803,9 @@ export const propertyService = {
   getAmenities: () => backend.getAmenities(),
   toggleAmenity: (name) => backend.toggleAmenity(name),
 
-  getReviews: (params) => backend.listReviews(params),
-  moderateReview: (id, status) => backend.moderateReview(id, status),
+  getPropertyReviews: (propertyId) => propertiesBackend.listPropertyReviews(propertyId),
+  respondToReview: (id, body) => propertiesBackend.respondToReview(id, body),
+  flagReview: (id, reason) => propertiesBackend.flagReview(id, reason),
 
   getDiscounts: () => pricing.listDiscounts(),
   createDiscount: (values) => pricing.createDiscount(values),
