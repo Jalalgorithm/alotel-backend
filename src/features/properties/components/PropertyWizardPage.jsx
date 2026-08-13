@@ -285,6 +285,8 @@ export const PropertyWizardPage = () => {
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [isVerifyingPostal, setIsVerifyingPostal] = useState(false);
   const [postalCheck, setPostalCheck] = useState(null);
+  const [isLookingUpPostcode, setIsLookingUpPostcode] = useState(false);
+  const [postcodeLookup, setPostcodeLookup] = useState(null);
 
   useEffect(() => {
     try {
@@ -354,6 +356,43 @@ export const PropertyWizardPage = () => {
     } finally {
       setIsVerifyingPostal(false);
     }
+  };
+
+  /**
+   * List every candidate address under a postcode so the admin can pick the
+   * right one instead of typing free-text and hoping it geocodes correctly.
+   * Falls back to manual entry (the existing address fields) when nothing
+   * matches or the backend flags `manual_override_required`.
+   */
+  const lookupAddresses = async () => {
+    if (!form.postalCode.trim()) {
+      toast.error('Enter a postal code first', 'Type the postcode before looking up addresses.');
+      return;
+    }
+    setIsLookingUpPostcode(true);
+    setPostcodeLookup(null);
+    try {
+      const result = await propertyService.lookupPostcode({ postcode: form.postalCode, location: form.location });
+      setPostcodeLookup(result);
+      if (!result.addresses.length) {
+        toast.info('No addresses found', 'Enter the address manually below.');
+      }
+    } catch (error) {
+      toast.error('Could not look up that postcode', getErrorMessage(error));
+    } finally {
+      setIsLookingUpPostcode(false);
+    }
+  };
+
+  const selectLookupAddress = (address) => {
+    update({
+      address: address.formattedAddress,
+      city: address.city || form.city,
+      state: address.state || form.state,
+      postalCode: address.postalCode || form.postalCode,
+      coordinates: { lat: String(address.coordinates.lat), lng: String(address.coordinates.lng) },
+    });
+    setPostcodeLookup(null);
   };
 
   /** Per-step validation. Returned map is empty when the step is complete. */
@@ -525,11 +564,46 @@ export const PropertyWizardPage = () => {
         <Button type="button" variant="secondary" isLoading={isVerifyingPostal} onClick={verifyPostalCode}>
           Verify
         </Button>
+        <Button type="button" variant="secondary" isLoading={isLookingUpPostcode} onClick={lookupAddresses}>
+          Find addresses
+        </Button>
       </div>
       {postalCheck && (
         <Alert variant={postalCheck.verified ? 'success' : postalCheck.formatError ? 'error' : 'warn'}>
           {postalCheck.formatError ?? postalCheck.detail}
         </Alert>
+      )}
+
+      {postcodeLookup && (
+        <div className="rounded-lg border border-line bg-white">
+          {postcodeLookup.addresses.length ? (
+            <ul className="divide-y divide-line">
+              {postcodeLookup.addresses.map((address, index) => (
+                <li key={`${address.formattedAddress}-${index}`}>
+                  <button
+                    type="button"
+                    onClick={() => selectLookupAddress(address)}
+                    className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left text-[12.5px] text-ink hover:bg-brand-50/60"
+                  >
+                    <span>{address.formattedAddress}</span>
+                    <span className="shrink-0 text-[11px] font-semibold text-brand-700">Use this</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-3">
+              <Alert variant="warn">
+                No addresses found under this postcode. Enter the street address manually above and continue.
+              </Alert>
+            </div>
+          )}
+          {postcodeLookup.manualOverrideRequired && postcodeLookup.addresses.length > 0 && (
+            <div className="border-t border-line p-3">
+              <Alert variant="info">Can&apos;t find the right one? Edit the street address above directly — manual entry is always allowed.</Alert>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="flex items-end gap-3">

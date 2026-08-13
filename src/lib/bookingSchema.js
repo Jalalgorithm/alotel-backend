@@ -20,6 +20,35 @@ export const toGuest = (raw) => ({
   joinedAt: raw.date_joined,
 });
 
+/**
+ * `GET/PATCH /auth/admin/guests/<id>/`'s enriched detail shape — adds
+ * `phone`, `kyc_status` and `stay_stats` on top of the base guest fields.
+ */
+export const toGuestDetail = (raw) => ({
+  ...toGuest(raw),
+  phone: raw.phone || null,
+  kycStatus: raw.kyc_status ?? 'none',
+  stayStats: {
+    totalBookings: raw.stay_stats?.total_bookings ?? 0,
+    completedStays: raw.stay_stats?.completed_stays ?? 0,
+    totalSpend: raw.stay_stats?.total_spend ?? 0,
+  },
+});
+
+/** One row of `GET /auth/admin/guests/<id>/bookings/`. */
+export const toGuestBooking = (raw) => ({
+  id: raw.id,
+  propertyId: raw.property_id,
+  propertyName: raw.property_name,
+  propertyImage: raw.property_main_image,
+  checkIn: raw.check_in_date,
+  checkOut: raw.check_out_date,
+  status: raw.status,
+  nights: raw.nights,
+  currency: raw.currency,
+  createdAt: raw.created_at,
+});
+
 /** `GET /auth/admin/guests/`'s pagination envelope (`count`/`page`/`page_size`/`results`), normalised to match every other list screen's `{items, total, page, pageSize, totalPages}`. */
 export const toGuestPage = (raw, { page = 1 } = {}) => ({
   items: (raw?.results ?? []).map(toGuest),

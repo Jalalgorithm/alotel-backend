@@ -11,9 +11,11 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import {
   useAssignedProperties,
+  useIssues,
   useReportIssue,
   useTasks,
   useTodaysRooms,
+  useUpdateIssueStatus,
   useUpdateTaskStatus,
 } from '../hooks/useOperations';
 import { useAuth } from '@/features/auth';
@@ -36,6 +38,14 @@ const TASK_STATUSES = [
 const TASK_STATUS_BADGE = { pending: 'warn', in_progress: 'info', cleaned: 'ok', ready: 'ok', blocked: 'danger' };
 
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
+const ISSUE_STATUSES = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'wont_fix', label: "Won't Fix" },
+];
+const ISSUE_STATUS_BADGE = { open: 'warn', in_progress: 'info', resolved: 'ok', wont_fix: 'neutral' };
+const ISSUE_SEVERITY_BADGE = { low: 'neutral', medium: 'gold', high: 'warn', critical: 'danger' };
 
 const emptyIssue = { propertyId: '', title: '', description: '', severity: 'medium' };
 
@@ -55,6 +65,8 @@ export const HousekeepingPage = () => {
   const { updateTaskStatus, isPending: isUpdatingTask, pendingId } = useUpdateTaskStatus();
   const { data: assignedProperties = [] } = useAssignedProperties();
   const { reportIssue, isPending: isReporting } = useReportIssue();
+  const { data: issues = [], isLoading: isLoadingIssues } = useIssues();
+  const { updateIssueStatus, isPending: isUpdatingIssue, pendingId: pendingIssueId } = useUpdateIssueStatus();
 
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
   const [issueDraft, setIssueDraft] = useState(emptyIssue);
@@ -171,6 +183,53 @@ export const HousekeepingPage = () => {
           </ul>
         ) : (
           <EmptyState title="No tasks" description="Nothing assigned right now." />
+        )}
+      </Card>
+
+      {/* Maintenance issues */}
+      <Card>
+        <CardHeader title="Issues" subtitle="Reported problems awaiting a fix." />
+
+        {isLoadingIssues ? (
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 3 }, (_, index) => (
+              <Skeleton key={index} className="h-12" />
+            ))}
+          </div>
+        ) : issues.length ? (
+          <ul className="divide-y divide-line border-t border-line">
+            {issues.map((issue) => (
+              <li key={issue.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-[12.5px] font-semibold text-ink">{issue.title}</p>
+                    <Badge variant={ISSUE_SEVERITY_BADGE[issue.severity]}>{issue.severity}</Badge>
+                  </div>
+                  <p className="truncate text-[10.5px] text-ink-muted">
+                    {propertyNameById.get(issue.propertyId) ?? issue.propertyId ?? 'Unknown property'}
+                    {issue.description && ` · ${issue.description}`}
+                  </p>
+                </div>
+
+                {canManage ? (
+                  <Select
+                    value={issue.status}
+                    onChange={(event) => updateIssueStatus(issue.id, { status: event.target.value })}
+                    options={ISSUE_STATUSES}
+                    aria-label={`Status for ${issue.title}`}
+                    disabled={isUpdatingIssue && pendingIssueId === issue.id}
+                    className="h-8 w-36 text-[11px]"
+                  />
+                ) : (
+                  <Badge variant={ISSUE_STATUS_BADGE[issue.status]}>
+                    {ISSUE_STATUSES.find((s) => s.value === issue.status)?.label ?? issue.status}
+                  </Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState title="No issues" description="Nothing reported right now." />
         )}
       </Card>
 

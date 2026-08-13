@@ -112,7 +112,21 @@ export const useTaxRuleMutations = () => {
     deleteRule: remove.mutate,
     approveRule: approve.mutate,
     rejectRule: (id, reason) => reject.mutate({ id, reason }),
-    pendingId: update.variables?.id ?? remove.variables ?? approve.variables ?? reject.variables?.id,
+    /**
+     * Only ever the id of a mutation that is *currently* in flight — react-query
+     * never clears `.variables` once a mutation settles, so deriving this from
+     * variables alone leaves it permanently "stuck" on whichever rule was last
+     * saved, even long after the request finished.
+     */
+    pendingId: update.isPending
+      ? update.variables?.id
+      : remove.isPending
+        ? remove.variables
+        : approve.isPending
+          ? approve.variables
+          : reject.isPending
+            ? reject.variables?.id
+            : undefined,
   };
 };
 

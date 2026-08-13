@@ -13,7 +13,16 @@ import {
   resolveContractType,
 } from '@/lib/mock/operations';
 import { units } from '@/lib/mock/catalogue';
-import { toAdminListParams, toBookingDetail, toBookingPage, toGuest, toGuestPage, toReceipt } from '@/lib/bookingSchema';
+import {
+  toAdminListParams,
+  toBookingDetail,
+  toBookingPage,
+  toGuest,
+  toGuestBooking,
+  toGuestDetail,
+  toGuestPage,
+  toReceipt,
+} from '@/lib/bookingSchema';
 
 /**
  * Booking-operations service: reservations, guests, check-in/out, check-out
@@ -113,6 +122,12 @@ const mockBookings = {
     return mockBookings.update(id, { status: 'Confirmed' });
   },
 
+  /** Manual approval for a non-instant-book property — mirrors the real endpoint's shape. */
+  async approve(id) {
+    const updated = await mockBookings.update(id, { status: 'Confirmed' });
+    return { booking_id: id, status: updated.status, manual_approval_granted: true, manual_approval_granted_at: new Date().toISOString() };
+  },
+
   async cancelBooking(id, reason) {
     return mockBookings.update(id, { status: 'Cancelled', reason });
   },
@@ -131,6 +146,46 @@ const mockBookings = {
     const guest = guests.find((entry) => entry.id === id);
     if (!guest) throw new ApiError('Guest not found.', 404);
     return clone({ ...guest, ...patch });
+  },
+
+  async guestDetail(id) {
+    await delay(280);
+    const guest = guests.find((entry) => entry.id === id);
+    if (!guest) throw new ApiError('Guest not found.', 404);
+    return clone({
+      id: guest.id,
+      name: guest.name,
+      email: guest.email,
+      isActive: guest.isActive ?? true,
+      joinedAt: guest.joinedAt,
+      phone: guest.phone ?? null,
+      kycStatus: (guest.kyc ?? 'none').toLowerCase().replace(/\s+/g, '_'),
+      stayStats: { totalBookings: guest.stays ?? 0, completedStays: guest.stays ?? 0, totalSpend: guest.lifetimeValue ?? 0 },
+    });
+  },
+
+  async guestBookingHistory(id, params = {}) {
+    await delay(280);
+    const guest = guests.find((entry) => entry.id === id);
+    if (!guest) throw new ApiError('Guest not found.', 404);
+
+    let rows = bookings
+      .filter((booking) => booking.email === guest.email)
+      .map((booking) => ({
+        id: booking.id,
+        propertyId: booking.propertyId,
+        propertyName: booking.property,
+        propertyImage: null,
+        checkIn: booking.checkIn,
+        checkOut: booking.checkOut,
+        status: booking.status,
+        nights: booking.nights,
+        currency: booking.currency,
+        createdAt: booking.checkIn,
+      }));
+
+    if (params.status) rows = rows.filter((row) => row.status === params.status);
+    return clone(rows);
   },
 
   /* -------------------------------------------------------- check-out reports */
@@ -273,6 +328,40 @@ const mockBookings = {
     return { id: createId('issue'), status: 'open', ...payload };
   },
 
+  async listIssues(params = {}) {
+    await delay(250);
+    const severityByPriority = { High: 'high', Medium: 'medium', Low: 'low' };
+    const statusByLabel = { Open: 'open', 'In Progress': 'in_progress', Resolved: 'resolved' };
+
+    let rows = readMaintenance().map((entry) => ({
+      id: entry.id,
+      propertyId: null,
+      propertyName: entry.property,
+      title: entry.title,
+      description: entry.title,
+      severity: severityByPriority[entry.priority] ?? 'medium',
+      status: statusByLabel[entry.status] ?? 'open',
+      createdAt: entry.reportedAt,
+      resolvedAt: entry.status === 'Resolved' ? entry.reportedAt : null,
+    }));
+
+    if (params.status) rows = rows.filter((row) => row.status === params.status);
+    if (params.severity) rows = rows.filter((row) => row.severity === params.severity);
+    return clone(rows);
+  },
+
+  async updateIssueStatus(id, { status }) {
+    await delay(400);
+    const rows = readMaintenance();
+    const index = rows.findIndex((entry) => entry.id === id);
+    if (index < 0) throw new ApiError('Issue not found.', 404);
+
+    const labelByStatus = { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', wont_fix: 'Resolved' };
+    rows[index] = { ...rows[index], status: labelByStatus[status] ?? rows[index].status };
+    jsonStorage.write(KEYS.maintenance, rows);
+    return clone(rows[index]);
+  },
+
   async listAssignedProperties() {
     await delay(200);
     const seen = new Set();
@@ -368,9 +457,20 @@ const realBookings = {
     return toReceipt(data);
   },
 
-  /** Approve a booking that is waiting on an admin decision. */
+  /** Re-runs compliance checks on a booking that has already met every other requirement. */
   async confirm(id) {
     const { data } = await apiClient.post(`/bookings/${id}/confirm/`);
+    return data;
+  },
+
+  /**
+   * Manual admin approval for a property with `instant_book` disabled — 400s if the
+   * property is instant-book (there's nothing to manually approve). Sets
+   * `manual_approval_granted` and, if payment already succeeded, transitions the
+   * booking straight to `confirmed`.
+   */
+  async approve(id) {
+    const { data } = await apiClient.post(`/bookings/${id}/approve/`);
     return data;
   },
 
@@ -409,6 +509,20 @@ const realBookings = {
     }
     const { data } = await apiClient.patch(`/auth/admin/guests/${id}/`, payload);
     return toGuest(data);
+  },
+
+  /** `GET /auth/admin/guests/<id>/` — enriched with `phone`, `kyc_status`, `stay_stats`. */
+  guestDetail: async (id) => {
+    const { data } = await apiClient.get(`/auth/admin/guests/${id}/`);
+    return toGuestDetail(data);
+  },
+
+  /** `GET /auth/admin/guests/<id>/bookings/` — the guest's stay history, `?status=` filter. */
+  guestBookingHistory: async (id, { status } = {}) => {
+    const { data } = await apiClient.get(`/auth/admin/guests/${id}/bookings/`, {
+      params: status ? { status } : undefined,
+    });
+    return (Array.isArray(data) ? data : (data?.results ?? [])).map(toGuestBooking);
   },
 
   listReports: async () => (await apiClient.get('/checkout-reports')).data,
@@ -610,7 +724,7 @@ const realBookings = {
     return data;
   },
 
-  /** `POST /operations/issues/report/` — write-only; there is no list/resolve endpoint for issues yet. */
+  /** `POST /operations/issues/report/` */
   reportIssue: async ({ propertyId, bookingId, title, description, severity }) => {
     const { data } = await apiClient.post('/operations/issues/report/', {
       property_id: propertyId,
@@ -619,6 +733,38 @@ const realBookings = {
       description,
       severity,
     });
+    return data;
+  },
+
+  /**
+   * `GET /operations/issues/report/` — same URL as the POST above;
+   * `MaintenanceIssueReportView` handles both. Scoped server-side to the
+   * caller's assigned properties.
+   */
+  listIssues: async (params = {}) => {
+    const query = {};
+    if (params.propertyId) query.property_id = params.propertyId;
+    if (params.status) query.status = params.status;
+    if (params.severity) query.severity = params.severity;
+
+    const { data } = await apiClient.get('/operations/issues/report/', { params: query });
+    return (Array.isArray(data) ? data : (data?.results ?? [])).map((issue) => ({
+      id: issue.id,
+      propertyId: issue.property,
+      bookingId: issue.booking,
+      reportedBy: issue.reported_by,
+      title: issue.title,
+      description: issue.description,
+      severity: issue.severity,
+      status: issue.status,
+      createdAt: issue.created_at,
+      resolvedAt: issue.resolved_at,
+    }));
+  },
+
+  /** `PATCH /operations/issues/<id>/status/` — status is one of open/in_progress/resolved/wont_fix. */
+  updateIssueStatus: async (id, { status }) => {
+    const { data } = await apiClient.patch(`/operations/issues/${id}/status/`, { status });
     return data;
   },
 
@@ -648,6 +794,7 @@ export const bookingService = {
   getBookingTimeline: (id) => bookingsBackend.timeline(id),
   getBookingReceipt: (id) => bookingsBackend.receipt(id),
   confirmBooking: (id) => bookingsBackend.confirm(id),
+  approveBooking: (id) => bookingsBackend.approve(id),
   cancelBooking: (id, reason) => bookingsBackend.cancelBooking(id, reason),
 
   /**
@@ -659,6 +806,8 @@ export const bookingService = {
 
   getGuests: (params) => bookingsBackend.listGuests(params),
   updateGuest: (id, patch) => bookingsBackend.updateGuest(id, patch),
+  getGuestDetail: (id) => bookingsBackend.guestDetail(id),
+  getGuestBookingHistory: (id, params) => bookingsBackend.guestBookingHistory(id, params),
 
   getCheckoutReports: () => backend.listReports(),
   saveCheckoutReport: (id, patch) => backend.saveReport(id, patch),
@@ -685,6 +834,8 @@ export const bookingService = {
   getTasks: (params) => bookingsBackend.listTasks(params),
   updateTaskStatus: (id, patch) => bookingsBackend.updateTaskStatus(id, patch),
   reportIssue: (payload) => bookingsBackend.reportIssue(payload),
+  getIssues: (params) => bookingsBackend.listIssues(params),
+  updateIssueStatus: (id, patch) => bookingsBackend.updateIssueStatus(id, patch),
   getAssignedProperties: () => bookingsBackend.listAssignedProperties(),
 
   getCalendar: (month) => backend.calendar(month),

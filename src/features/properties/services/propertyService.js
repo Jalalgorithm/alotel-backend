@@ -662,6 +662,30 @@ const realGeocoding = {
       detail: data.detail,
     };
   },
+
+  /**
+   * `GET /listings/postcode-lookup/` — every candidate address under a
+   * postcode, so an admin can pick the right one instead of typing a single
+   * address and hoping the geocoder resolves it correctly. Falls back to
+   * manual entry when `manual_override_required` is true or nothing matches.
+   */
+  async lookupPostcode({ postcode, location }) {
+    const { data } = await apiClient.get('/listings/postcode-lookup/', {
+      params: { postcode, ...(location ? { location } : {}) },
+    });
+    return {
+      postcode: data.postcode,
+      manualOverrideRequired: Boolean(data.manual_override_required),
+      addresses: (data.addresses ?? []).map((entry) => ({
+        formattedAddress: entry.formatted_address,
+        postalCode: entry.postal_code ?? '',
+        city: entry.city,
+        state: entry.state,
+        country: entry.country,
+        coordinates: { lat: entry.lat, lng: entry.lng },
+      })),
+    };
+  },
 };
 
 const mockGeocoding = {
@@ -686,6 +710,15 @@ const mockGeocoding = {
       matchedPostalCode: postalCode ?? '',
       coordinates: null,
       detail: 'Mock verification — not checked against a real address.',
+    };
+  },
+
+  async lookupPostcode({ postcode }) {
+    await delay(300);
+    return {
+      postcode,
+      manualOverrideRequired: true,
+      addresses: [],
     };
   },
 };
@@ -822,6 +855,7 @@ export const propertyService = {
 
   forwardGeocode: (values) => geocoding.forwardGeocode(values),
   verifyPostalCode: (values) => geocoding.verifyPostalCode(values),
+  lookupPostcode: (values) => geocoding.lookupPostcode(values),
 
   /** Exposed for the wizard's draft id generation. */
   createDraftId: () => createId('draft'),

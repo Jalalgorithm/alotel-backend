@@ -31,6 +31,23 @@ const seeded = (key, source) => {
 const readPayouts = () => seeded(KEYS.payouts, payouts);
 const readTaxRules = () => seeded(KEYS.taxRules, taxRules);
 
+/** `PaymentTransactionSerializer`'s exact fields — no `fee`/`net`, those aren't tracked server-side. */
+const toPayment = (raw) => ({
+  id: raw.id,
+  reference: raw.provider_reference || raw.id,
+  bookingId: raw.booking,
+  guest: raw.guest_email,
+  property: raw.property_name,
+  provider: raw.provider,
+  transactionType: raw.transaction_type,
+  amount: Number(raw.amount),
+  currency: raw.currency,
+  status: raw.status,
+  failureReason: raw.failure_reason,
+  paidAt: raw.processed_at,
+  createdAt: raw.created_at,
+});
+
 const mockFinance = {
   async listPayments(params) {
     await delay(300);
@@ -264,7 +281,27 @@ const realTaxes = {
 };
 
 const realFinance = {
-  listPayments: async (params) => (await apiClient.get('/payments', { params })).data,
+  /** `GET /payments/` — admin transaction ledger, `IsLevel1Or2` (FM scoped to assigned properties server-side). */
+  listPayments: async (params = {}) => {
+    const query = { page: params.page ?? 1 };
+    if (params.status) query.status = params.status;
+    if (params.provider) query.provider = params.provider;
+    if (params.transactionType) query.transaction_type = params.transactionType;
+    if (params.bookingId) query.booking_id = params.bookingId;
+    if (params.startDate) query.start_date = params.startDate;
+    if (params.endDate) query.end_date = params.endDate;
+    if (params.pageSize) query.page_size = params.pageSize;
+
+    const { data } = await apiClient.get('/payments/', { params: query });
+    const pageSize = data?.page_size ?? params.pageSize ?? 20;
+    return {
+      items: (data?.results ?? []).map(toPayment),
+      total: data?.count ?? 0,
+      page: data?.page ?? query.page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil((data?.count ?? 0) / pageSize)),
+    };
+  },
   listPayouts: async (params) => (await apiClient.get('/payouts', { params })).data,
   releasePayout: async (id) => (await apiClient.post(`/payouts/${id}/release`)).data,
   revenue: async () => (await apiClient.get('/revenue')).data,
@@ -277,6 +314,8 @@ const realFinance = {
 const backend = env.useMock ? mockFinance : realFinance;
 // `payments` is already the imported mock fixture — name the backend distinctly.
 const paymentOps = env.useMockPayments ? mockPayments : realPayments;
+// The payments ledger has its own flag (previously declared but unused — it fell through to the global one).
+const paymentsList = env.useMockPayments ? mockFinance : realFinance;
 const taxes = env.useMockTaxes ? mockFinance : realTaxes;
 
 export const financeService = {
@@ -289,8 +328,8 @@ export const financeService = {
   deductDeposit: (payload) => paymentOps.deductDeposit(payload),
   getFxRates: (base) => paymentOps.fxRates(base),
 
-  /* Payouts, revenue and tax rules remain on mocks. */
-  getPayments: (params) => backend.listPayments(params),
+  getPayments: (params) => paymentsList.listPayments(params),
+  /* Payouts and revenue remain on mocks. */
   getPayouts: (params) => backend.listPayouts(params),
   releasePayout: (id) => backend.releasePayout(id),
   getRevenue: () => backend.revenue(),

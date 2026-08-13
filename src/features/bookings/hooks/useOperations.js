@@ -71,11 +71,44 @@ export const useAssignedProperties = () =>
     queryFn: bookingService.getAssignedProperties,
   });
 
-/** Log a maintenance issue. Write-only — there is no list/resolve endpoint for issues yet. */
+/** Maintenance issues — scoped server-side to the caller's assigned properties. */
+export const useIssues = (params = {}) =>
+  useQuery({
+    queryKey: [...queryKeys.bookings.housekeeping(), 'issues', params],
+    queryFn: () => bookingService.getIssues(params),
+  });
+
+/** Advance an issue's status (`open → in_progress → resolved/wont_fix`). */
+export const useUpdateIssueStatus = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ id, patch }) => bookingService.updateIssueStatus(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.bookings.housekeeping(), 'issues'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+      toast.success('Issue updated');
+    },
+    onError: (error) => toast.error('Could not update issue', getErrorMessage(error)),
+  });
+
+  return {
+    updateIssueStatus: (id, patch) => mutation.mutate({ id, patch }),
+    isPending: mutation.isPending,
+    pendingId: mutation.isPending ? mutation.variables?.id : undefined,
+  };
+};
+
+/** Log a maintenance issue. */
 export const useReportIssue = () => {
+  const queryClient = useQueryClient();
+
   const mutation = useMutation({
     mutationFn: bookingService.reportIssue,
-    onSuccess: () => toast.success('Issue reported', 'Logged for the property team.'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...queryKeys.bookings.housekeeping(), 'issues'] });
+      toast.success('Issue reported', 'Logged for the property team.');
+    },
     onError: (error) => toast.error('Could not report issue', getErrorMessage(error)),
   });
 

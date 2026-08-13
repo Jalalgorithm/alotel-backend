@@ -51,11 +51,15 @@ export const useBookingActions = () => {
     if (id) queryClient.invalidateQueries({ queryKey: queryKeys.bookings.detail(id) });
   };
 
-  const confirm = useMutation({
-    mutationFn: (id) => bookingService.confirmBooking(id),
-    onSuccess: (_result, id) => {
+  const approve = useMutation({
+    mutationFn: (id) => bookingService.approveBooking(id),
+    onSuccess: (result, id) => {
       refresh(id);
-      toast.success('Booking approved', 'The guest has been notified.');
+      const confirmed = result?.status === 'confirmed';
+      toast.success(
+        confirmed ? 'Booking approved' : 'Approval granted',
+        confirmed ? 'The guest has been notified.' : 'Waiting on the remaining requirements before it confirms.',
+      );
     },
     onError: (error) => toast.error('Could not approve booking', getErrorMessage(error)),
   });
@@ -83,12 +87,12 @@ export const useBookingActions = () => {
   });
 
   return {
-    approve: confirm.mutate,
+    approve: approve.mutate,
     cancel: (id, reason = '') => cancel.mutate({ id, reason }),
     sendContract: (id) => nudge.mutate({ id, patch: { contract: 'Signed' }, message: 'Contract sent for signature' }),
     remindKyc: (id) => nudge.mutate({ id, patch: { kyc: 'Pending' }, message: 'KYC reminder sent' }),
-    isPending: confirm.isPending || cancel.isPending || nudge.isPending,
-    pendingId: confirm.variables ?? cancel.variables?.id ?? nudge.variables?.id,
+    isPending: approve.isPending || cancel.isPending || nudge.isPending,
+    pendingId: approve.isPending ? approve.variables : cancel.isPending ? cancel.variables?.id : nudge.isPending ? nudge.variables?.id : undefined,
   };
 };
 
@@ -97,6 +101,22 @@ export const useGuests = (params = {}) =>
     queryKey: queryKeys.bookings.guests(params),
     queryFn: () => bookingService.getGuests(params),
     placeholderData: keepPreviousData,
+  });
+
+/** Enriched guest profile — phone, KYC status, stay stats. Fetched only when a row is opened. */
+export const useGuestDetail = (id) =>
+  useQuery({
+    queryKey: queryKeys.bookings.guestDetail(id),
+    queryFn: () => bookingService.getGuestDetail(id),
+    enabled: Boolean(id),
+  });
+
+/** One guest's booking history — powers the detail drawer's stay list. */
+export const useGuestBookingHistory = (id, params = {}) =>
+  useQuery({
+    queryKey: queryKeys.bookings.guestBookings(id, params),
+    queryFn: () => bookingService.getGuestBookingHistory(id, params),
+    enabled: Boolean(id),
   });
 
 /** Activate / deactivate a guest account, or edit their name — the only fields `PATCH /auth/admin/guests/<id>/` accepts. */

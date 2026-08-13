@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { ListToolbar } from '@/components/shared/ListToolbar';
 import { Pagination } from '@/components/shared/Pagination';
 import { Card } from '@/components/ui/Card';
+import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
@@ -155,6 +156,8 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
 
   const currency = booking?.currency ?? row.currency;
   const canAct = canManage && ACTIONABLE_STATUSES.includes(booking?.status ?? row.status);
+  // The guest has already checked in — the API rejects a cancel here, so don't offer it.
+  const canCancel = canAct && booking?.status !== 'active';
 
   return (
     <Modal
@@ -177,20 +180,21 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
               </Button>
             )}
 
-            {isCancelling ? (
-              <Button
-                size="sm"
-                variant="danger"
-                isLoading={actions.isPending}
-                onClick={() => actions.cancel(row.id, reason)}
-              >
-                Confirm cancellation
-              </Button>
-            ) : (
-              <Button size="sm" variant="dangerSoft" onClick={() => setIsCancelling(true)}>
-                Cancel booking
-              </Button>
-            )}
+            {canCancel &&
+              (isCancelling ? (
+                <Button
+                  size="sm"
+                  variant="danger"
+                  isLoading={actions.isPending}
+                  onClick={() => actions.cancel(row.id, reason)}
+                >
+                  Confirm cancellation
+                </Button>
+              ) : (
+                <Button size="sm" variant="dangerSoft" onClick={() => setIsCancelling(true)}>
+                  Cancel booking
+                </Button>
+              ))}
           </div>
         )
       }
@@ -216,6 +220,10 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
             <AvatarCell name={row.guestName} secondary={row.guestEmail} />
             <StatusPill status={booking.status} />
           </div>
+
+          {canManage && booking.status === 'active' && (
+            <Alert variant="info">The guest has already checked in — this booking can no longer be cancelled.</Alert>
+          )}
 
           <div className="grid grid-cols-2 gap-4 border-t border-line pt-4 sm:grid-cols-4">
             <Field icon={CalendarDays} label="Check-in">
@@ -420,26 +428,28 @@ export const BookingsPage = () => {
       />
 
       <Card>
-        <ListToolbar
-          search={query}
-          onSearchChange={withReset(setQuery)}
-          searchPlaceholder="Search guest, email or property…"
-          total={data?.total ?? 0}
-          noun="booking"
-          nounPlural="bookings"
-          filters={[
-            {
-              id: 'status',
-              value: status,
-              onChange: withReset(setStatus),
-              label: 'Status',
-              options: [
-                { value: 'All', label: 'All statuses' },
-                ...BOOKING_STATUSES.map((value) => ({ value, label: BOOKING_STATUS_LABELS[value] })),
-              ],
-            },
-          ]}
-        />
+        <div className="p-4">
+          <ListToolbar
+            search={query}
+            onSearchChange={withReset(setQuery)}
+            searchPlaceholder="Search guest, email or property…"
+            total={data?.total ?? 0}
+            noun="booking"
+            nounPlural="bookings"
+            filters={[
+              {
+                id: 'status',
+                value: status,
+                onChange: withReset(setStatus),
+                label: 'Status',
+                options: [
+                  { value: 'All', label: 'All statuses' },
+                  ...BOOKING_STATUSES.map((value) => ({ value, label: BOOKING_STATUS_LABELS[value] })),
+                ],
+              },
+            ]}
+          />
+        </div>
 
         {isError ? (
           <EmptyState

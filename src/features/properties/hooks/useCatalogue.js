@@ -157,7 +157,8 @@ export const useDiscountRuleMutations = () => {
     isCreating: create.isPending,
     updateRule: (id, patch) => update.mutate({ id, patch }),
     deleteRule: remove.mutate,
-    pendingId: update.variables?.id ?? remove.variables,
+    // Only while a mutation is actually in flight — `.variables` survives past settling.
+    pendingId: update.isPending ? update.variables?.id : remove.isPending ? remove.variables : undefined,
   };
 };
 
@@ -206,7 +207,8 @@ export const usePricingConfigMutations = () => {
     isCreating: create.isPending,
     updateConfig: (id, patch) => update.mutate({ id, patch }),
     deleteConfig: remove.mutate,
-    pendingId: update.variables?.id ?? remove.variables,
+    // Only while a mutation is actually in flight — `.variables` survives past settling.
+    pendingId: update.isPending ? update.variables?.id : remove.isPending ? remove.variables : undefined,
   };
 };
 
