@@ -4,7 +4,7 @@ import { cn } from '@/utils/classNames';
  * Segmented tab strip.
  *
  * @param {{
- *   tabs: Array<{ id: string, label: string, count?: number }>,
+ *   tabs: Array<{ id: string, label: string, count?: number, disabled?: boolean }>,
  *   value: string,
  *   onChange: (id: string) => void,
  *   variant?: 'segmented' | 'underline',
@@ -22,10 +22,12 @@ export const Tabs = ({ tabs = [], value, onChange, variant = 'segmented', classN
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => onChange(tab.id)}
+              aria-disabled={tab.disabled || undefined}
+              disabled={tab.disabled}
+              onClick={() => !tab.disabled && onChange(tab.id)}
               className={cn(
                 'relative shrink-0 whitespace-nowrap pb-2.5 pt-1 text-[13px] transition-colors',
-                isActive ? 'font-semibold text-brand-700' : 'text-ink-muted hover:text-ink',
+                tab.disabled ? 'cursor-not-allowed text-ink-muted/50' : isActive ? 'font-semibold text-brand-700' : 'text-ink-muted hover:text-ink',
               )}
             >
               {tab.label}
@@ -55,10 +57,16 @@ export const Tabs = ({ tabs = [], value, onChange, variant = 'segmented', classN
             type="button"
             role="tab"
             aria-selected={isActive}
-            onClick={() => onChange(tab.id)}
+            aria-disabled={tab.disabled || undefined}
+            disabled={tab.disabled}
+            onClick={() => !tab.disabled && onChange(tab.id)}
             className={cn(
               'shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors',
-              isActive ? 'bg-brand-700 text-white' : 'text-ink-soft hover:bg-brand-50 hover:text-brand-700',
+              tab.disabled
+                ? 'cursor-not-allowed text-ink-muted/50'
+                : isActive
+                  ? 'bg-brand-700 text-white'
+                  : 'text-ink-soft hover:bg-brand-50 hover:text-brand-700',
             )}
           >
             {tab.label}

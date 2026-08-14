@@ -111,6 +111,40 @@ export const damageSchema = z.object({
   cost: z.coerce.number().positive('Enter the estimated cost'),
 });
 
+/** `MaintenanceWorkerCreateSerializer` — vendor-only fields (`companyName`) are only required when `employmentType` is `external_vendor`. */
+export const workerSchema = z
+  .object({
+    name: z.string().min(1, 'Name is required'),
+    phone: phoneField,
+    email: z.string().email('Enter a valid email address').optional().or(z.literal('')),
+    specialtyTags: z.array(z.string()).min(1, 'Add at least one specialty'),
+    employmentType: z.enum(['in_house', 'external_vendor'], { message: 'Select an employment type' }),
+    companyName: z.string().optional().default(''),
+    rateBasis: z.enum(['hourly', 'flat', 'per_job'], { message: 'Select a rate basis' }),
+    rateAmount: z.coerce.number().min(0, 'Cannot be negative').optional().or(z.literal('')),
+  })
+  .refine((values) => values.employmentType !== 'external_vendor' || values.companyName.trim().length > 0, {
+    message: 'Company name is required for an external vendor',
+    path: ['companyName'],
+  });
+
+/** `MaintenanceTicketCreateSerializer`. */
+export const maintenanceTicketSchema = z.object({
+  propertyId: z.string().min(1, 'Select a property'),
+  category: z.string().min(1, 'Category is required'),
+  description: z.string().min(3, 'Describe the issue'),
+  priority: z.enum(['low', 'medium', 'high', 'urgent'], { message: 'Select a priority' }),
+  assignedWorkerId: z.string().optional().default(''),
+});
+
+/** `MaintenanceTicketCostSerializer`. */
+export const ticketCostSchema = z.object({
+  costType: z.enum(['materials', 'labor', 'other'], { message: 'Select a cost type' }),
+  amount: z.coerce.number({ message: 'Enter an amount' }).positive('Must be greater than 0'),
+  note: z.string().optional().default(''),
+  invoiceReference: z.string().optional().default(''),
+});
+
 export const propertyWizardSchema = z.object({
   classification: z.string().min(1),
   country: z.string().min(1),

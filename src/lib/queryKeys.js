@@ -67,9 +67,40 @@ export const queryKeys = {
     roles: () => ['people', 'roles'],
     auditLog: (filters = {}) => ['people', 'audit-log', filters],
   },
+  spaces: {
+    all: ['spaces'],
+    list: (filters = {}) => ['spaces', 'list', filters],
+    detail: (id) => ['spaces', 'detail', id],
+    layouts: (id) => ['spaces', 'layouts', id],
+    addons: (id) => ['spaces', 'addons', id],
+    hours: (id) => ['spaces', 'hours', id],
+    blackouts: (id) => ['spaces', 'blackouts', id],
+    bookings: (filters = {}) => ['spaces', 'bookings', filters],
+    bookingDetail: (id) => ['spaces', 'booking-detail', id],
+    approvalQueue: (filters = {}) => ['spaces', 'approval-queue', filters],
+  },
+  /**
+   * Namespaced `maintenance-ops` (matching the backend's `/operations/maintenance/`
+   * mount) rather than a bare `maintenance` root — that name is already spoken
+   * for by the unused `system.maintenance()` key and the unrelated housekeeper
+   * self-report flow under `bookings.housekeeping()`.
+   */
+  maintenanceOps: {
+    all: ['maintenance-ops'],
+    workers: (filters = {}) => ['maintenance-ops', 'workers', filters],
+    workerDetail: (id) => ['maintenance-ops', 'workers', 'detail', id],
+    tickets: (filters = {}) => ['maintenance-ops', 'tickets', filters],
+    ticketDetail: (id) => ['maintenance-ops', 'tickets', 'detail', id],
+    dashboard: (filters = {}) => ['maintenance-ops', 'dashboard', filters],
+  },
   system: {
     settings: () => ['system', 'settings'],
     maintenance: () => ['system', 'maintenance'],
     announcements: () => ['system', 'announcements'],
+  },
+  /** Country/state reference data — `utils/countries.py`, static-ish, shared across features. */
+  geo: {
+    countries: () => ['geo', 'countries'],
+    states: (countryCode) => ['geo', 'states', countryCode],
   },
 };

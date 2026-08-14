@@ -30,6 +30,19 @@ const AmenitiesPage = load(() => import('@/features/properties'), 'AmenitiesPage
 const PricingPage = load(() => import('@/features/properties'), 'PricingPage');
 const PropertyReviewPage = load(() => import('@/features/properties'), 'PropertyReviewPage');
 
+const MaintenanceDashboardPage = load(() => import('@/features/maintenance'), 'MaintenanceDashboardPage');
+const WorkerDirectoryPage = load(() => import('@/features/maintenance'), 'WorkerDirectoryPage');
+const WorkerDetailPage = load(() => import('@/features/maintenance'), 'WorkerDetailPage');
+const TicketTablePage = load(() => import('@/features/maintenance'), 'TicketTablePage');
+const TicketDetailPage = load(() => import('@/features/maintenance'), 'TicketDetailPage');
+
+const SpacesPage = load(() => import('@/features/spaces'), 'SpacesPage');
+const SpaceWizardPage = load(() => import('@/features/spaces'), 'SpaceWizardPage');
+const SpaceBookingsPage = load(() => import('@/features/spaces'), 'SpaceBookingsPage');
+const SpaceBookingCalendarPage = load(() => import('@/features/spaces'), 'SpaceBookingCalendarPage');
+const SpaceApprovalQueuePage = load(() => import('@/features/spaces'), 'SpaceApprovalQueuePage');
+const SpaceDetailPage = load(() => import('@/features/spaces'), 'SpaceDetailPage');
+
 const BookingsPage = load(() => import('@/features/bookings'), 'BookingsPage');
 const GuestsPage = load(() => import('@/features/bookings'), 'GuestsPage');
 const CheckInOutPage = load(() => import('@/features/bookings'), 'CheckInOutPage');
@@ -65,6 +78,20 @@ const SCREENS = [
   { path: paths.amenities, element: <AmenitiesPage />, capability: C.amenitiesManage },
   { path: paths.pricing, element: <PricingPage />, capability: C.pricingManage },
   { path: paths.propertyReview, element: <PropertyReviewPage />, capability: C.reviewsModerate },
+
+  { path: paths.maintenanceDashboard, element: <MaintenanceDashboardPage />, capability: C.maintenanceView },
+  { path: paths.maintenanceWorkers, element: <WorkerDirectoryPage />, capability: C.maintenanceView },
+  { path: paths.maintenanceWorkerDetail(), element: <WorkerDetailPage />, capability: C.maintenanceView },
+  { path: paths.maintenanceTickets, element: <TicketTablePage />, capability: C.maintenanceView },
+  { path: paths.maintenanceTicketDetail(), element: <TicketDetailPage />, capability: C.maintenanceView },
+
+  { path: paths.spaces, element: <SpacesPage />, capability: C.spacesView },
+  { path: paths.spaceNew, element: <SpaceWizardPage />, capability: C.spacesManage },
+  { path: paths.spaceBookings, element: <SpaceBookingsPage />, capability: C.spacesBookingsView },
+  { path: paths.spaceCalendar, element: <SpaceBookingCalendarPage />, capability: C.spacesBookingsView },
+  { path: paths.spaceApprovals, element: <SpaceApprovalQueuePage />, capability: C.spacesBookingsManage },
+  // Declared after the static `/spaces/*` paths above so the literal segments always win the match.
+  { path: paths.spaceDetail(), element: <SpaceDetailPage />, capability: C.spacesView },
 
   { path: paths.bookings, element: <BookingsPage />, capability: C.bookingsView },
   { path: paths.guests, element: <GuestsPage />, capability: C.guestsView },

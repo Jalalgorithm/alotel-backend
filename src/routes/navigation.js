@@ -30,6 +30,25 @@ export const NAV_GROUPS = [
     ],
   },
   {
+    id: 'maintenance',
+    label: 'Maintenance',
+    items: [
+      { id: 'maintenance-dashboard', label: 'Dashboard', to: paths.maintenanceDashboard, icon: 'Gauge', capability: C.maintenanceView, end: true },
+      { id: 'maintenance-workers', label: 'Worker Directory', to: paths.maintenanceWorkers, icon: 'HardHat', capability: C.maintenanceView },
+      { id: 'maintenance-tickets', label: 'Tickets', to: paths.maintenanceTickets, icon: 'Wrench', capability: C.maintenanceView },
+    ],
+  },
+  {
+    id: 'spaces',
+    label: 'Spaces',
+    items: [
+      { id: 'spaces', label: 'Spaces', to: paths.spaces, icon: 'Warehouse', capability: C.spacesView, badge: 'spaces' },
+      { id: 'space-bookings', label: 'Space Bookings', to: paths.spaceBookings, icon: 'CalendarClock', capability: C.spacesBookingsView },
+      { id: 'space-calendar', label: 'Booking Calendar', to: paths.spaceCalendar, icon: 'CalendarRange', capability: C.spacesBookingsView },
+      { id: 'space-approvals', label: 'Booking Approvals', to: paths.spaceApprovals, icon: 'ListChecks', capability: C.spacesBookingsManage, badge: 'spaceApprovals' },
+    ],
+  },
+  {
     id: 'booking',
     label: 'Booking Management',
     items: [

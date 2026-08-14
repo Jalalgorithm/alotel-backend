@@ -26,7 +26,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge, StatusBadge } from '@/components/ui/Badge';
-import { Input, Textarea } from '@/components/ui/Input';
+import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Toggle } from '@/components/ui/Toggle';
 import { Modal } from '@/components/ui/Modal';
@@ -47,6 +47,7 @@ import {
   CLASSIFICATIONS,
   FURNISHED_OPTIONS,
   LOCATIONS,
+  LOCATION_META,
   PETS_OPTIONS,
   PROPERTY_TYPES,
 } from '@/lib/propertySchema';
@@ -66,6 +67,8 @@ import {
 import { PhotoUploadButton } from './PhotoPicker';
 import { VideoUploadButton } from './VideoPicker';
 import { AvailabilityPanel } from './AvailabilityPanel';
+import { AddressFields } from './AddressFields';
+import { PropertyMaintenanceTab } from '@/features/maintenance';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -446,35 +449,21 @@ const EditForm = ({ property, onCancel, onSaved }) => {
         <h2 className="mb-4 font-display text-[14px] font-semibold text-ink">Identity &amp; location</h2>
 
         <div className="space-y-4">
-          <Input label="Listing name" value={form.name} onChange={(e) => update({ name: e.target.value })} />
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Select
-              label="Classification"
-              value={form.classification}
-              onChange={(e) => update({ classification: e.target.value })}
-              options={CLASSIFICATIONS}
-            />
-            <Select
-              label="Market"
-              value={form.location}
-              onChange={(e) => update({ location: e.target.value })}
-              options={LOCATIONS}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Input label="Country" value={form.country} onChange={(e) => update({ country: e.target.value })} />
-            <Input label="State / province" value={form.state} onChange={(e) => update({ state: e.target.value })} />
-            <Input label="City" value={form.city} onChange={(e) => update({ city: e.target.value })} />
-          </div>
-
-          <Textarea
-            label="Street address"
-            rows={2}
-            value={form.address}
-            onChange={(e) => update({ address: e.target.value })}
+          <Input
+            label="Listing name"
+            placeholder={LOCATION_META[form.location]?.listingNamePlaceholder}
+            value={form.name}
+            onChange={(e) => update({ name: e.target.value })}
           />
+
+          <Select
+            label="Classification"
+            value={form.classification}
+            onChange={(e) => update({ classification: e.target.value })}
+            options={CLASSIFICATIONS}
+          />
+
+          <AddressFields form={form} update={update} />
         </div>
       </Card>
 
@@ -601,6 +590,8 @@ export const PropertyDetailPage = () => {
 
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.propertiesManage);
+  const canViewMaintenance = can(CAPABILITIES.maintenanceView);
+  const tabs = canViewMaintenance ? [...TABS, { id: 'maintenance', label: 'Maintenance' }] : TABS;
 
   // A fresh id means a different listing — don't carry the previous one's
   // open edit form or scroll-restored tab across.
@@ -739,7 +730,7 @@ export const PropertyDetailPage = () => {
 
           <VideoGallery propertyId={property.id} canManage={canManage} />
 
-          <Tabs tabs={TABS} value={tab} onChange={setTab} variant="underline" />
+          <Tabs tabs={tabs} value={tab} onChange={setTab} variant="underline" />
 
           {tab === 'overview' && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
@@ -872,6 +863,10 @@ export const PropertyDetailPage = () => {
 
           {tab === 'availability' && (
             <AvailabilityPanel propertyId={property.id} currency={currency} canManage={canManage} />
+          )}
+
+          {tab === 'maintenance' && canViewMaintenance && (
+            <PropertyMaintenanceTab propertyId={property.id} propertyName={property.name} />
           )}
         </>
       )}

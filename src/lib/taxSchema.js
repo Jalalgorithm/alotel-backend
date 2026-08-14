@@ -44,6 +44,13 @@ export const TAX_STATUSES = [
 /** Statuses that still need a human decision — these get Approve/Reject actions in the table. */
 export const REVIEWABLE_STATUSES = ['pending_review', 'ai_suggested', 'csv_import'];
 
+/** Badge variant per AI suggestion confidence level — shared by `AiSuggestModal` and `TaxRuleModal`. */
+export const CONFIDENCE_BADGE_VARIANT = {
+  high: 'ok',
+  medium: 'warn',
+  low: 'danger',
+};
+
 /** Badge variant per lifecycle stage. */
 export const STATUS_BADGE_VARIANT = {
   draft: 'neutral',
@@ -121,4 +128,36 @@ export const toTaxRulePayload = ({ ruleName, country, state, county, city, guest
   display_label: displayLabel?.trim() ?? '',
   status: status || 'active',
   source: 'manual',
+});
+
+/**
+ * Turn one `POST /properties/taxes/suggest/` suggestion into a `POST /properties/taxes/`
+ * create payload. The suggestion response is already close to
+ * `TaxRuleCreateUpdateSerializer`'s shape (`rule_name, country, state, city,
+ * tax_type, value, frequency, display_label`), so this mostly passes fields
+ * through — the only thing it decides is `source`/`status`, both forced to
+ * `'ai_suggested'` so the created row lands directly in the existing
+ * `REVIEWABLE_STATUSES` approve/reject queue rather than going live unreviewed.
+ *
+ * Deliberately separate from `toTaxRulePayload`, which always forces
+ * `source: 'manual'` — a human editing a rule through the form is itself the
+ * "manual" decision the backend's status model expects, and that path stays
+ * untouched by this one.
+ */
+export const toAiSuggestionPayload = (suggestion) => ({
+  rule_name: suggestion.rule_name || '',
+  country: suggestion.country,
+  state: suggestion.state || '',
+  county: '',
+  city: suggestion.city || '',
+  guest_segment: [],
+  tax_type: suggestion.tax_type,
+  value: String(Number(suggestion.value) || 0),
+  frequency: suggestion.frequency,
+  display_label: suggestion.display_label || '',
+  status: 'ai_suggested',
+  source: 'ai_suggested',
+  source_url: suggestion.source_url || '',
+  confidence: suggestion.confidence || '',
+  caveat: suggestion.caveat || '',
 });

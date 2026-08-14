@@ -1,12 +1,23 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ExternalLink } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { Badge } from '@/components/ui/Badge';
 import { taxRuleSchema } from '@/utils/validators';
-import { GUEST_SEGMENT_NOTE, GUEST_SEGMENTS, TAX_COUNTRIES, TAX_FREQUENCIES, TAX_STATUSES, TAX_TYPES } from '@/lib/taxSchema';
+import { formatDate } from '@/utils/format';
+import {
+  CONFIDENCE_BADGE_VARIANT,
+  GUEST_SEGMENT_NOTE,
+  GUEST_SEGMENTS,
+  TAX_COUNTRIES,
+  TAX_FREQUENCIES,
+  TAX_STATUSES,
+  TAX_TYPES,
+} from '@/lib/taxSchema';
 
 const emptyValues = () => ({
   ruleName: '',
@@ -91,6 +102,30 @@ export const TaxRuleModal = ({ isOpen, onClose, rule, createRule, updateRule, is
       }
     >
       <form className="space-y-3.5" noValidate>
+        {isEditing && rule?.aiGenerated && (
+          <div className="rounded-lg border border-line bg-brand-50/40 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="brand">AI-sourced</Badge>
+              {rule.confidence && (
+                <Badge variant={CONFIDENCE_BADGE_VARIANT[rule.confidence] ?? 'neutral'}>{rule.confidence} confidence</Badge>
+              )}
+              {rule.lastVerifiedAt && <span className="text-[11px] text-ink-muted">Verified {formatDate(rule.lastVerifiedAt)}</span>}
+            </div>
+            {rule.caveat && <p className="mt-2 text-[11.5px] text-ink-soft">{rule.caveat}</p>}
+            {rule.sourceUrl && (
+              <a
+                href={rule.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-[11.5px] text-brand-700 hover:underline"
+              >
+                View source <ExternalLink className="size-3" aria-hidden="true" />
+              </a>
+            )}
+            <p className="mt-2 text-[10.5px] text-ink-muted">Saving changes here records them as a manual edit, same as any other rule.</p>
+          </div>
+        )}
+
         <Input label="Rule name" placeholder="e.g. NYC Hotel Occupancy Tax" error={errors.ruleName?.message} {...register('ruleName')} />
 
         <div className="grid grid-cols-3 gap-3">

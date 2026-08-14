@@ -49,6 +49,12 @@ export const env = {
   /** The `/analytics/*` endpoints and CSV/PDF export. */
   useMockAnalytics: toBool(import.meta.env.VITE_USE_MOCK_ANALYTICS, useMock),
 
+  /** Spaces has no backend at all yet — always mock, not a togglable flag. */
+  useMockSpaces: true,
+
+  /** Maintenance oversight (`/operations/maintenance/*`) is a real, working endpoint — defaults to the live API regardless of the global flag. Flip on only for offline dev. */
+  useMockMaintenance: toBool(import.meta.env.VITE_USE_MOCK_MAINTENANCE, false),
+
   mockLatency: Number(import.meta.env.VITE_MOCK_LATENCY ?? 500),
   appName: import.meta.env.VITE_APP_NAME || 'Alotel Spaces Admin',
   isDev: import.meta.env.DEV,

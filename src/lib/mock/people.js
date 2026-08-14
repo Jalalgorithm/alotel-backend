@@ -43,6 +43,14 @@ export const CAPABILITIES = {
 
   settingsManage: 'settings.manage',
   helpView: 'help.view',
+
+  spacesView: 'spaces.view',
+  spacesManage: 'spaces.manage',
+  spacesBookingsView: 'spaces.bookings.view',
+  spacesBookingsManage: 'spaces.bookings.manage',
+
+  maintenanceView: 'maintenance.view',
+  maintenanceManage: 'maintenance.manage',
 };
 
 const C = CAPABILITIES;
@@ -89,6 +97,12 @@ export const ROLES = [
       C.rolesView,
       C.settingsManage,
       C.helpView,
+      C.spacesView,
+      C.spacesManage,
+      C.spacesBookingsView,
+      C.spacesBookingsManage,
+      C.maintenanceView,
+      C.maintenanceManage,
     ],
   },
   {
@@ -150,6 +164,8 @@ export const PERMISSION_MATRIX = [
   { permission: 'View audit log', L1: true, L2: false, L3: false },
   { permission: 'View room status (no PII)', L1: true, L2: true, L3: true },
   { permission: 'Mark rooms cleaned / block', L1: true, L2: true, L3: true },
+  { permission: 'Manage spaces & space bookings', L1: true, L2: true, L3: false },
+  { permission: 'Maintenance worker & ticket oversight', L1: true, L2: true, L3: false },
   { permission: 'View full card numbers', L1: false, L2: false, L3: false, hardDenied: true },
 ];
 

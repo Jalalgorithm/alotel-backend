@@ -29,6 +29,55 @@ export const PETS_OPTIONS = ['No pets', 'Pets allowed', 'Small pets only', 'Serv
 /** `location` is a fixed market list, distinct from the free-text `country`. */
 export const LOCATIONS = ['UK', 'Spain', 'Nigeria', 'UAE Dubai', 'US'];
 
+/**
+ * Presentation-only, per-market address hints — the backend doesn't hand
+ * these back pre-formatted, so they live here.
+ *
+ * `postalSearchSupported` mirrors `property/geocoding.py`'s own
+ * `POSTAL_CODE_RECOMMENDED_LOCATIONS = {UK, Spain, US}` on the backend: where
+ * `true`, the postal field keeps the existing Verify/Find-addresses lookup;
+ * where `false` (Nigeria — the backend's own comment calls real-world postal
+ * adoption there unreliable; UAE Dubai — no postal-code concept at all), the
+ * field is manual entry only, since there's nothing reliable to search.
+ */
+export const LOCATION_META = {
+  UK: {
+    postalLabel: 'Postcode',
+    postalPlaceholder: 'SW1A 1AA',
+    postalSearchSupported: true,
+    cityPlaceholder: 'e.g. London',
+    listingNamePlaceholder: 'e.g. Notting Hill Garden Flat',
+  },
+  Spain: {
+    postalLabel: 'Postal code',
+    postalPlaceholder: '28001',
+    postalSearchSupported: true,
+    cityPlaceholder: 'e.g. Madrid',
+    listingNamePlaceholder: 'e.g. Madrid Centro Apartment',
+  },
+  US: {
+    postalLabel: 'ZIP code',
+    postalPlaceholder: '10001',
+    postalSearchSupported: true,
+    cityPlaceholder: 'e.g. New York',
+    listingNamePlaceholder: 'e.g. SoHo Loft',
+  },
+  Nigeria: {
+    postalLabel: 'Postal code',
+    postalPlaceholder: '100001',
+    postalSearchSupported: false,
+    cityPlaceholder: 'e.g. Lagos',
+    listingNamePlaceholder: 'e.g. Eko Atlantic Suite',
+  },
+  'UAE Dubai': {
+    postalLabel: 'Postal code (optional, not commonly used)',
+    postalPlaceholder: '',
+    postalSearchSupported: false,
+    cityPlaceholder: 'e.g. Dubai',
+    listingNamePlaceholder: 'e.g. Downtown Dubai Suite',
+  },
+};
+
 export const PROPERTY_STATUSES = ['draft', 'published', 'archived', 'under_review'];
 
 /** Statuses shown as human labels in the UI. */

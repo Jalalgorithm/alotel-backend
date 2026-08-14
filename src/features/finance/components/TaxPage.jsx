@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { Plus, Sparkles, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { DataTable } from '@/components/ui/DataTable';
@@ -11,6 +11,7 @@ import { useTaxRuleMutations, useTaxRules } from '../hooks/useFinance';
 import { REVIEWABLE_STATUSES, scopeLabel, STATUS_BADGE_VARIANT, TAX_COUNTRIES, TAX_STATUSES } from '@/lib/taxSchema';
 import { TaxRuleModal } from './TaxBuilder/TaxRuleModal';
 import { RejectRuleModal } from './TaxBuilder/RejectRuleModal';
+import { AiSuggestModal } from './TaxBuilder/AiSuggestModal';
 
 /** Tax Rule Builder v2: country/state/city rules that stack, with a status lifecycle and approve/reject. */
 export const TaxPage = () => {
@@ -21,6 +22,7 @@ export const TaxPage = () => {
   const [editingRule, setEditingRule] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rejectingRule, setRejectingRule] = useState(null);
+  const [isAiSuggestOpen, setIsAiSuggestOpen] = useState(false);
 
   const openCreate = () => {
     setEditingRule(null);
@@ -102,9 +104,14 @@ export const TaxPage = () => {
         title="Tax Builder"
         subtitle="Country, state and city tax rules — several can stack for one booking."
         actions={
-          <Button variant="primary" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={openCreate}>
-            Add rule
-          </Button>
+          <>
+            <Button leftIcon={<Sparkles className="size-3.5" aria-hidden="true" />} onClick={() => setIsAiSuggestOpen(true)}>
+              AI Suggest
+            </Button>
+            <Button variant="primary" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={openCreate}>
+              Add rule
+            </Button>
+          </>
         }
       />
 
@@ -157,6 +164,8 @@ export const TaxPage = () => {
         onReject={(reason) => rejectRule(rejectingRule.id, reason)}
         isSaving={pendingId === rejectingRule?.id}
       />
+
+      <AiSuggestModal isOpen={isAiSuggestOpen} onClose={() => setIsAiSuggestOpen(false)} />
     </div>
   );
 };

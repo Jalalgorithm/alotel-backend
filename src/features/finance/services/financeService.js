@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
-import { toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
+import { toAiSuggestionPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
@@ -129,6 +129,42 @@ const mockFinance = {
   async rejectTaxRule(id, reason) {
     await delay(350);
     return mockFinance.updateTaxRule(id, { status: 'rejected', rejectedReason: reason });
+  },
+
+  /**
+   * Shaped like the real `/properties/taxes/suggest/` response (snake_case) —
+   * `AiSuggestModal` consumes the AI response as-is with no normaliser, so the
+   * mock mirrors that wire shape rather than this file's usual camelCase
+   * convention for everything else.
+   */
+  async suggestTaxRules({ country, state, city }) {
+    await delay(700);
+    const scopeLevel = city ? 'city' : state ? 'state' : 'country';
+    return {
+      mode: `${scopeLevel}_level`,
+      queried: { country, state: state || null, city: city || null },
+      suggestions: [
+        {
+          suggestion_id: 'sugg_mock_1',
+          rule_name: `${city || state || country} Occupancy Tax`,
+          scope_level: scopeLevel,
+          country,
+          state: state || null,
+          city: city || null,
+          tax_type: 'percentage',
+          value: 8.5,
+          frequency: 'per_night',
+          display_label: 'Occupancy Tax',
+          confidence: 'medium',
+          source_url: 'https://example.com/mock-tax-reference',
+          caveat: 'Mock suggestion — GEMINI_API_KEY is not configured on the backend; this is placeholder data for demo purposes.',
+        },
+      ],
+    };
+  },
+
+  async createTaxRuleFromSuggestion(suggestion) {
+    return mockFinance.createTaxRule(toTaxRule(toAiSuggestionPayload(suggestion)));
   },
 };
 
@@ -278,6 +314,26 @@ const realTaxes = {
     const { data } = await apiClient.patch(`/properties/taxes/${id}/reject/`, { reason });
     return toTaxRule(data);
   },
+
+  /**
+   * `POST /properties/taxes/suggest/` — Super Admin only, Gemini-backed.
+   * Read-only: never writes a `TaxRule`. Country-only is "mode A" (country-wide
+   * research); country+state(+city) is "mode B" (narrower, more specific).
+   */
+  async suggest({ country, state, city }) {
+    const body = { country };
+    if (state) body.state = state;
+    if (city) body.city = city;
+
+    const { data } = await apiClient.post('/properties/taxes/suggest/', body);
+    return data;
+  },
+
+  /** Turn one AI suggestion into a real rule — `source`/`status` both `ai_suggested`, landing it in the existing review queue. */
+  async createFromSuggestion(suggestion) {
+    const { data } = await apiClient.post('/properties/taxes/', toAiSuggestionPayload(suggestion));
+    return toTaxRule(data);
+  },
 };
 
 const realFinance = {
@@ -340,4 +396,7 @@ export const financeService = {
   deleteTaxRule: (id) => (env.useMockTaxes ? backend.deleteTaxRule(id) : taxes.remove(id)),
   approveTaxRule: (id) => (env.useMockTaxes ? backend.approveTaxRule(id) : taxes.approve(id)),
   rejectTaxRule: (id, reason) => (env.useMockTaxes ? backend.rejectTaxRule(id, reason) : taxes.reject(id, reason)),
+  suggestTaxRules: (payload) => (env.useMockTaxes ? mockFinance.suggestTaxRules(payload) : realTaxes.suggest(payload)),
+  createTaxRuleFromSuggestion: (suggestion) =>
+    env.useMockTaxes ? mockFinance.createTaxRuleFromSuggestion(suggestion) : realTaxes.createFromSuggestion(suggestion),
 };

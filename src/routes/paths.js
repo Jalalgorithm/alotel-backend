@@ -39,6 +39,22 @@ export const paths = {
   revenue: '/revenue',
   tax: '/tax',
 
+  // Spaces (bookable venues — distinct from Property, see the Spaces spec §A.1)
+  spaces: '/spaces',
+  spaceNew: '/spaces/new',
+  spaceBookings: '/spaces/bookings',
+  spaceCalendar: '/spaces/calendar',
+  spaceApprovals: '/spaces/approvals',
+  // Declared last of the `/spaces/*` paths — a dynamic segment must never shadow a literal one.
+  spaceDetail: (id = ':spaceId') => `/spaces/${id}`,
+
+  // Maintenance (worker/vendor directory + ticket oversight — distinct from the housekeeper self-report flow)
+  maintenanceDashboard: '/maintenance',
+  maintenanceWorkers: '/maintenance/workers',
+  maintenanceWorkerDetail: (id = ':workerId') => `/maintenance/workers/${id}`,
+  maintenanceTickets: '/maintenance/tickets',
+  maintenanceTicketDetail: (id = ':ticketId') => `/maintenance/tickets/${id}`,
+
   // Users & roles
   staff: '/staff',
   roles: '/roles',

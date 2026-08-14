@@ -130,6 +130,46 @@ export const useTaxRuleMutations = () => {
   };
 };
 
+/**
+ * AI Suggest — `POST /properties/taxes/suggest/`, Super Admin only.
+ * A mutation, not a query: it's an on-demand research trigger with no
+ * meaningful cache key (the same country/state/city can suggest something
+ * different on the next Gemini call), not a list to keep fresh.
+ */
+export const useSuggestTaxRules = () => {
+  const mutation = useMutation({
+    mutationFn: financeService.suggestTaxRules,
+    onError: (error) => toast.error('Could not get AI suggestions', getErrorMessage(error)),
+  });
+
+  return {
+    suggest: mutation.mutate,
+    suggestions: mutation.data?.suggestions ?? [],
+    isPending: mutation.isPending,
+    reset: mutation.reset,
+  };
+};
+
+/** Turn one AI suggestion into a real tax rule — lands in the existing `ai_suggested` review queue, not live immediately. */
+export const useCreateTaxRuleFromSuggestion = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: financeService.createTaxRuleFromSuggestion,
+    onSuccess: (rule) => {
+      queryClient.invalidateQueries({ queryKey: ['finance', 'tax-rules'] });
+      toast.success('Suggestion added', `${rule.ruleName || rule.country} — sent for review`);
+    },
+    onError: (error) => toast.error('Could not add suggestion', getErrorMessage(error)),
+  });
+
+  return {
+    addSuggestion: mutation.mutate,
+    isPending: mutation.isPending,
+    pendingId: mutation.isPending ? mutation.variables?.suggestion_id : undefined,
+  };
+};
+
 /* -------------------------------------------------------------------------- */
 /* Payment operations                                                          */
 /* -------------------------------------------------------------------------- */
