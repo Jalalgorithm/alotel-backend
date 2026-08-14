@@ -18,10 +18,15 @@ export {
   useCalendar,
   useCancellations,
   useProcessRefund,
+  useInspectionState,
+  useDamageAssessments,
+  useCreateDamageAssessment,
+  useUpdateDamageAssessment,
+  useCheckoutReport,
+  useCheckoutReportsByBookingIds,
+  useGenerateCheckoutReport,
 } from './hooks/useBookings';
 export {
-  useCheckoutReports,
-  useSaveCheckoutReport,
   useTodaysRooms,
   useTasks,
   useUpdateTaskStatus,

@@ -104,11 +104,12 @@ export const pricingRuleSchema = z.object({
   seasonalPriceRules: z.array(seasonalRuleSchema).optional().default([]),
 });
 
-export const damageSchema = z.object({
-  room: z.string().min(1, 'Select a room'),
+/** `DamageAssessmentCreateSerializer` — logging a newly-found item during check-out inspection. */
+export const damageAssessmentSchema = z.object({
+  roomArea: z.string().min(1, 'Select a room / area'),
   description: z.string().min(3, 'Describe the damage'),
-  severity: z.string().min(1, 'Select a severity'),
-  cost: z.coerce.number().positive('Enter the estimated cost'),
+  severity: z.enum(['minor', 'moderate', 'major'], { message: 'Select a severity' }),
+  estimatedCost: z.coerce.number({ message: 'Enter the estimated cost' }).positive('Enter the estimated cost'),
 });
 
 /** `MaintenanceWorkerCreateSerializer` — vendor-only fields (`companyName`) are only required when `employmentType` is `external_vendor`. */

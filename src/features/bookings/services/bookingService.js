@@ -7,7 +7,6 @@ import { jsonStorage } from '@/lib/storage';
 import {
   bookings,
   cancellations,
-  checkoutReports,
   guests,
   maintenanceRequests,
   resolveContractType,
@@ -23,6 +22,12 @@ import {
   toGuestPage,
   toReceipt,
 } from '@/lib/bookingSchema';
+import {
+  toCheckoutReport,
+  toDamageAssessment,
+  toDamageAssessmentPatch,
+  toDamageAssessmentPayload,
+} from '@/lib/checkoutSchema';
 
 /**
  * Booking-operations service: reservations, guests, check-in/out, check-out
@@ -31,7 +36,8 @@ import {
 
 const KEYS = {
   bookings: 'alotel.admin.mock.bookings',
-  reports: 'alotel.admin.mock.checkoutReports',
+  damageAssessments: 'alotel.admin.mock.damageAssessments',
+  checkoutReports: 'alotel.admin.mock.checkoutReportsByBooking',
   cancellations: 'alotel.admin.mock.cancellations',
   units: 'alotel.admin.mock.units',
   maintenance: 'alotel.admin.mock.maintenance',
@@ -62,10 +68,13 @@ const seeded = (key, source) => {
 };
 
 const readBookings = () => seeded(KEYS.bookings, bookings);
-const readReports = () => seeded(KEYS.reports, checkoutReports);
 const readCancellations = () => seeded(KEYS.cancellations, cancellations);
 const readUnits = () => seeded(KEYS.units, units);
 const readMaintenance = () => seeded(KEYS.maintenance, maintenanceRequests);
+
+/** Offline-dev-only stores for damage assessments / reports — keyed by booking id, empty until touched. */
+const readDamageAssessments = () => jsonStorage.read(KEYS.damageAssessments, {});
+const readCheckoutReports = () => jsonStorage.read(KEYS.checkoutReports, {});
 
 const mockBookings = {
   /* --------------------------------------------------------------- bookings */
@@ -188,22 +197,74 @@ const mockBookings = {
     return clone(rows);
   },
 
-  /* -------------------------------------------------------- check-out reports */
-  async listReports() {
-    await delay(260);
-    return clone(readReports());
+  /**
+   * -------------------------------------------------------- check-out reports
+   * Offline-dev-only — thin by design. The real feature (`operations` app) has
+   * no fixture-worthy equivalent since it's genuinely per-booking; this exists
+   * so `useMockBookings=true` doesn't crash the screen, not to demo the flow.
+   */
+  async getDamageAssessments(bookingId) {
+    await delay(200);
+    return clone(readDamageAssessments()[bookingId] ?? []).map(toDamageAssessment);
   },
 
-  async saveReport(id, patch) {
-    await delay(450);
+  async createDamageAssessment(bookingId, values) {
+    await delay(350);
+    const store = readDamageAssessments();
+    const rows = store[bookingId] ?? [];
+    const record = {
+      id: createId('dmg'),
+      booking: bookingId,
+      inspection: null,
+      photo: null,
+      deduct_from_deposit: false,
+      approved_cost: null,
+      logged_by: null,
+      logged_at: new Date().toISOString(),
+      ...toDamageAssessmentPayload(values),
+    };
+    jsonStorage.write(KEYS.damageAssessments, { ...store, [bookingId]: [...rows, record] });
+    return toDamageAssessment(record);
+  },
 
-    const rows = readReports();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Report not found.', 404);
+  async updateDamageAssessment(bookingId, damageId, values) {
+    await delay(300);
+    const store = readDamageAssessments();
+    const rows = store[bookingId] ?? [];
+    const index = rows.findIndex((entry) => entry.id === damageId);
+    if (index < 0) throw new ApiError('Damage item not found.', 404);
 
-    rows[index] = { ...rows[index], ...patch };
-    jsonStorage.write(KEYS.reports, rows);
-    return clone(rows[index]);
+    rows[index] = { ...rows[index], ...toDamageAssessmentPatch(values) };
+    jsonStorage.write(KEYS.damageAssessments, { ...store, [bookingId]: rows });
+    return toDamageAssessment(rows[index]);
+  },
+
+  async getCheckoutReport(bookingId) {
+    await delay(200);
+    return clone(readCheckoutReports()[bookingId] ?? null);
+  },
+
+  async generateCheckoutReport(bookingId) {
+    await delay(500);
+    const damageItems = readDamageAssessments()[bookingId] ?? [];
+    const deductionTotal = damageItems
+      .filter((item) => item.deduct_from_deposit)
+      .reduce((sum, item) => sum + Number(item.approved_cost ?? item.estimated_cost ?? 0), 0);
+
+    const report = {
+      id: createId('rpt'),
+      booking: bookingId,
+      pdf_url: '',
+      sent_to_guest: false,
+      sent_at: null,
+      admin_signature_url: '',
+      deposit_deduction_total: String(deductionTotal),
+      delivery_log: [],
+      generated_at: new Date().toISOString(),
+      damage_items: damageItems,
+    };
+    jsonStorage.write(KEYS.checkoutReports, { ...readCheckoutReports(), [bookingId]: report });
+    return toCheckoutReport(report);
   },
 
   /* -------------------------------------------------------------- contracts */
@@ -679,6 +740,47 @@ const realBookings = {
     return data;
   },
 
+  /** `GET /inspections/<id>/damage/` — every damage item logged for this booking. */
+  getDamageAssessments: async (bookingId) => {
+    const { data } = await apiClient.get(`/inspections/${bookingId}/damage/`);
+    return (Array.isArray(data) ? data : (data?.results ?? [])).map(toDamageAssessment);
+  },
+
+  /** `POST /inspections/<id>/damage/` — log a newly-found item. Starts `deduct_from_deposit: false` — that's the approval step, not creation. */
+  createDamageAssessment: async (bookingId, values) => {
+    const { data } = await apiClient.post(`/inspections/${bookingId}/damage/`, toDamageAssessmentPayload(values));
+    return toDamageAssessment(data);
+  },
+
+  /** `PATCH /inspections/<id>/damage/<pk>/` — the admin approval step: confirm a cost, decide whether it counts against the deposit. */
+  updateDamageAssessment: async (bookingId, damageId, values) => {
+    const { data } = await apiClient.patch(`/inspections/${bookingId}/damage/${damageId}/`, toDamageAssessmentPatch(values));
+    return toDamageAssessment(data);
+  },
+
+  /** `GET /inspections/<id>/report/` — 404 until a report has been generated for this booking. */
+  getCheckoutReport: async (bookingId) => {
+    try {
+      const { data } = await apiClient.get(`/inspections/${bookingId}/report/`);
+      return toCheckoutReport({ ...data, pdf_url: resolveMediaUrl(data?.pdf_url) });
+    } catch (error) {
+      if (error?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  /**
+   * `POST /inspections/<id>/report/` — real side effect: sums `approved_cost
+   * ?? estimated_cost` across every `deduct_from_deposit` item, deducts that
+   * from the booking's deposit, and auto-releases the remainder. Safe to call
+   * again later (regenerates from current damage data) — there is no
+   * dedicated update endpoint, this is both create and refresh.
+   */
+  generateCheckoutReport: async (bookingId) => {
+    const { data } = await apiClient.post(`/inspections/${bookingId}/report/`);
+    return toCheckoutReport({ ...data, pdf_url: resolveMediaUrl(data?.pdf_url) });
+  },
+
   /** `GET /operations/rooms/today/` — derived from real bookings + tasks, scoped to the caller's assigned properties server-side. */
   todaysRooms: async () => {
     const { data } = await apiClient.get('/operations/rooms/today/');
@@ -780,10 +882,11 @@ const realBookings = {
 };
 
 /**
- * Reservations, contracts and inspections (check-in/out) are wired to the
+ * Reservations, contracts, inspections (check-in/out) and check-out
+ * reporting (damage assessments + `PostCheckoutReport`) are wired to the
  * real API via `bookingsBackend`; the surrounding operations features
- * (guests, housekeeping, calendar, checkout reports) are still mocked and
- * stay on the global `backend` flag.
+ * (guests, housekeeping, calendar) are still mocked and stay on the global
+ * `backend` flag.
  */
 const bookingsBackend = env.useMockBookings ? mockBookings : realBookings;
 const backend = env.useMock ? mockBookings : realBookings;
@@ -809,9 +912,6 @@ export const bookingService = {
   getGuestDetail: (id) => bookingsBackend.guestDetail(id),
   getGuestBookingHistory: (id, params) => bookingsBackend.guestBookingHistory(id, params),
 
-  getCheckoutReports: () => backend.listReports(),
-  saveCheckoutReport: (id, patch) => backend.saveReport(id, patch),
-
   /*
    * Contracts follow the bookings flag, not the global one: they are wired to
    * the real API while the surrounding operations screens are still mocked.
@@ -827,6 +927,11 @@ export const bookingService = {
 
   uploadInspectionPhoto: (payload) => bookingsBackend.uploadInspectionPhoto(payload),
   getInspectionState: (bookingId) => bookingsBackend.getInspectionState(bookingId),
+  getDamageAssessments: (bookingId) => bookingsBackend.getDamageAssessments(bookingId),
+  createDamageAssessment: (bookingId, values) => bookingsBackend.createDamageAssessment(bookingId, values),
+  updateDamageAssessment: (bookingId, damageId, values) => bookingsBackend.updateDamageAssessment(bookingId, damageId, values),
+  getCheckoutReport: (bookingId) => bookingsBackend.getCheckoutReport(bookingId),
+  generateCheckoutReport: (bookingId) => bookingsBackend.generateCheckoutReport(bookingId),
   completeCheckIn: (payload) => bookingsBackend.completeCheckIn(payload),
   completeCheckOut: (payload) => bookingsBackend.completeCheckOut(payload),
 
@@ -842,6 +947,4 @@ export const bookingService = {
 
   getCancellations: (params) => backend.listCancellations(params),
   processRefund: (id) => backend.processRefund(id),
-
-  createDamageId: () => createId('dmg'),
 };

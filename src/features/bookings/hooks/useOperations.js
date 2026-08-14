@@ -4,33 +4,6 @@ import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
 
-/* ------------------------------------------------------- check-out reports */
-
-export const useCheckoutReports = () =>
-  useQuery({
-    queryKey: queryKeys.bookings.checkouts(),
-    queryFn: bookingService.getCheckoutReports,
-  });
-
-/**
- * Save a check-out report — damage list edits and the final deposit decision.
- */
-export const useSaveCheckoutReport = () => {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: ({ id, patch }) => bookingService.saveCheckoutReport(id, patch),
-    onSuccess: (_report, { message }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
-      if (message) toast.success(message);
-    },
-    onError: (error) => toast.error('Could not save report', getErrorMessage(error)),
-  });
-
-  return { saveReport: mutation.mutate, isPending: mutation.isPending };
-};
-
 /* ------------------------------------------------------------ housekeeping */
 
 /** Today's room-status board (Occupied / Due Check-out / Needs Cleaning / Ready), scoped server-side to the caller's assigned properties. */

@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { bookingService } from '../services/bookingService';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
@@ -284,6 +284,96 @@ export const useCompleteCheckOut = () => {
   });
 
   return { completeCheckOut: mutation.mutate, isPending: mutation.isPending };
+};
+
+/* -------------------------------------------------------- check-out reports */
+
+export const useDamageAssessments = (bookingId) =>
+  useQuery({
+    queryKey: queryKeys.bookings.damageAssessments(bookingId),
+    queryFn: () => bookingService.getDamageAssessments(bookingId),
+    enabled: Boolean(bookingId),
+  });
+
+export const useCreateDamageAssessment = (bookingId) => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (values) => bookingService.createDamageAssessment(bookingId, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.damageAssessments(bookingId) });
+      toast.success('Damage item logged');
+    },
+    onError: (error) => toast.error('Could not log damage item', getErrorMessage(error)),
+  });
+
+  return { createDamage: mutation.mutate, isPending: mutation.isPending };
+};
+
+/** The admin approval step — confirm a cost, decide whether it counts against the deposit. */
+export const useUpdateDamageAssessment = (bookingId) => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ id, values }) => bookingService.updateDamageAssessment(bookingId, id, values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.damageAssessments(bookingId) });
+      // A report already generated from the old numbers is now stale.
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.checkoutReport(bookingId) });
+    },
+    onError: (error) => toast.error('Could not update damage item', getErrorMessage(error)),
+  });
+
+  return {
+    updateDamage: (id, values, options) => mutation.mutate({ id, values }, options),
+    isPending: mutation.isPending,
+    pendingId: mutation.isPending ? mutation.variables?.id : undefined,
+  };
+};
+
+/** `null` (not an error) until a report has been generated for this booking — same "absence is normal" pattern `useDeposit` already uses. */
+export const useCheckoutReport = (bookingId) =>
+  useQuery({
+    queryKey: queryKeys.bookings.checkoutReport(bookingId),
+    queryFn: () => bookingService.getCheckoutReport(bookingId),
+    enabled: Boolean(bookingId),
+  });
+
+/**
+ * Report status for a handful of bookings in parallel — there is no backend
+ * list endpoint for this, so the Check-out Reports queue resolves it per
+ * visible row instead, the same bounded-fan-out pattern `usePropertiesByIds`
+ * already uses in `useProperties.js` for the equivalent "resolve records the
+ * list endpoint doesn't carry" need. Bounded to one page of ids, not
+ * unbounded — fine at this scale, would need a real backend list endpoint to
+ * go further.
+ */
+export const useCheckoutReportsByBookingIds = (bookingIds = []) =>
+  useQueries({
+    queries: bookingIds.map((bookingId) => ({
+      queryKey: queryKeys.bookings.checkoutReport(bookingId),
+      queryFn: () => bookingService.getCheckoutReport(bookingId),
+      enabled: Boolean(bookingId),
+      staleTime: 1000 * 60,
+    })),
+  });
+
+/** Real side effect: deducts approved damage from the deposit and auto-releases the remainder — see `bookingService.generateCheckoutReport`. */
+export const useGenerateCheckoutReport = (bookingId) => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => bookingService.generateCheckoutReport(bookingId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.checkoutReport(bookingId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.deposit(bookingId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.detail(bookingId) });
+      toast.success('Check-out report generated', 'The deposit has been reconciled.');
+    },
+    onError: (error) => toast.error('Could not generate the report', getErrorMessage(error)),
+  });
+
+  return { generateReport: mutation.mutate, isPending: mutation.isPending };
 };
 
 export const useCalendar = (month) =>
