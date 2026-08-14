@@ -148,7 +148,7 @@ export const TaxPage = () => {
         rule={editingRule}
         createRule={createRule}
         updateRule={updateRule}
-        isSaving={isCreating || pendingId === editingRule?.id}
+        isSaving={isCreating || (Boolean(editingRule) && pendingId === editingRule.id)}
       />
 
       <RejectRuleModal
