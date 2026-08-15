@@ -59,8 +59,8 @@ export const SpaceBookingCalendarPage = () => {
     [bookingsPage, dateStr],
   );
 
-  const openMin = todayHours?.isOpen ? minutesOf(todayHours.openTime) : 8 * 60;
-  const closeMin = todayHours?.isOpen ? minutesOf(todayHours.closeTime) : 20 * 60;
+  const openMin = todayHours ? minutesOf(todayHours.openTime) : 8 * 60;
+  const closeMin = todayHours ? minutesOf(todayHours.closeTime) : 20 * 60;
   const rangeMin = Math.max(closeMin - openMin, 60);
   const hourTicks = useMemo(() => {
     const ticks = [];
@@ -106,7 +106,7 @@ export const SpaceBookingCalendarPage = () => {
         <Alert variant="warn" title="Blacked out">
           This space is marked unavailable on {formatDate(date)} ({blackouts.find((b) => b.date === dateStr)?.reason || 'no reason given'}).
         </Alert>
-      ) : !todayHours?.isOpen ? (
+      ) : !todayHours ? (
         <Alert variant="info" title="Closed">
           {activeSpace.title} is closed on {WEEKDAYS.find((w) => w.value === weekday)?.label}s.
         </Alert>

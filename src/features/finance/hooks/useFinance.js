@@ -170,6 +170,38 @@ export const useCreateTaxRuleFromSuggestion = () => {
   };
 };
 
+/** `GET /properties/taxes/coverage-alerts/` — Super Admin only, real-time (not cached long — alerts change as pricing calculations happen). */
+export const useCoverageAlerts = () =>
+  useQuery({
+    queryKey: queryKeys.finance.coverageAlerts(),
+    queryFn: financeService.getCoverageAlerts,
+  });
+
+/** `POST /properties/taxes/no-tax-confirmation/` — records "this location genuinely has no tax," silencing the alert for that exact scope. */
+export const useConfirmNoTax = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: financeService.confirmNoTax,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.coverageAlerts() });
+      toast.success('Confirmed', 'This location will no longer be flagged.');
+    },
+    onError: (error) => toast.error('Could not confirm', getErrorMessage(error)),
+  });
+
+  return { confirmNoTax: mutation.mutate, isPending: mutation.isPending };
+};
+
+/**
+ * One CSV row → one create call. Not a `useMutation` — the import modal drives
+ * a sequential loop itself (progress/per-row success-failure reporting), so
+ * this is a thin wrapper the loop calls directly rather than a query-cache-
+ * aware mutation (there's no single "this mutation succeeded/failed" moment
+ * to hook onto across N independent requests).
+ */
+export const importTaxRuleCsvRow = (row) => financeService.createTaxRuleFromCsvRow(row);
+
 /* -------------------------------------------------------------------------- */
 /* Payment operations                                                          */
 /* -------------------------------------------------------------------------- */

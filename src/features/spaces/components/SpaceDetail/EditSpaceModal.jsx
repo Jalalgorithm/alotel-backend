@@ -16,8 +16,7 @@ const toForm = (space) => ({
   address: space?.address ?? '',
   sizeSqm: space?.sizeSqm ?? '',
   baseRate: space?.baseRate ?? '',
-  currency: space?.currency ?? 'NGN',
-  slotUnit: space?.slotUnit ?? 'hourly',
+  slotUnit: space?.slotUnit ?? 'hour',
   customSlotMinutes: space?.customSlotMinutes ?? '',
   minSlots: space?.minSlots ?? 1,
   maxSlots: space?.maxSlots ?? '',
@@ -64,13 +63,10 @@ export const EditSpaceModal = ({ isOpen, onClose, space }) => {
           <Input label="City" value={form.city} onChange={(e) => update({ city: e.target.value })} />
         </div>
         <Input label="Address" value={form.address} onChange={(e) => update({ address: e.target.value })} />
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Base rate" type="number" min="0" value={form.baseRate} onChange={(e) => update({ baseRate: e.target.value })} />
-          <Input label="Currency" value={form.currency} onChange={(e) => update({ currency: e.target.value.toUpperCase() })} maxLength={3} />
-        </div>
+        <Input label="Base rate" type="number" min="0" value={form.baseRate} onChange={(e) => update({ baseRate: e.target.value })} />
         <div className="grid grid-cols-3 gap-3">
           <Select label="Slot unit" options={SLOT_UNITS} value={form.slotUnit} onChange={(e) => update({ slotUnit: e.target.value })} />
-          {form.slotUnit === 'custom' && (
+          {form.slotUnit === 'custom_minutes' && (
             <Input label="Slot length (min)" type="number" min="1" value={form.customSlotMinutes} onChange={(e) => update({ customSlotMinutes: e.target.value })} />
           )}
           <Input label="Min slots" type="number" min="1" value={form.minSlots} onChange={(e) => update({ minSlots: e.target.value })} />

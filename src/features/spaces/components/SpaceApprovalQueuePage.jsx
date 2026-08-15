@@ -9,12 +9,17 @@ import { formatCurrency, formatDate, formatRelative } from '@/utils/format';
 import { useApprovalQueue, useBookingDecisions } from '../hooks/useSpaceBookings';
 import { SpaceBookingDetailModal } from './SpaceBookingDetailModal';
 
-/** Auto-expiry is a background-job concept on the (future) real backend — the mock surfaces the deadline for now, without ticking it down live. */
+/**
+ * `approval_due_at` is real and server-set — but expiry itself only happens
+ * lazily (checked on the next read of this booking, or via the backend's
+ * `expire_space_bookings` management command) or on the next fetch of this
+ * list, not client-side in real time, so this is a countdown display, not a
+ * live timer that flips the row itself.
+ */
 const expiresLabel = (booking) => {
-  const requested = new Date(booking.requestedAt).getTime();
-  const deadline = requested + 24 * 60 * 60 * 1000;
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) return 'Expiring imminently';
+  if (!booking.approvalDueAt) return 'No deadline set';
+  const remaining = new Date(booking.approvalDueAt).getTime() - Date.now();
+  if (remaining <= 0) return 'Overdue — will expire on next refresh';
   const hours = Math.round(remaining / (60 * 60 * 1000));
   return `~${hours}h left to respond`;
 };
@@ -32,7 +37,7 @@ export const SpaceApprovalQueuePage = () => {
     { key: 'window', header: 'When', render: (row) => <span className="whitespace-nowrap text-[12px] text-ink-soft">{formatDate(row.startDatetime, 'd MMM yyyy, HH:mm')}</span> },
     { key: 'guestCount', header: 'Guests', align: 'right' },
     { key: 'totalPrice', header: 'Total', align: 'right', render: (row) => <span className="font-semibold tabular-nums">{formatCurrency(row.totalPrice, row.currency)}</span> },
-    { key: 'requestedAt', header: 'Requested', render: (row) => <span className="text-[11px] text-ink-muted">{formatRelative(row.requestedAt)}</span> },
+    { key: 'createdAt', header: 'Requested', render: (row) => <span className="text-[11px] text-ink-muted">{formatRelative(row.createdAt)}</span> },
     { key: 'expires', header: 'Deadline', render: (row) => <Badge variant="warn">{expiresLabel(row)}</Badge> },
     {
       key: 'actions',

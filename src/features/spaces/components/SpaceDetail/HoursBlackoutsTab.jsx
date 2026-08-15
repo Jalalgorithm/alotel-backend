@@ -1,38 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Toggle } from '@/components/ui/Toggle';
+import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate } from '@/utils/format';
 import { WEEKDAYS } from '@/lib/spaceSchema';
-import { useBlackoutDateMutations, useBlackoutDates, useOperatingHours, useUpdateOperatingHours } from '../../hooks/useSpaces';
+import { useBlackoutDateMutations, useBlackoutDates, useOperatingHours, useOperatingHoursMutations } from '../../hooks/useSpaces';
 
-const rowsFromQuery = (hours) =>
-  WEEKDAYS.map(({ value }) => hours?.find((row) => row.dayOfWeek === value) ?? { dayOfWeek: value, isOpen: false, openTime: '09:00', closeTime: '18:00' });
+const EMPTY_ROW = { dayOfWeek: '', openTime: '09:00', closeTime: '18:00' };
 
-/** Weekly operating hours + one-off blackout dates — both gate `space_bookings` availability (spec §A.3.2). */
+/**
+ * Weekly operating hours + one-off blackout dates — both gate booking
+ * availability. Hours are an add/delete list, not a fixed 7-row toggle grid:
+ * the real API has one row per open weekday and no bulk-update endpoint — a
+ * weekday with no row is implicitly closed.
+ */
 export const HoursBlackoutsTab = ({ spaceId, canManage }) => {
-  const { data: hours, isLoading: isLoadingHours } = useOperatingHours(spaceId);
-  const { saveHours, isPending: isSaving } = useUpdateOperatingHours(spaceId);
+  const { data: hours = [], isLoading: isLoadingHours } = useOperatingHours(spaceId);
+  const { addHours, isAdding, removeHours, pendingId: pendingHoursId } = useOperatingHoursMutations(spaceId);
   const { data: blackouts = [], isLoading: isLoadingBlackouts } = useBlackoutDates(spaceId);
-  const { createBlackout, isCreating, deleteBlackout, pendingId } = useBlackoutDateMutations(spaceId);
+  const { createBlackout, isCreating, deleteBlackout, pendingId: pendingBlackoutId } = useBlackoutDateMutations(spaceId);
 
-  const [rows, setRows] = useState([]);
-  const [isDirty, setIsDirty] = useState(false);
+  const [newRow, setNewRow] = useState(EMPTY_ROW);
   const [newBlackout, setNewBlackout] = useState({ date: '', reason: '' });
 
-  useEffect(() => {
-    if (hours) {
-      setRows(rowsFromQuery(hours));
-      setIsDirty(false);
-    }
-  }, [hours]);
+  const openDays = new Set(hours.map((row) => row.dayOfWeek));
+  const availableDays = WEEKDAYS.filter((day) => !openDays.has(day.value));
 
-  const setRow = (dayOfWeek, patch) => {
-    setRows((current) => current.map((row) => (row.dayOfWeek === dayOfWeek ? { ...row, ...patch } : row)));
-    setIsDirty(true);
+  const addRow = () => {
+    if (newRow.dayOfWeek === '') return;
+    addHours({ ...newRow, dayOfWeek: Number(newRow.dayOfWeek) }, { onSuccess: () => setNewRow(EMPTY_ROW) });
   };
 
   const addBlackout = () => {
@@ -43,45 +42,52 @@ export const HoursBlackoutsTab = ({ spaceId, canManage }) => {
   return (
     <div className="space-y-5">
       <Card>
-        <CardHeader
-          title="Operating hours"
-          subtitle="Guests can only book within these windows."
-          action={canManage && <Button size="sm" variant="primary" isLoading={isSaving} disabled={!isDirty} onClick={() => saveHours(rows)}>Save hours</Button>}
-        />
-        <div className="space-y-1.5 border-t border-line p-4">
+        <CardHeader title="Operating hours" subtitle="Guests can only book within these windows. A weekday with no hours listed is closed." />
+        <div className="space-y-3 border-t border-line p-4">
+          {canManage && availableDays.length > 0 && (
+            <div className="flex flex-wrap items-end gap-2.5">
+              <Select
+                label="Day"
+                placeholder="Select"
+                options={availableDays}
+                value={newRow.dayOfWeek}
+                onChange={(e) => setNewRow((p) => ({ ...p, dayOfWeek: e.target.value }))}
+                containerClassName="w-40"
+              />
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Hours</p>
+                <div className="flex items-center gap-2">
+                  <input type="time" value={newRow.openTime} onChange={(e) => setNewRow((p) => ({ ...p, openTime: e.target.value }))} className="h-9 rounded-lg border border-line px-2 text-[13px]" />
+                  <span className="text-ink-muted">–</span>
+                  <input type="time" value={newRow.closeTime} onChange={(e) => setNewRow((p) => ({ ...p, closeTime: e.target.value }))} className="h-9 rounded-lg border border-line px-2 text-[13px]" />
+                </div>
+              </div>
+              <Button size="sm" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} isLoading={isAdding} disabled={newRow.dayOfWeek === ''} onClick={addRow}>
+                Add
+              </Button>
+            </div>
+          )}
+
           {isLoadingHours ? (
             <p className="text-[12px] text-ink-muted">Loading…</p>
+          ) : !hours.length ? (
+            <EmptyState title="No hours set" description="This space has no listed hours yet — add at least one open day so it can be booked." />
           ) : (
-            rows.map((row) => {
-              const label = WEEKDAYS.find((d) => d.value === row.dayOfWeek)?.label;
-              return (
-                <div key={row.dayOfWeek} className="flex items-center gap-3 rounded-lg border border-line bg-white px-3 py-2">
-                  <span className="w-24 shrink-0 text-[12px] font-semibold text-ink">{label}</span>
-                  <Toggle checked={row.isOpen} onChange={(isOpen) => setRow(row.dayOfWeek, { isOpen })} disabled={!canManage} label={`${label} open`} />
-                  {row.isOpen ? (
-                    <div className="flex flex-1 items-center gap-2">
-                      <input
-                        type="time"
-                        disabled={!canManage}
-                        value={row.openTime}
-                        onChange={(e) => setRow(row.dayOfWeek, { openTime: e.target.value })}
-                        className="h-8 rounded-md border border-line px-2 text-[12px] disabled:bg-black/5"
-                      />
-                      <span className="text-ink-muted">–</span>
-                      <input
-                        type="time"
-                        disabled={!canManage}
-                        value={row.closeTime}
-                        onChange={(e) => setRow(row.dayOfWeek, { closeTime: e.target.value })}
-                        className="h-8 rounded-md border border-line px-2 text-[12px] disabled:bg-black/5"
-                      />
-                    </div>
-                  ) : (
-                    <span className="text-[11.5px] text-ink-muted">Closed</span>
+            <div className="space-y-1.5">
+              {hours.map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-24 shrink-0 text-[12px] font-semibold text-ink">{WEEKDAYS.find((d) => d.value === row.dayOfWeek)?.label}</span>
+                    <span className="text-[12.5px] text-ink-soft">{row.openTime} – {row.closeTime}</span>
+                  </div>
+                  {canManage && (
+                    <Button size="xs" variant="ghost" aria-label="Remove hours" isLoading={pendingHoursId === row.id} onClick={() => removeHours(row.id)}>
+                      <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
+                    </Button>
                   )}
                 </div>
-              );
-            })
+              ))}
+            </div>
           )}
         </div>
       </Card>
@@ -112,7 +118,7 @@ export const HoursBlackoutsTab = ({ spaceId, canManage }) => {
                     {row.reason && <p className="truncate text-[11px] text-ink-muted">{row.reason}</p>}
                   </div>
                   {canManage && (
-                    <Button size="xs" variant="ghost" aria-label="Remove blackout date" isLoading={pendingId === row.id} onClick={() => deleteBlackout(row.id)}>
+                    <Button size="xs" variant="ghost" aria-label="Remove blackout date" isLoading={pendingBlackoutId === row.id} onClick={() => deleteBlackout(row.id)}>
                       <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
                     </Button>
                   )}

@@ -49,8 +49,8 @@ export const env = {
   /** The `/analytics/*` endpoints and CSV/PDF export. */
   useMockAnalytics: toBool(import.meta.env.VITE_USE_MOCK_ANALYTICS, useMock),
 
-  /** Spaces has no backend at all yet — always mock, not a togglable flag. */
-  useMockSpaces: true,
+  /** Spaces now has a real backend (`/api/v1/spaces/...`) — defaults to it regardless of the global flag, matching `useMockMaintenance`. Flip on only for offline dev. */
+  useMockSpaces: toBool(import.meta.env.VITE_USE_MOCK_SPACES, false),
 
   /** Maintenance oversight (`/operations/maintenance/*`) is a real, working endpoint — defaults to the live API regardless of the global flag. Flip on only for offline dev. */
   useMockMaintenance: toBool(import.meta.env.VITE_USE_MOCK_MAINTENANCE, false),

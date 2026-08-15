@@ -1,12 +1,12 @@
 /**
- * The Spaces vocabulary, per the "Alotel Spaces" product spec.
- *
- * Spaces has NO real backend yet — everything here is mocked (see
- * `spaceService.js`). Field names below deliberately mirror the spec's
- * proposed wire contract (`slot_unit`, `booking_mode`, `size_sqm`, …) even
- * though the mock layer is the only thing speaking it today, so that wiring
- * up a real `POST /admin/api/spaces` later is a service-file change only —
- * the UI already speaks this shape.
+ * The Spaces vocabulary — `spaces` app on the backend, mounted at
+ * `/api/v1/spaces/...`. Field names/enums below are copied verbatim from
+ * `spaces/models.py` and `spaces/serializers.py` (read in full before this
+ * file was written), not the earlier product-spec draft this module
+ * originally mocked against — a few things genuinely differ from that draft:
+ * `slot_unit` values, no stored `currency`, `status` has no `archived`, and
+ * layouts/add-ons/operating-hours have no update endpoint (create+delete
+ * only). See `spaceService.js` for the real/mock service split.
  */
 
 export const SPACE_TYPES = ['Meeting Room', 'Boardroom', 'Event Hall', 'Conference Center', 'Studio', 'Other'];
@@ -14,27 +14,26 @@ export const SPACE_TYPES = ['Meeting Room', 'Boardroom', 'Event Hall', 'Conferen
 export const SPACE_STATUSES = [
   { value: 'draft', label: 'Draft' },
   { value: 'published', label: 'Published' },
-  { value: 'archived', label: 'Archived' },
 ];
 
 export const STATUS_BADGE_VARIANT = {
   draft: 'neutral',
   published: 'ok',
-  archived: 'danger',
 };
 
+/** `half_day`/`full_day` durations are hardcoded server-side (6h/12h) — not a per-space setting. */
 export const SLOT_UNITS = [
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'half_day', label: 'Half-day' },
-  { value: 'full_day', label: 'Full-day' },
-  { value: 'custom', label: 'Custom' },
+  { value: 'hour', label: 'Hour' },
+  { value: 'half_day', label: 'Half-day (6h)' },
+  { value: 'full_day', label: 'Full-day (12h)' },
+  { value: 'custom_minutes', label: 'Custom' },
 ];
 
 export const SLOT_UNIT_LABEL = {
-  hourly: 'hour',
+  hour: 'hour',
   half_day: 'half-day',
   full_day: 'full-day',
-  custom: 'slot',
+  custom_minutes: 'slot',
 };
 
 export const BOOKING_MODES = [
@@ -61,6 +60,7 @@ export const WEEKDAYS = [
 ];
 
 export const SPACE_BOOKING_STATUSES = [
+  { value: 'pending_payment', label: 'Pending payment' },
   { value: 'pending_host_approval', label: 'Pending approval' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'declined', label: 'Declined' },
@@ -70,6 +70,7 @@ export const SPACE_BOOKING_STATUSES = [
 ];
 
 export const BOOKING_STATUS_BADGE_VARIANT = {
+  pending_payment: 'neutral',
   pending_host_approval: 'warn',
   confirmed: 'ok',
   declined: 'danger',
@@ -78,14 +79,25 @@ export const BOOKING_STATUS_BADGE_VARIANT = {
   completed: 'info',
 };
 
+/** Same 5 markets as `propertySchema.js`'s `LOCATIONS` — `Space.LOCATION_CHOICES` is a literal reference to `Property.LOCATION_CHOICES` on the backend. */
+const CURRENCY_BY_LOCATION = { UK: 'GBP', Spain: 'EUR', Nigeria: 'NGN', 'UAE Dubai': 'AED', US: 'USD' };
+
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+/**
+ * There is no stored currency on a Space — the backend derives it from
+ * `location` only at booking/quote time. This is a display-only guess so the
+ * admin UI can show a sensible symbol before any booking exists; it is never
+ * sent to the API.
+ */
+export const currencyForSpace = (space) => CURRENCY_BY_LOCATION[space?.location] ?? CURRENCY_BY_LOCATION[space?.country] ?? 'GBP';
+
 /** `slot_unit`-appropriate price suffix, e.g. "₦700,000 / half-day". */
 export const slotUnitSuffix = (space) =>
-  space?.slotUnit === 'custom' ? `/ ${space.customSlotMinutes || 0}-min slot` : `/ ${SLOT_UNIT_LABEL[space?.slotUnit] ?? 'unit'}`;
+  space?.slotUnit === 'custom_minutes' ? `/ ${space.customSlotMinutes || 0}-min slot` : `/ ${SLOT_UNIT_LABEL[space?.slotUnit] ?? 'unit'}`;
 
 export const locationLabel = (space) => [space?.city, space?.state, space?.country].filter(Boolean).join(', ');
 
@@ -99,18 +111,20 @@ export const toSpace = (raw) => {
     id: raw.id,
     host: raw.host,
     title: raw.title ?? '',
-    type: raw.type ?? SPACE_TYPES[0],
+    type: raw.space_type || SPACE_TYPES[0],
     description: raw.description ?? '',
     status: raw.status ?? 'draft',
-    country: raw.location?.country ?? '',
-    state: raw.location?.state ?? '',
-    city: raw.location?.city ?? '',
-    address: raw.location?.address ?? '',
-    images: raw.images ?? [],
+    publishedAt: raw.published_at ?? null,
+    country: raw.country ?? '',
+    state: raw.state ?? '',
+    city: raw.city ?? '',
+    address: raw.address ?? '',
+    coordinates: raw.coordinates ?? {},
+    location: raw.location ?? '',
+    images: (raw.images ?? []).map(toSpaceImage),
     sizeSqm: raw.size_sqm ?? null,
     baseRate: toNumber(raw.base_rate),
-    currency: raw.currency ?? 'NGN',
-    slotUnit: raw.slot_unit ?? 'hourly',
+    slotUnit: raw.slot_unit ?? 'hour',
     customSlotMinutes: raw.slot_unit_minutes ?? null,
     minSlots: raw.min_slots ?? 1,
     maxSlots: raw.max_slots ?? null,
@@ -122,31 +136,35 @@ export const toSpace = (raw) => {
   };
 };
 
-export const toSpacePayload = (values) => ({
-  title: values.title?.trim() ?? '',
-  type: values.type,
-  description: values.description?.trim() ?? '',
-  status: values.status || 'draft',
-  location: {
+/** `SpaceCreateUpdateSerializer` — flat fields, no nested `location` object (that key is the separate market enum, see `location` below). */
+export const toSpacePayload = (values) => {
+  const payload = {
+    title: values.title?.trim() ?? '',
+    description: values.description?.trim() ?? '',
+    space_type: values.type || '',
+    status: values.status || 'draft',
     country: values.country?.trim() ?? '',
     state: values.state?.trim() ?? '',
     city: values.city?.trim() ?? '',
     address: values.address?.trim() ?? '',
-  },
-  images: values.images ?? [],
-  size_sqm: values.sizeSqm ? Number(values.sizeSqm) : null,
-  base_rate: String(Number(values.baseRate) || 0),
-  currency: values.currency || 'NGN',
-  slot_unit: values.slotUnit,
-  slot_unit_minutes: values.slotUnit === 'custom' ? Number(values.customSlotMinutes) || null : null,
-  min_slots: Number(values.minSlots) || 1,
-  max_slots: values.maxSlots ? Number(values.maxSlots) : null,
-  booking_mode: values.bookingMode,
-  approval_expiry_hours: Number(values.approvalExpiryHours) || 24,
-});
+    coordinates: values.coordinates ?? {},
+    size_sqm: values.sizeSqm ? Number(values.sizeSqm) : null,
+    base_rate: String(Number(values.baseRate) || 0),
+    slot_unit: values.slotUnit,
+    slot_unit_minutes: values.slotUnit === 'custom_minutes' ? Number(values.customSlotMinutes) || null : null,
+    min_slots: Number(values.minSlots) || 1,
+    max_slots: values.maxSlots ? Number(values.maxSlots) : null,
+    booking_mode: values.bookingMode,
+    approval_expiry_hours: Number(values.approvalExpiryHours) || 24,
+  };
+  // Only send `location` when the typed country happens to match one of the 5 known markets —
+  // otherwise the server leaves it null and currency display falls back to GBP, same as Property.
+  if (CURRENCY_BY_LOCATION[payload.country]) payload.location = payload.country;
+  return payload;
+};
 
 /* -------------------------------------------------------------------------- */
-/* Layouts                                                                     */
+/* Layouts — create + delete only, no update endpoint                          */
 /* -------------------------------------------------------------------------- */
 
 export const toLayout = (raw) => ({
@@ -162,7 +180,7 @@ export const toLayoutPayload = (values) => ({
 });
 
 /* -------------------------------------------------------------------------- */
-/* Add-ons                                                                     */
+/* Add-ons — create + delete only, no update endpoint                          */
 /* -------------------------------------------------------------------------- */
 
 export const toAddon = (raw) => ({
@@ -189,18 +207,22 @@ export const toAddonPayload = (values) => ({
 /* Operating hours & blackout dates                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * One row per weekday that's open — there is no `is_open` flag and no bulk
+ * "set the whole week" endpoint. A weekday with no row is implicitly closed;
+ * opening/changing a day means POSTing a new row (and DELETEing the old one
+ * if the hours changed), not PATCHing one.
+ */
 export const toOperatingHours = (raw) => ({
   id: raw.id,
   spaceId: raw.space,
   dayOfWeek: raw.day_of_week,
-  isOpen: raw.is_open ?? true,
-  openTime: raw.open_time ?? '09:00',
-  closeTime: raw.close_time ?? '18:00',
+  openTime: raw.open_time,
+  closeTime: raw.close_time,
 });
 
 export const toOperatingHoursPayload = (row) => ({
   day_of_week: row.dayOfWeek,
-  is_open: row.isOpen,
   open_time: row.openTime,
   close_time: row.closeTime,
 });
@@ -218,24 +240,44 @@ export const toBlackoutDatePayload = (values) => ({
 });
 
 /* -------------------------------------------------------------------------- */
+/* Images                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export const toSpaceImage = (raw) => ({
+  id: raw.id,
+  spaceId: raw.space,
+  url: raw.image,
+  order: raw.order ?? 0,
+  caption: raw.caption ?? '',
+  createdAt: raw.created_at,
+});
+
+/* -------------------------------------------------------------------------- */
 /* Bookings                                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * `SpaceBookingSerializer` — output-only (bookings are never created/edited
+ * through this shape, only via the dedicated create/approve/decline/cancel
+ * views). No `guest_phone`, no `booking_mode` on the booking itself (that
+ * lives on the parent Space), no `requested_at`/`decided_at`/`decided_by` —
+ * `created_at`/`approval_due_at` are what the real API actually carries.
+ */
 export const toSpaceBooking = (raw) => ({
   id: raw.id,
   spaceId: raw.space,
-  spaceName: raw.space_name ?? '',
-  layoutId: raw.layout_id,
+  spaceName: raw.space_title ?? '',
+  layoutId: raw.layout,
   layoutName: raw.layout_name ?? '',
   guestName: raw.guest_name ?? '',
   guestEmail: raw.guest_email ?? '',
-  guestPhone: raw.guest_phone ?? '',
   startDatetime: raw.start_datetime,
   endDatetime: raw.end_datetime,
   guestCount: raw.guest_count ?? 0,
-  addons: (raw.addons ?? []).map((entry) => ({
-    addonId: entry.addon_id,
-    name: entry.name,
+  addons: (raw.addon_lines ?? []).map((entry) => ({
+    id: entry.id,
+    addonId: entry.addon,
+    name: entry.addon_name,
     qty: entry.qty,
     price: toNumber(entry.price_at_booking),
   })),
@@ -243,11 +285,10 @@ export const toSpaceBooking = (raw) => ({
   addonsPrice: toNumber(raw.addons_price),
   taxTotal: toNumber(raw.tax_total),
   totalPrice: toNumber(raw.total_price),
-  currency: raw.currency ?? 'NGN',
-  status: raw.status ?? 'pending_host_approval',
-  bookingMode: raw.booking_mode ?? 'instant',
-  requestedAt: raw.requested_at,
-  decidedAt: raw.decided_at ?? null,
-  decidedBy: raw.decided_by ?? null,
+  currency: raw.currency ?? '',
+  status: raw.status ?? 'pending_payment',
+  approvalDueAt: raw.approval_due_at ?? null,
   declineReason: raw.decline_reason ?? '',
+  createdAt: raw.created_at,
+  updatedAt: raw.updated_at,
 });

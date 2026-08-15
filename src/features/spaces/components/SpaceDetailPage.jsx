@@ -1,23 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, MapPin, Pencil, Trash2, Users, Warehouse } from 'lucide-react';
+import { ArrowLeft, Copy, ImageOff, MapPin, Pencil, Trash2, Users, Warehouse } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Modal } from '@/components/ui/Modal';
 import { Tabs } from '@/components/ui/Tabs';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
+import { FileDropzone } from '@/components/ui/FileDropzone';
 import { getErrorMessage } from '@/utils/errors';
 import { formatCurrency } from '@/utils/format';
 import { toast } from '@/stores/uiStore';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { paths } from '@/routes/paths';
-import { locationLabel, slotUnitSuffix, SPACE_STATUSES, STATUS_BADGE_VARIANT } from '@/lib/spaceSchema';
-import { useDeleteSpace, useSetSpaceStatus, useSpace } from '../hooks/useSpaces';
+import { currencyForSpace, locationLabel, slotUnitSuffix, SPACE_STATUSES, STATUS_BADGE_VARIANT } from '@/lib/spaceSchema';
+import { useSetSpaceStatus, useSpace, useSpaceImageMutations, useSpaceImages } from '../hooks/useSpaces';
 import { EditSpaceModal } from './SpaceDetail/EditSpaceModal';
 import { LayoutsTab } from './SpaceDetail/LayoutsTab';
 import { AddonsTab } from './SpaceDetail/AddonsTab';
@@ -26,6 +26,7 @@ import { BookingsTab } from './SpaceDetail/BookingsTab';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'photos', label: 'Photos' },
   { id: 'layouts', label: 'Layouts' },
   { id: 'addons', label: 'Add-ons' },
   { id: 'hours', label: 'Hours & Blackouts' },
@@ -39,16 +40,60 @@ const TABS = [
   { id: 'maintenance', label: 'Maintenance', disabled: true },
 ];
 
+const PhotosTab = ({ spaceId, canManage }) => {
+  const { data: images = [], isLoading } = useSpaceImages(spaceId);
+  const { uploadImage, isUploading, deleteImage, pendingId } = useSpaceImageMutations(spaceId);
+
+  return (
+    <Card>
+      <div className="space-y-4 p-4">
+        {canManage && (
+          <FileDropzone
+            accept="image/*"
+            hint="JPG or PNG, up to 20MB"
+            compact
+            onFileSelected={(file) => file && uploadImage({ file, order: images.length })}
+          />
+        )}
+        {isUploading && <p className="text-[11px] text-ink-muted">Uploading…</p>}
+
+        {isLoading ? (
+          <Skeleton className="h-32" />
+        ) : !images.length ? (
+          <EmptyState icon={<ImageOff className="size-5 text-brand-600" aria-hidden="true" />} title="No photos yet" description="Add photos so guests can see this space before booking." />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {images.map((image) => (
+              <div key={image.id} className="group relative overflow-hidden rounded-lg border border-line">
+                <img src={image.url} alt={image.caption || 'Space photo'} className="aspect-square w-full object-cover" loading="lazy" />
+                {canManage && (
+                  <button
+                    type="button"
+                    aria-label="Remove photo"
+                    onClick={() => deleteImage(image.id)}
+                    disabled={pendingId === image.id}
+                    className="absolute right-1.5 top-1.5 rounded-md bg-ink/70 p-1.5 text-white opacity-0 transition-opacity hover:bg-danger group-hover:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+};
+
 export const SpaceDetailPage = () => {
   const { spaceId } = useParams();
   const { data: space, isLoading, isError, error } = useSpace(spaceId);
 
   const [tab, setTab] = useState('overview');
   const [isEditing, setIsEditing] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { setStatus, isPending: isStatusPending } = useSetSpaceStatus();
-  const { deleteSpace, isPending: isDeleting } = useDeleteSpace();
 
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.spacesManage);
@@ -58,12 +103,12 @@ export const SpaceDetailPage = () => {
     setTab('overview');
   }, [spaceId]);
 
+  /** Only `draft`/`published` exist on the real API — no `archived` status, no delete-space endpoint. */
   const statusActions = useMemo(() => {
     if (!space) return [];
     return [
       space.status !== 'published' && { label: 'Publish', status: 'published', variant: 'primary' },
       space.status !== 'draft' && { label: 'Move to draft', status: 'draft' },
-      space.status !== 'archived' && { label: 'Archive', status: 'archived' },
     ].filter(Boolean);
   }, [space]);
 
@@ -99,6 +144,8 @@ export const SpaceDetailPage = () => {
     );
   }
 
+  const currency = currencyForSpace(space);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -129,8 +176,6 @@ export const SpaceDetailPage = () => {
                     {action.label}
                   </Button>
                 ))}
-
-                <Button onClick={() => setConfirmDelete(true)} leftIcon={<Trash2 className="size-3.5" aria-hidden="true" />} aria-label="Delete space" />
               </>
             )}
           </>
@@ -160,7 +205,7 @@ export const SpaceDetailPage = () => {
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">Rate</p>
             <p className="truncate text-[13px] font-semibold text-ink">
-              {formatCurrency(space.baseRate, space.currency)} <span className="font-normal text-ink-muted">{slotUnitSuffix(space)}</span>
+              {formatCurrency(space.baseRate, currency)} <span className="font-normal text-ink-muted">{slotUnitSuffix(space)}</span>
             </p>
           </div>
           <Badge variant={space.bookingMode === 'instant' ? 'ok' : 'info'}>{space.bookingMode === 'instant' ? 'Instant book' : 'Request to book'}</Badge>
@@ -178,8 +223,9 @@ export const SpaceDetailPage = () => {
           {space.bookingMode === 'request' && <p className="mt-1">Requests auto-expire after {space.approvalExpiryHours}h without a response.</p>}
         </Card>
       )}
+      {tab === 'photos' && <PhotosTab spaceId={space.id} canManage={canManage} />}
       {tab === 'layouts' && <LayoutsTab spaceId={space.id} canManage={canManage} />}
-      {tab === 'addons' && <AddonsTab spaceId={space.id} canManage={canManage} />}
+      {tab === 'addons' && <AddonsTab spaceId={space.id} canManage={canManage} currency={currency} />}
       {tab === 'hours' && <HoursBlackoutsTab spaceId={space.id} canManage={canManage} />}
       {tab === 'bookings' && <BookingsTab spaceId={space.id} canManage={canManage} />}
       {tab === 'maintenance' && (
@@ -190,19 +236,6 @@ export const SpaceDetailPage = () => {
       )}
 
       <EditSpaceModal isOpen={isEditing} onClose={() => setIsEditing(false)} space={space} />
-
-      <Modal
-        isOpen={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
-        title="Delete this space?"
-        description="This permanently removes the space, its layouts, add-ons, hours and blackout dates. Existing bookings are kept for record-keeping."
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-            <Button variant="danger" isLoading={isDeleting} onClick={() => deleteSpace(space.id)}>Delete permanently</Button>
-          </div>
-        }
-      />
     </div>
   );
 };

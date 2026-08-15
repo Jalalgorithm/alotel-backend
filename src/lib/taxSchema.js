@@ -21,6 +21,15 @@
 
 export const TAX_COUNTRIES = ['UK', 'Spain', 'USA', 'UAE', 'Nigeria'];
 
+/** Display-only full names for `TAX_COUNTRIES` — values sent to the API are always the short codes above, unchanged. */
+export const TAX_COUNTRY_LABELS = {
+  UK: 'United Kingdom',
+  Spain: 'Spain',
+  USA: 'United States',
+  UAE: 'United Arab Emirates',
+  Nigeria: 'Nigeria',
+};
+
 export const TAX_TYPES = [
   { value: 'percentage', label: 'Percentage' },
   { value: 'fixed', label: 'Fixed amount' },
@@ -44,7 +53,7 @@ export const TAX_STATUSES = [
 /** Statuses that still need a human decision — these get Approve/Reject actions in the table. */
 export const REVIEWABLE_STATUSES = ['pending_review', 'ai_suggested', 'csv_import'];
 
-/** Badge variant per AI suggestion confidence level — shared by `AiSuggestModal` and `TaxRuleModal`. */
+/** Badge variant per AI suggestion confidence level — shared by `AiTaxCompanionPanel` and `TaxRuleModal`. */
 export const CONFIDENCE_BADGE_VARIANT = {
   high: 'ok',
   medium: 'warn',
@@ -60,6 +69,13 @@ export const STATUS_BADGE_VARIANT = {
   active: 'ok',
   needs_reverification: 'warn',
   rejected: 'danger',
+};
+
+/** Human label for the "Source" table column. */
+export const SOURCE_LABELS = {
+  manual: 'Manual',
+  csv_import: 'CSV Import',
+  ai_suggested: 'AI Suggested',
 };
 
 export const GUEST_SEGMENTS = [
@@ -160,4 +176,47 @@ export const toAiSuggestionPayload = (suggestion) => ({
   source_url: suggestion.source_url || '',
   confidence: suggestion.confidence || '',
   caveat: suggestion.caveat || '',
+});
+
+/* -------------------------------------------------------------------------- */
+/* Coverage alerts — `GET /properties/taxes/coverage-alerts/`, Super Admin only */
+/* -------------------------------------------------------------------------- */
+
+export const toCoverageAlert = (raw) => ({
+  id: raw.id,
+  country: raw.country,
+  state: raw.state ?? '',
+  city: raw.city ?? '',
+  propertyIds: raw.property_ids ?? [],
+  firstSeenAt: raw.first_seen_at,
+  lastSeenAt: raw.last_seen_at,
+});
+
+/* -------------------------------------------------------------------------- */
+/* CSV import — no bulk backend endpoint exists; one `POST /properties/taxes/` */
+/* per row, forced into the same pending-review path as an AI suggestion.      */
+/* -------------------------------------------------------------------------- */
+
+/** Header row for the downloadable template, and the columns the parser reads back — mirrors `TaxRuleCreateUpdateSerializer`'s writable fields (minus `guest_segment`, too complex for a flat file). */
+export const CSV_TEMPLATE_COLUMNS = ['rule_name', 'country', 'state', 'county', 'city', 'tax_type', 'value', 'frequency', 'display_label'];
+
+/**
+ * One parsed CSV row (already keyed by `CSV_TEMPLATE_COLUMNS`) → the create
+ * payload. Forces `source`/`status: 'csv_import'` on every row — nothing
+ * server-side enforces that landing status for CSV-sourced rows the way it
+ * does for AI ones, so the frontend has to.
+ */
+export const toCsvRowPayload = (row) => ({
+  rule_name: row.rule_name?.trim() ?? '',
+  country: row.country?.trim() ?? '',
+  state: row.state?.trim() ?? '',
+  county: row.county?.trim() ?? '',
+  city: row.city?.trim() ?? '',
+  guest_segment: [],
+  tax_type: row.tax_type?.trim() === 'fixed' ? 'fixed' : 'percentage',
+  value: String(Number(row.value) || 0),
+  frequency: row.frequency?.trim() === 'per_booking' ? 'per_booking' : 'per_night',
+  display_label: row.display_label?.trim() ?? '',
+  status: 'csv_import',
+  source: 'csv_import',
 });

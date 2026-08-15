@@ -1,10 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { spaceService } from '../services/spaceService';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
-import { paths } from '@/routes/paths';
 
 /* -------------------------------------------------------------------------- */
 /* Spaces                                                                       */
@@ -72,26 +70,8 @@ export const useSetSpaceStatus = () => {
   return { setStatus: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.id };
 };
 
-export const useDeleteSpace = () => {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-
-  const mutation = useMutation({
-    mutationFn: (id) => spaceService.deleteSpace(id),
-    onSuccess: (_result, id) => {
-      queryClient.removeQueries({ queryKey: queryKeys.spaces.detail(id) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all });
-      toast.success('Space deleted');
-      navigate(paths.spaces);
-    },
-    onError: (error) => toast.error('Could not delete space', getErrorMessage(error)),
-  });
-
-  return { deleteSpace: mutation.mutate, isPending: mutation.isPending };
-};
-
 /* -------------------------------------------------------------------------- */
-/* Layouts                                                                     */
+/* Layouts — create + delete only, the real API has no update endpoint         */
 /* -------------------------------------------------------------------------- */
 
 export const useLayouts = (spaceId) =>
@@ -117,35 +97,27 @@ export const useLayoutMutations = (spaceId) => {
     onError: (error) => toast.error('Could not add layout', getErrorMessage(error)),
   });
 
-  const update = useMutation({
-    mutationFn: ({ id, values }) => spaceService.updateLayout(spaceId, id, values),
-    onSuccess: () => {
-      invalidate();
-      toast.success('Layout updated');
-    },
-    onError: (error) => toast.error('Could not update layout', getErrorMessage(error)),
-  });
-
+  /** Fails with a clear error (not a crash) if a booking still references this layout — `SpaceBooking.layout` is a protected FK server-side. */
   const remove = useMutation({
     mutationFn: (id) => spaceService.deleteLayout(spaceId, id),
     onSuccess: () => {
       invalidate();
       toast.info('Layout removed');
     },
-    onError: (error) => toast.error('Could not remove layout', getErrorMessage(error)),
+    onError: (error) => toast.error('Could not remove layout', getErrorMessage(error, 'It may still be referenced by a booking.')),
   });
 
   return {
     createLayout: create.mutate,
     isCreating: create.isPending,
-    updateLayout: (id, values) => update.mutate({ id, values }),
     deleteLayout: remove.mutate,
-    pendingId: update.isPending ? update.variables?.id : remove.isPending ? remove.variables : undefined,
+    isDeleting: remove.isPending,
+    pendingId: remove.isPending ? remove.variables : undefined,
   };
 };
 
 /* -------------------------------------------------------------------------- */
-/* Add-ons                                                                     */
+/* Add-ons — create + delete only, the real API has no update endpoint         */
 /* -------------------------------------------------------------------------- */
 
 export const useAddons = (spaceId) =>
@@ -168,15 +140,6 @@ export const useAddonMutations = (spaceId) => {
     onError: (error) => toast.error('Could not add add-on', getErrorMessage(error)),
   });
 
-  const update = useMutation({
-    mutationFn: ({ id, values }) => spaceService.updateAddon(spaceId, id, values),
-    onSuccess: () => {
-      invalidate();
-      toast.success('Add-on updated');
-    },
-    onError: (error) => toast.error('Could not update add-on', getErrorMessage(error)),
-  });
-
   const remove = useMutation({
     mutationFn: (id) => spaceService.deleteAddon(spaceId, id),
     onSuccess: () => {
@@ -189,14 +152,13 @@ export const useAddonMutations = (spaceId) => {
   return {
     createAddon: create.mutate,
     isCreating: create.isPending,
-    updateAddon: (id, values) => update.mutate({ id, values }),
     deleteAddon: remove.mutate,
-    pendingId: update.isPending ? update.variables?.id : remove.isPending ? remove.variables : undefined,
+    pendingId: remove.isPending ? remove.variables : undefined,
   };
 };
 
 /* -------------------------------------------------------------------------- */
-/* Operating hours & blackout dates                                            */
+/* Operating hours — one row per open weekday, create + delete only            */
 /* -------------------------------------------------------------------------- */
 
 export const useOperatingHours = (spaceId) =>
@@ -206,20 +168,39 @@ export const useOperatingHours = (spaceId) =>
     enabled: Boolean(spaceId),
   });
 
-export const useUpdateOperatingHours = (spaceId) => {
+export const useOperatingHoursMutations = (spaceId) => {
   const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.spaces.hours(spaceId) });
 
-  const mutation = useMutation({
-    mutationFn: (weekRows) => spaceService.updateOperatingHours(spaceId, weekRows),
+  const create = useMutation({
+    mutationFn: (values) => spaceService.createOperatingHoursRow(spaceId, values),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.hours(spaceId) });
-      toast.success('Operating hours saved');
+      invalidate();
+      toast.success('Hours added');
     },
-    onError: (error) => toast.error('Could not save operating hours', getErrorMessage(error)),
+    onError: (error) => toast.error('Could not add hours', getErrorMessage(error)),
   });
 
-  return { saveHours: mutation.mutate, isPending: mutation.isPending };
+  const remove = useMutation({
+    mutationFn: (id) => spaceService.deleteOperatingHoursRow(spaceId, id),
+    onSuccess: () => {
+      invalidate();
+      toast.info('Marked closed');
+    },
+    onError: (error) => toast.error('Could not update hours', getErrorMessage(error)),
+  });
+
+  return {
+    addHours: create.mutate,
+    isAdding: create.isPending,
+    removeHours: remove.mutate,
+    pendingId: remove.isPending ? remove.variables : undefined,
+  };
 };
+
+/* -------------------------------------------------------------------------- */
+/* Blackout dates                                                              */
+/* -------------------------------------------------------------------------- */
 
 export const useBlackoutDates = (spaceId) =>
   useQuery({
@@ -255,5 +236,46 @@ export const useBlackoutDateMutations = (spaceId) => {
     isCreating: create.isPending,
     deleteBlackout: remove.mutate,
     pendingId: remove.variables,
+  };
+};
+
+/* -------------------------------------------------------------------------- */
+/* Images                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export const useSpaceImages = (spaceId) =>
+  useQuery({
+    queryKey: queryKeys.spaces.images(spaceId),
+    queryFn: () => spaceService.getImages(spaceId),
+    enabled: Boolean(spaceId),
+  });
+
+export const useSpaceImageMutations = (spaceId) => {
+  const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.spaces.images(spaceId) });
+
+  const upload = useMutation({
+    mutationFn: (payload) => spaceService.uploadImage(spaceId, payload),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Photo uploaded');
+    },
+    onError: (error) => toast.error('Could not upload photo', getErrorMessage(error)),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => spaceService.deleteImage(spaceId, id),
+    onSuccess: () => {
+      invalidate();
+      toast.info('Photo removed');
+    },
+    onError: (error) => toast.error('Could not remove photo', getErrorMessage(error)),
+  });
+
+  return {
+    uploadImage: upload.mutate,
+    isUploading: upload.isPending,
+    deleteImage: remove.mutate,
+    pendingId: remove.isPending ? remove.variables : undefined,
   };
 };

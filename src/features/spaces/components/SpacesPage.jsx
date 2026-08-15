@@ -11,7 +11,7 @@ import { DataTable } from '@/components/ui/DataTable';
 import { formatCurrency } from '@/utils/format';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSpaces } from '../hooks/useSpaces';
-import { BOOKING_MODES, locationLabel, slotUnitSuffix, SPACE_STATUSES, SPACE_TYPES, STATUS_BADGE_VARIANT } from '@/lib/spaceSchema';
+import { BOOKING_MODES, currencyForSpace, locationLabel, slotUnitSuffix, SPACE_STATUSES, SPACE_TYPES, STATUS_BADGE_VARIANT } from '@/lib/spaceSchema';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { paths } from '@/routes/paths';
@@ -79,7 +79,7 @@ export const SpacesPage = () => {
       align: 'right',
       render: (row) => (
         <span className="whitespace-nowrap">
-          <span className="font-semibold tabular-nums text-ink">{formatCurrency(row.baseRate, row.currency)}</span>
+          <span className="font-semibold tabular-nums text-ink">{formatCurrency(row.baseRate, currencyForSpace(row))}</span>
           <span className="ml-1 text-[10.5px] text-ink-muted">{slotUnitSuffix(row)}</span>
         </span>
       ),

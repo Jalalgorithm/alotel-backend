@@ -1,29 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2, Users } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
-import { useLayouts, useLayoutMutations } from '../../hooks/useSpaces';
+import { useLayoutMutations, useLayouts } from '../../hooks/useSpaces';
 
-const LayoutModal = ({ isOpen, onClose, layout, createLayout, updateLayout, isSaving }) => {
+const AddLayoutModal = ({ isOpen, onClose, createLayout, isSaving }) => {
   const [form, setForm] = useState({ name: '', maxCapacity: '' });
 
-  useEffect(() => {
-    if (isOpen) setForm({ name: layout?.name ?? '', maxCapacity: layout?.maxCapacity ?? '' });
-  }, [isOpen, layout]);
-
-  const save = () => {
-    if (layout) updateLayout(layout.id, form, { onSuccess: onClose });
-    else createLayout(form, { onSuccess: onClose });
-  };
+  const save = () => createLayout(form, { onSuccess: () => { setForm({ name: '', maxCapacity: '' }); onClose(); } });
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={layout ? 'Edit layout' : 'Add layout'}
+      title="Add layout"
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -39,21 +32,16 @@ const LayoutModal = ({ isOpen, onClose, layout, createLayout, updateLayout, isSa
   );
 };
 
-/** Layouts sub-tab of the Space detail page — seating/room configurations, each with its own capacity. */
+/**
+ * Layouts sub-tab — seating/room configurations, each with its own capacity.
+ * Add + delete only: the real API has no update endpoint for a layout, and
+ * `SpaceBooking.layout` is a protected FK, so deleting one still in use by a
+ * booking fails with a clear error rather than a raw crash.
+ */
 export const LayoutsTab = ({ spaceId, canManage }) => {
   const { data: layouts = [], isLoading } = useLayouts(spaceId);
-  const { createLayout, isCreating, updateLayout, deleteLayout, pendingId } = useLayoutMutations(spaceId);
-  const [editing, setEditing] = useState(null);
+  const { createLayout, isCreating, deleteLayout, pendingId } = useLayoutMutations(spaceId);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const openCreate = () => {
-    setEditing(null);
-    setIsModalOpen(true);
-  };
-  const openEdit = (row) => {
-    setEditing(row);
-    setIsModalOpen(true);
-  };
 
   const columns = [
     {
@@ -73,11 +61,9 @@ export const LayoutsTab = ({ spaceId, canManage }) => {
             header: '',
             align: 'right',
             render: (row) => (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Button size="xs" variant="ghost" aria-label="Delete layout" isLoading={pendingId === row.id} onClick={() => deleteLayout(row.id)}>
-                  <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
-                </Button>
-              </div>
+              <Button size="xs" variant="ghost" aria-label="Delete layout" isLoading={pendingId === row.id} onClick={() => deleteLayout(row.id)}>
+                <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
+              </Button>
             ),
           },
         ]
@@ -89,27 +75,19 @@ export const LayoutsTab = ({ spaceId, canManage }) => {
       <CardHeader
         title="Layouts"
         subtitle="Each layout is a seating/room configuration guests choose at booking, with its own capacity."
-        action={canManage && <Button size="sm" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={openCreate}>Add layout</Button>}
+        action={canManage && <Button size="sm" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={() => setIsModalOpen(true)}>Add layout</Button>}
       />
       <div className="border-t border-line">
         <DataTable
           columns={columns}
           rows={layouts}
           isLoading={isLoading}
-          onRowClick={canManage ? openEdit : undefined}
           emptyTitle="No layouts yet"
           emptyDescription="Add at least one layout so this space can be booked."
         />
       </div>
 
-      <LayoutModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        layout={editing}
-        createLayout={createLayout}
-        updateLayout={updateLayout}
-        isSaving={isCreating || (Boolean(editing) && pendingId === editing.id)}
-      />
+      <AddLayoutModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} createLayout={createLayout} isSaving={isCreating} />
     </Card>
   );
 };

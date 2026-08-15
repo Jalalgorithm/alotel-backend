@@ -119,12 +119,12 @@ export const AnalyticsPage = () => {
 
       {kpis && (
         <>
-          {kpis.review_trend.length > 0 && (
+          {(kpis.review_trend ?? []).length > 0 && (
             <Card>
               <CardHeader title="Review trend" subtitle="Average rating per day this period." />
               <div className="px-4 pb-4">
                 <BarChart
-                  data={kpis.review_trend.map((entry) => ({ label: entry.date.slice(5), value: entry.avg_rating }))}
+                  data={kpis.review_trend.map((entry) => ({ label: entry.date?.slice(5) ?? '', value: entry.avg_rating }))}
                   highlightIndex={kpis.review_trend.length - 1}
                   height={190}
                   formatValue={(value) => `${value.toFixed(1)}★`}

@@ -6,7 +6,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Toggle } from '@/components/ui/Toggle';
 import { Alert } from '@/components/ui/Alert';
 import { cn } from '@/utils/classNames';
 import { getErrorMessage } from '@/utils/errors';
@@ -34,8 +33,8 @@ const STEPS = [
   { id: 'review', label: 'Review', hint: 'Check everything and publish' },
 ];
 
-const emptyHours = () =>
-  WEEKDAYS.map(({ value }) => ({ dayOfWeek: value, isOpen: value < 5, openTime: '09:00', closeTime: '18:00' }));
+/** Mon–Fri open by default; a weekday simply has no row when closed — added/removed individually, matching the real API (one row per open day, no bulk update). */
+const emptyHours = () => [0, 1, 2, 3, 4].map((dayOfWeek) => ({ dayOfWeek, openTime: '09:00', closeTime: '18:00' }));
 
 const EMPTY_FORM = {
   title: '',
@@ -47,8 +46,7 @@ const EMPTY_FORM = {
   address: '',
   sizeSqm: '',
   baseRate: '',
-  currency: 'NGN',
-  slotUnit: 'hourly',
+  slotUnit: 'hour',
   customSlotMinutes: '',
   minSlots: 1,
   maxSlots: '',
@@ -167,7 +165,7 @@ export const SpaceWizardPage = () => {
       if (!form.city.trim()) errors.city = 'City is required';
       if (!form.address.trim()) errors.address = 'Address is required';
       if (!form.baseRate || Number(form.baseRate) <= 0) errors.baseRate = 'A base rate is required';
-      if (form.slotUnit === 'custom' && (!form.customSlotMinutes || Number(form.customSlotMinutes) <= 0)) {
+      if (form.slotUnit === 'custom_minutes' && (!form.customSlotMinutes || Number(form.customSlotMinutes) <= 0)) {
         errors.customSlotMinutes = 'Enter the slot length in minutes';
       }
     }
@@ -205,7 +203,7 @@ export const SpaceWizardPage = () => {
         ...form.layouts.map((layout) => spaceService.createLayout(space.id, layout)),
         ...form.addons.map((addon) => spaceService.createAddon(space.id, addon)),
         ...form.blackouts.map((blackout) => spaceService.createBlackoutDate(space.id, blackout)),
-        spaceService.updateOperatingHours(space.id, form.hours),
+        ...form.hours.map((row) => spaceService.createOperatingHoursRow(space.id, row)),
       ]);
 
       if (publish) await setSpaceStatus({ id: space.id, status: 'published' });
@@ -247,13 +245,12 @@ export const SpaceWizardPage = () => {
       </div>
       <Input label="Address" value={form.address} onChange={(e) => update({ address: e.target.value })} error={showErrors ? stepErrors.address : undefined} />
 
-      <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
-        <Input label="Base rate" type="number" min="0" value={form.baseRate} onChange={(e) => update({ baseRate: e.target.value })} error={showErrors ? stepErrors.baseRate : undefined} />
-        <Input label="Currency" value={form.currency} onChange={(e) => update({ currency: e.target.value.toUpperCase() })} maxLength={3} />
+      <div className="border-t border-line pt-4">
+        <Input label="Base rate" type="number" min="0" value={form.baseRate} onChange={(e) => update({ baseRate: e.target.value })} error={showErrors ? stepErrors.baseRate : undefined} hint="Currency is derived from the country/market — nothing to set here." />
       </div>
       <div className="grid grid-cols-3 gap-3">
         <Select label="Slot unit" options={SLOT_UNITS} value={form.slotUnit} onChange={(e) => update({ slotUnit: e.target.value })} />
-        {form.slotUnit === 'custom' && (
+        {form.slotUnit === 'custom_minutes' && (
           <Input
             label="Slot length (minutes)"
             type="number"
@@ -323,27 +320,49 @@ export const SpaceWizardPage = () => {
     // 3 · Hours & Blackouts
     <div key="hours" className="space-y-5">
       <div>
-        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Weekly hours</p>
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">
+          Weekly hours <span className="font-normal normal-case text-ink-muted">— a weekday with no row is closed</span>
+        </p>
         <div className="space-y-1.5">
-          {form.hours.map((row, index) => {
-            const label = WEEKDAYS.find((d) => d.value === row.dayOfWeek)?.label;
-            const setRow = (patch) => update({ hours: form.hours.map((r, i) => (i === index ? { ...r, ...patch } : r)) });
-            return (
-              <div key={row.dayOfWeek} className="flex items-center gap-3 rounded-lg border border-line bg-white px-3 py-2">
-                <span className="w-24 shrink-0 text-[12px] font-semibold text-ink">{label}</span>
-                <Toggle checked={row.isOpen} onChange={(isOpen) => setRow({ isOpen })} label={`${label} open`} />
-                {row.isOpen ? (
-                  <div className="flex flex-1 items-center gap-2">
-                    <input type="time" value={row.openTime} onChange={(e) => setRow({ openTime: e.target.value })} className="h-8 rounded-md border border-line px-2 text-[12px]" />
-                    <span className="text-ink-muted">–</span>
-                    <input type="time" value={row.closeTime} onChange={(e) => setRow({ closeTime: e.target.value })} className="h-8 rounded-md border border-line px-2 text-[12px]" />
-                  </div>
-                ) : (
-                  <span className="text-[11.5px] text-ink-muted">Closed</span>
-                )}
+          {form.hours.map((row, index) => (
+            <div key={row.dayOfWeek} className="flex items-center gap-3 rounded-lg border border-line bg-white px-3 py-2">
+              <span className="w-24 shrink-0 text-[12px] font-semibold text-ink">{WEEKDAYS.find((d) => d.value === row.dayOfWeek)?.label}</span>
+              <div className="flex flex-1 items-center gap-2">
+                <input
+                  type="time"
+                  value={row.openTime}
+                  onChange={(e) => update({ hours: form.hours.map((r, i) => (i === index ? { ...r, openTime: e.target.value } : r)) })}
+                  className="h-8 rounded-md border border-line px-2 text-[12px]"
+                />
+                <span className="text-ink-muted">–</span>
+                <input
+                  type="time"
+                  value={row.closeTime}
+                  onChange={(e) => update({ hours: form.hours.map((r, i) => (i === index ? { ...r, closeTime: e.target.value } : r)) })}
+                  className="h-8 rounded-md border border-line px-2 text-[12px]"
+                />
               </div>
-            );
-          })}
+              <button
+                type="button"
+                onClick={() => update({ hours: form.hours.filter((_, i) => i !== index) })}
+                aria-label={`Mark ${WEEKDAYS.find((d) => d.value === row.dayOfWeek)?.label} closed`}
+                className="shrink-0 rounded-md p-1.5 text-ink-muted transition-colors hover:bg-danger-soft hover:text-danger"
+              >
+                <Trash2 className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+          {WEEKDAYS.filter((day) => !form.hours.some((row) => row.dayOfWeek === day.value)).length > 0 && (
+            <Select
+              placeholder="Add a day…"
+              options={WEEKDAYS.filter((day) => !form.hours.some((row) => row.dayOfWeek === day.value))}
+              value=""
+              onChange={(e) =>
+                e.target.value !== '' &&
+                update({ hours: [...form.hours, { dayOfWeek: Number(e.target.value), openTime: '09:00', closeTime: '18:00' }] })
+              }
+            />
+          )}
         </div>
       </div>
 
@@ -418,7 +437,7 @@ export const SpaceWizardPage = () => {
           </p>
         </div>
         <div className="p-3.5 text-[12.5px] text-ink-soft">
-          {form.currency} {form.baseRate || 0} / {form.slotUnit === 'custom' ? `${form.customSlotMinutes || 0}-min slot` : form.slotUnit.replace('_', '-')}
+          {form.baseRate || 0} / {form.slotUnit === 'custom_minutes' ? `${form.customSlotMinutes || 0}-min slot` : form.slotUnit.replace('_', '-')}
         </div>
         <div className="p-3.5 text-[12.5px] text-ink-soft">
           {form.layouts.length} layout{form.layouts.length === 1 ? '' : 's'} · {form.addons.length} add-on{form.addons.length === 1 ? '' : 's'} · {form.blackouts.length} blackout date{form.blackouts.length === 1 ? '' : 's'}

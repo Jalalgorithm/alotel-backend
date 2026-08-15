@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,25 +13,17 @@ import { useAddonMutations, useAddons } from '../../hooks/useSpaces';
 
 const EMPTY = { category: '', name: '', price: '', unitType: 'flat', minQty: 0, maxQty: '' };
 
-const AddonModal = ({ isOpen, onClose, addon, createAddon, updateAddon, isSaving }) => {
+const AddAddonModal = ({ isOpen, onClose, createAddon, isSaving }) => {
   const [form, setForm] = useState(EMPTY);
-
-  useEffect(() => {
-    if (isOpen) setForm(addon ? { ...EMPTY, ...addon } : EMPTY);
-  }, [isOpen, addon]);
-
   const update = (patch) => setForm((p) => ({ ...p, ...patch }));
 
-  const save = () => {
-    if (addon) updateAddon(addon.id, form, { onSuccess: onClose });
-    else createAddon(form, { onSuccess: onClose });
-  };
+  const save = () => createAddon(form, { onSuccess: () => { setForm(EMPTY); onClose(); } });
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={addon ? 'Edit add-on' : 'Add add-on'}
+      title="Add add-on"
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
@@ -59,21 +51,14 @@ const AddonModal = ({ isOpen, onClose, addon, createAddon, updateAddon, isSaving
   );
 };
 
-/** Add-ons sub-tab — host-defined catalog, grouped by host-defined category (per spec §A.1's white-label principle). */
-export const AddonsTab = ({ spaceId, canManage }) => {
+/**
+ * Add-ons sub-tab — host-defined catalog, grouped by host-defined category.
+ * Add + delete only: the real API has no update endpoint for an add-on.
+ */
+export const AddonsTab = ({ spaceId, canManage, currency }) => {
   const { data: addons = [], isLoading } = useAddons(spaceId);
-  const { createAddon, isCreating, updateAddon, deleteAddon, pendingId } = useAddonMutations(spaceId);
-  const [editing, setEditing] = useState(null);
+  const { createAddon, isCreating, deleteAddon, pendingId } = useAddonMutations(spaceId);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const openCreate = () => {
-    setEditing(null);
-    setIsModalOpen(true);
-  };
-  const openEdit = (row) => {
-    setEditing(row);
-    setIsModalOpen(true);
-  };
 
   const grouped = useMemo(() => {
     const groups = new Map();
@@ -92,7 +77,7 @@ export const AddonsTab = ({ spaceId, canManage }) => {
       <CardHeader
         title="Add-ons"
         subtitle="Optional extras guests can attach at checkout — the catalog is entirely host-authored."
-        action={canManage && <Button size="sm" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={openCreate}>Add add-on</Button>}
+        action={canManage && <Button size="sm" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={() => setIsModalOpen(true)}>Add add-on</Button>}
       />
 
       <div className="space-y-4 border-t border-line p-4">
@@ -106,15 +91,11 @@ export const AddonsTab = ({ spaceId, canManage }) => {
               <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">{category}</p>
               <div className="space-y-1.5">
                 {rows.map((addon) => (
-                  <div
-                    key={addon.id}
-                    onClick={() => canManage && openEdit(addon)}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2.5 transition-colors hover:border-brand-200"
-                  >
+                  <div key={addon.id} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate text-[12.5px] font-semibold text-ink">{addon.name}</p>
                       <p className="text-[11px] text-ink-muted">
-                        {formatCurrency(addon.price, 'NGN')} {unitLabel[addon.unitType]}
+                        {formatCurrency(addon.price, currency)} {unitLabel[addon.unitType]}
                         {addon.minQty ? ` · min ${addon.minQty}` : ''}
                         {addon.maxQty ? ` · max ${addon.maxQty}` : ''}
                       </p>
@@ -127,10 +108,7 @@ export const AddonsTab = ({ spaceId, canManage }) => {
                           variant="ghost"
                           aria-label="Delete add-on"
                           isLoading={pendingId === addon.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteAddon(addon.id);
-                          }}
+                          onClick={() => deleteAddon(addon.id)}
                         >
                           <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
                         </Button>
@@ -144,14 +122,7 @@ export const AddonsTab = ({ spaceId, canManage }) => {
         )}
       </div>
 
-      <AddonModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        addon={editing}
-        createAddon={createAddon}
-        updateAddon={updateAddon}
-        isSaving={isCreating || (Boolean(editing) && pendingId === editing.id)}
-      />
+      <AddAddonModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} createAddon={createAddon} isSaving={isCreating} />
     </Card>
   );
 };

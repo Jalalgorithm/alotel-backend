@@ -68,7 +68,8 @@ export const SpaceBookingDetailModal = ({ isOpen, onClose, booking, canManage })
           <Badge variant={BOOKING_STATUS_BADGE_VARIANT[booking.status]} dot>
             {SPACE_BOOKING_STATUSES.find((s) => s.value === booking.status)?.label ?? booking.status}
           </Badge>
-          <Badge variant={booking.bookingMode === 'instant' ? 'ok' : 'info'}>{booking.bookingMode === 'instant' ? 'Instant' : 'Request'}</Badge>
+          {/* `booking_mode` lives on the parent Space, not the booking itself — inferred here from whether an approval deadline was ever set. */}
+          <Badge variant={booking.approvalDueAt ? 'info' : 'ok'}>{booking.approvalDueAt ? 'Request' : 'Instant'}</Badge>
         </div>
 
         <div className="space-y-1.5 rounded-lg border border-line bg-white p-3">
@@ -78,7 +79,6 @@ export const SpaceBookingDetailModal = ({ isOpen, onClose, booking, canManage })
             {formatDate(start, 'HH:mm')} – {formatDate(end, 'HH:mm')}, {formatDate(start, 'd MMM yyyy')}
           </Row>
           <Row label="Contact">{booking.guestEmail}</Row>
-          {booking.guestPhone && <Row label="Phone">{booking.guestPhone}</Row>}
         </div>
 
         {booking.addons.length > 0 && (
@@ -86,7 +86,7 @@ export const SpaceBookingDetailModal = ({ isOpen, onClose, booking, canManage })
             <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Add-ons</p>
             <div className="space-y-1">
               {booking.addons.map((addon) => (
-                <div key={addon.addonId} className="flex items-center justify-between text-[12px] text-ink-soft">
+                <div key={addon.id ?? addon.addonId} className="flex items-center justify-between text-[12px] text-ink-soft">
                   <span>{addon.name} × {addon.qty}</span>
                   <span className="tabular-nums">{formatCurrency(addon.price * addon.qty, booking.currency)}</span>
                 </div>

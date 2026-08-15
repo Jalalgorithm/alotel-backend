@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
-import { toAiSuggestionPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
+import { toAiSuggestionPayload, toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
@@ -133,7 +133,7 @@ const mockFinance = {
 
   /**
    * Shaped like the real `/properties/taxes/suggest/` response (snake_case) —
-   * `AiSuggestModal` consumes the AI response as-is with no normaliser, so the
+   * `AiTaxCompanionPanel` consumes the AI response as-is with no normaliser, so the
    * mock mirrors that wire shape rather than this file's usual camelCase
    * convention for everything else.
    */
@@ -165,6 +165,21 @@ const mockFinance = {
 
   async createTaxRuleFromSuggestion(suggestion) {
     return mockFinance.createTaxRule(toTaxRule(toAiSuggestionPayload(suggestion)));
+  },
+
+  /** Always "all clear" — this is fundamentally a real-backend panel, not a rich fixture. */
+  async coverageAlerts() {
+    await delay(250);
+    return { count: 0, alerts: [] };
+  },
+
+  async confirmNoTax(payload) {
+    await delay(300);
+    return { id: createId('ntc'), ...payload, confirmed_by: null, created_at: new Date().toISOString() };
+  },
+
+  async createTaxRuleFromCsvRow(row) {
+    return mockFinance.createTaxRule(toTaxRule(toCsvRowPayload(row)));
   },
 };
 
@@ -334,6 +349,29 @@ const realTaxes = {
     const { data } = await apiClient.post('/properties/taxes/', toAiSuggestionPayload(suggestion));
     return toTaxRule(data);
   },
+
+  /** `GET /properties/taxes/coverage-alerts/` — Super Admin only. Locations a real pricing calculation priced with zero active tax coverage. */
+  async coverageAlerts() {
+    const { data } = await apiClient.get('/properties/taxes/coverage-alerts/');
+    return { count: data?.count ?? 0, alerts: (data?.alerts ?? []).map(toCoverageAlert) };
+  },
+
+  /** `POST /properties/taxes/no-tax-confirmation/` — idempotent upsert on the exact (country, state, city) scope. */
+  async confirmNoTax({ country, state, city, reason }) {
+    const { data } = await apiClient.post('/properties/taxes/no-tax-confirmation/', {
+      country,
+      ...(state ? { state } : {}),
+      ...(city ? { city } : {}),
+      reason,
+    });
+    return data;
+  },
+
+  /** One CSV row → one create call, `source`/`status` forced to `csv_import` — no bulk import endpoint exists on the backend. */
+  async createFromCsvRow(row) {
+    const { data } = await apiClient.post('/properties/taxes/', toCsvRowPayload(row));
+    return toTaxRule(data);
+  },
 };
 
 const realFinance = {
@@ -399,4 +437,7 @@ export const financeService = {
   suggestTaxRules: (payload) => (env.useMockTaxes ? mockFinance.suggestTaxRules(payload) : realTaxes.suggest(payload)),
   createTaxRuleFromSuggestion: (suggestion) =>
     env.useMockTaxes ? mockFinance.createTaxRuleFromSuggestion(suggestion) : realTaxes.createFromSuggestion(suggestion),
+  getCoverageAlerts: () => (env.useMockTaxes ? mockFinance.coverageAlerts() : realTaxes.coverageAlerts()),
+  confirmNoTax: (payload) => (env.useMockTaxes ? mockFinance.confirmNoTax(payload) : realTaxes.confirmNoTax(payload)),
+  createTaxRuleFromCsvRow: (row) => (env.useMockTaxes ? mockFinance.createTaxRuleFromCsvRow(row) : realTaxes.createFromCsvRow(row)),
 };

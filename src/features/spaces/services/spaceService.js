@@ -1,3 +1,4 @@
+import { apiClient } from '@/lib/apiClient';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
@@ -21,17 +22,206 @@ import {
   toOperatingHoursPayload,
   toBlackoutDate,
   toBlackoutDatePayload,
+  toSpaceImage,
   toSpaceBooking,
 } from '@/lib/spaceSchema';
 
 /**
- * Spaces has no real backend yet (confirmed by reading `aotel-backend` — no
- * app, models, serializers or URLs exist for it). Every method below is
- * mocked against `jsonStorage`, seeded from `@/lib/mock/spaces.js`. Fixtures
- * are kept in the spec's proposed wire shape and normalised through
- * `spaceSchema.js` on the way in/out, the same way a real API response would
- * be — so this mock layer is the exact seam a future `realSpaces` slots into.
+ * Spaces now has a real backend (`spaces` app, `/api/v1/spaces/...`) —
+ * confirmed by reading `spaces/{models,serializers,views}.py` in full.
+ * `realSpaces` below is the primary path (`env.useMockSpaces` defaults
+ * false). A few real capabilities are narrower than the module originally
+ * mocked: no delete-space endpoint, no update endpoint for layouts/add-ons
+ * (create+delete only), and operating hours are one row per open weekday
+ * with no bulk-update endpoint (create+delete only, no PATCH) — the
+ * exported `spaceService` below reflects exactly what's callable, nothing
+ * more.
  */
+
+/** Resolve a bare `/media/...` path against the API's own origin — same helper as `bookingService.js`. */
+const resolveMediaUrl = (path) => {
+  if (!path || /^https?:\/\//i.test(path)) return path;
+  try {
+    return new URL(path, env.apiUrl).href;
+  } catch {
+    return path;
+  }
+};
+
+/** Normalise a list response the same defensive way regardless of whether the endpoint turns out to paginate or not. */
+const toListResult = (data, params, mapFn) => {
+  const items = Array.isArray(data) ? data : (data?.results ?? []);
+  const pageSize = data?.page_size ?? params.pageSize ?? 20;
+  const total = data?.count ?? items.length;
+  return {
+    items: items.map(mapFn),
+    total,
+    page: data?.page ?? params.page ?? 1,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+};
+
+/* -------------------------------------------------------------------------- */
+/* Real backend                                                                */
+/* -------------------------------------------------------------------------- */
+
+const realSpaces = {
+  async listSpaces(params = {}) {
+    const { data } = await apiClient.get('/spaces/admin/');
+    // No confirmed server-side search/pagination on this endpoint — filter/paginate the full list client-side.
+    const result = paginate((Array.isArray(data) ? data : (data?.results ?? [])), params, {
+      searchFields: ['title', 'city', 'country'],
+      filterFields: ['status'],
+    });
+    return { ...result, items: result.items.map(toSpace) };
+  },
+
+  async getSpace(id) {
+    const { data } = await apiClient.get(`/spaces/${id}/`);
+    const space = toSpace(data);
+    return { ...space, images: space.images.map((image) => ({ ...image, url: resolveMediaUrl(image.url) })) };
+  },
+
+  async createSpace(values) {
+    const { data } = await apiClient.post('/spaces/admin/', toSpacePayload(values));
+    return toSpace(data);
+  },
+
+  async updateSpace(id, values) {
+    const { data } = await apiClient.patch(`/spaces/${id}/`, toSpacePayload(values));
+    return toSpace(data);
+  },
+
+  async setSpaceStatus(id, status) {
+    const { data } = await apiClient.patch(`/spaces/${id}/`, { status });
+    return toSpace(data);
+  },
+
+  /* ------------------------------------------------------------- layouts -- */
+
+  async listLayouts(spaceId) {
+    const { data } = await apiClient.get(`/spaces/admin/${spaceId}/layouts/`);
+    return (Array.isArray(data) ? data : (data?.results ?? [])).map(toLayout);
+  },
+
+  async createLayout(spaceId, values) {
+    const { data } = await apiClient.post(`/spaces/admin/${spaceId}/layouts/`, toLayoutPayload(values));
+    return toLayout(data);
+  },
+
+  async deleteLayout(spaceId, id) {
+    await apiClient.delete(`/spaces/admin/${spaceId}/layouts/${id}/`);
+    return { success: true };
+  },
+
+  /* -------------------------------------------------------------- add-ons -- */
+
+  async listAddons(spaceId) {
+    const { data } = await apiClient.get(`/spaces/admin/${spaceId}/addons/`);
+    return (Array.isArray(data) ? data : (data?.results ?? [])).map(toAddon);
+  },
+
+  async createAddon(spaceId, values) {
+    const { data } = await apiClient.post(`/spaces/admin/${spaceId}/addons/`, toAddonPayload(values));
+    return toAddon(data);
+  },
+
+  async deleteAddon(spaceId, id) {
+    await apiClient.delete(`/spaces/admin/${spaceId}/addons/${id}/`);
+    return { success: true };
+  },
+
+  /* --------------------------------------------------------- operating hours -- */
+
+  async listOperatingHours(spaceId) {
+    const { data } = await apiClient.get(`/spaces/admin/${spaceId}/operating-hours/`);
+    return (Array.isArray(data) ? data : (data?.results ?? []))
+      .map(toOperatingHours)
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+  },
+
+  async createOperatingHoursRow(spaceId, values) {
+    const { data } = await apiClient.post(`/spaces/admin/${spaceId}/operating-hours/`, toOperatingHoursPayload(values));
+    return toOperatingHours(data);
+  },
+
+  async deleteOperatingHoursRow(spaceId, id) {
+    await apiClient.delete(`/spaces/admin/${spaceId}/operating-hours/${id}/`);
+    return { success: true };
+  },
+
+  /* -------------------------------------------------------------- blackouts -- */
+
+  async listBlackoutDates(spaceId) {
+    const { data } = await apiClient.get(`/spaces/admin/${spaceId}/blackout-dates/`);
+    return (Array.isArray(data) ? data : (data?.results ?? [])).map(toBlackoutDate);
+  },
+
+  async createBlackoutDate(spaceId, values) {
+    const { data } = await apiClient.post(`/spaces/admin/${spaceId}/blackout-dates/`, toBlackoutDatePayload(values));
+    return toBlackoutDate(data);
+  },
+
+  async deleteBlackoutDate(spaceId, id) {
+    await apiClient.delete(`/spaces/admin/${spaceId}/blackout-dates/${id}/`);
+    return { success: true };
+  },
+
+  /* ----------------------------------------------------------------- images -- */
+
+  async listImages(spaceId) {
+    const { data } = await apiClient.get(`/spaces/admin/${spaceId}/images/`);
+    return (Array.isArray(data) ? data : (data?.results ?? []))
+      .map(toSpaceImage)
+      .map((image) => ({ ...image, url: resolveMediaUrl(image.url) }));
+  },
+
+  async uploadImage(spaceId, { file, caption = '', order = 0 }) {
+    const form = new FormData();
+    form.append('image', file);
+    form.append('order', String(order));
+    if (caption) form.append('caption', caption);
+
+    const { data } = await apiClient.post(`/spaces/admin/${spaceId}/images/`, form);
+    return { ...toSpaceImage(data), url: resolveMediaUrl(data.image) };
+  },
+
+  async deleteImage(spaceId, id) {
+    await apiClient.delete(`/spaces/admin/${spaceId}/images/${id}/`);
+    return { success: true };
+  },
+
+  /* --------------------------------------------------------------- bookings -- */
+
+  async listBookings(params = {}) {
+    const query = { page: params.page ?? 1 };
+    if (params.status) query.status = params.status;
+    if (params.spaceId) query.space_id = params.spaceId;
+
+    const { data } = await apiClient.get('/spaces/bookings/', { params: query });
+    return toListResult(data, params, toSpaceBooking);
+  },
+
+  async getBooking(id) {
+    const { data } = await apiClient.get(`/spaces/bookings/${id}/`);
+    return toSpaceBooking(data);
+  },
+
+  async approveBooking(id) {
+    const { data } = await apiClient.patch(`/spaces/bookings/${id}/approve/`);
+    return toSpaceBooking(data);
+  },
+
+  async declineBooking(id, reason) {
+    const { data } = await apiClient.patch(`/spaces/bookings/${id}/decline/`, { reason });
+    return toSpaceBooking(data);
+  },
+};
+
+/* -------------------------------------------------------------------------- */
+/* Offline-dev-only mock                                                       */
+/* -------------------------------------------------------------------------- */
 
 const KEYS = {
   spaces: 'alotel.admin.mock.spaces',
@@ -39,6 +229,7 @@ const KEYS = {
   addons: 'alotel.admin.mock.spaceAddons',
   hours: 'alotel.admin.mock.spaceHours',
   blackouts: 'alotel.admin.mock.spaceBlackouts',
+  images: 'alotel.admin.mock.spaceImages',
   bookings: 'alotel.admin.mock.spaceBookings',
 };
 
@@ -55,6 +246,7 @@ const readLayouts = () => seeded(KEYS.layouts, layoutsFixture);
 const readAddons = () => seeded(KEYS.addons, addonsFixture);
 const readHours = () => seeded(KEYS.hours, hoursFixture);
 const readBlackouts = () => seeded(KEYS.blackouts, blackoutsFixture);
+const readImages = () => jsonStorage.read(KEYS.images, []);
 const readBookings = () => seeded(KEYS.bookings, bookingsFixture);
 
 /** A space's `max_capacity` is derived from its widest layout — recompute whenever layouts change. */
@@ -70,17 +262,10 @@ const recomputeMaxCapacity = (spaceId) => {
   }
 };
 
-/* -------------------------------------------------------------------------- */
-/* Spaces                                                                       */
-/* -------------------------------------------------------------------------- */
-
 const mockSpaces = {
   async listSpaces(params = {}) {
     await delay(300);
-    const result = paginate(readSpaces(), params, {
-      searchFields: ['title'],
-      filterFields: ['status'],
-    });
+    const result = paginate(readSpaces(), params, { searchFields: ['title'], filterFields: ['status'] });
     return { ...result, items: result.items.map(toSpace) };
   },
 
@@ -88,20 +273,13 @@ const mockSpaces = {
     await delay(220);
     const row = readSpaces().find((entry) => entry.id === id);
     if (!row) throw new ApiError('Space not found.', 404);
-    return toSpace(row);
+    return { ...toSpace(row), images: readImages().filter((img) => img.space === id).map(toSpaceImage) };
   },
 
   async createSpace(values) {
     await delay(450);
     const payload = toSpacePayload(values);
-    const record = {
-      id: createId('spc'),
-      host: null,
-      max_capacity: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...payload,
-    };
+    const record = { id: createId('spc'), host: null, max_capacity: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...payload };
     jsonStorage.write(KEYS.spaces, [...readSpaces(), record]);
     return toSpace(record);
   },
@@ -111,7 +289,6 @@ const mockSpaces = {
     const rows = readSpaces();
     const index = rows.findIndex((entry) => entry.id === id);
     if (index < 0) throw new ApiError('Space not found.', 404);
-
     const payload = toSpacePayload({ ...toSpace(rows[index]), ...values });
     rows[index] = { ...rows[index], ...payload, updated_at: new Date().toISOString() };
     jsonStorage.write(KEYS.spaces, rows);
@@ -122,23 +299,10 @@ const mockSpaces = {
     return mockSpaces.updateSpace(id, { ...(await mockSpaces.getSpace(id)), status });
   },
 
-  async deleteSpace(id) {
-    await delay(350);
-    jsonStorage.write(KEYS.spaces, readSpaces().filter((entry) => entry.id !== id));
-    jsonStorage.write(KEYS.layouts, readLayouts().filter((entry) => entry.space !== id));
-    jsonStorage.write(KEYS.addons, readAddons().filter((entry) => entry.space !== id));
-    jsonStorage.write(KEYS.hours, readHours().filter((entry) => entry.space !== id));
-    jsonStorage.write(KEYS.blackouts, readBlackouts().filter((entry) => entry.space !== id));
-    return { success: true };
-  },
-
-  /* ------------------------------------------------------------- layouts -- */
-
   async listLayouts(spaceId) {
     await delay(200);
     return readLayouts().filter((row) => row.space === spaceId).map(toLayout);
   },
-
   async createLayout(spaceId, values) {
     await delay(300);
     const record = { id: createId('lay'), space: spaceId, ...toLayoutPayload(values) };
@@ -146,18 +310,6 @@ const mockSpaces = {
     recomputeMaxCapacity(spaceId);
     return toLayout(record);
   },
-
-  async updateLayout(spaceId, id, values) {
-    await delay(300);
-    const rows = readLayouts();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Layout not found.', 404);
-    rows[index] = { ...rows[index], ...toLayoutPayload(values) };
-    jsonStorage.write(KEYS.layouts, rows);
-    recomputeMaxCapacity(spaceId);
-    return toLayout(rows[index]);
-  },
-
   async deleteLayout(spaceId, id) {
     await delay(300);
     jsonStorage.write(KEYS.layouts, readLayouts().filter((entry) => entry.id !== id));
@@ -165,131 +317,101 @@ const mockSpaces = {
     return { success: true };
   },
 
-  /* -------------------------------------------------------------- add-ons -- */
-
   async listAddons(spaceId) {
     await delay(200);
     return readAddons().filter((row) => row.space === spaceId).map(toAddon);
   },
-
   async createAddon(spaceId, values) {
     await delay(300);
     const record = { id: createId('add'), space: spaceId, ...toAddonPayload(values) };
     jsonStorage.write(KEYS.addons, [...readAddons(), record]);
     return toAddon(record);
   },
-
-  async updateAddon(spaceId, id, values) {
-    await delay(300);
-    const rows = readAddons();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Add-on not found.', 404);
-    rows[index] = { ...rows[index], ...toAddonPayload(values) };
-    jsonStorage.write(KEYS.addons, rows);
-    return toAddon(rows[index]);
-  },
-
   async deleteAddon(_spaceId, id) {
     await delay(300);
     jsonStorage.write(KEYS.addons, readAddons().filter((entry) => entry.id !== id));
     return { success: true };
   },
 
-  /* --------------------------------------------------------- operating hours -- */
-
   async listOperatingHours(spaceId) {
     await delay(200);
-    return readHours()
-      .filter((row) => row.space === spaceId)
-      .sort((a, b) => a.day_of_week - b.day_of_week)
-      .map(toOperatingHours);
+    return readHours().filter((row) => row.space === spaceId).sort((a, b) => a.day_of_week - b.day_of_week).map(toOperatingHours);
   },
-
-  /** Upserts all seven weekday rows in one call — the editor always submits the full week. */
-  async updateOperatingHours(spaceId, weekRows) {
-    await delay(350);
-    const others = readHours().filter((row) => row.space !== spaceId);
-    const updated = weekRows.map((row) => ({
-      id: row.id ?? createId('hrs'),
-      space: spaceId,
-      ...toOperatingHoursPayload(row),
-    }));
-    jsonStorage.write(KEYS.hours, [...others, ...updated]);
-    return updated.map(toOperatingHours);
+  async createOperatingHoursRow(spaceId, values) {
+    await delay(250);
+    const record = { id: createId('hrs'), space: spaceId, ...toOperatingHoursPayload(values) };
+    jsonStorage.write(KEYS.hours, [...readHours(), record]);
+    return toOperatingHours(record);
   },
-
-  /* -------------------------------------------------------------- blackouts -- */
+  async deleteOperatingHoursRow(_spaceId, id) {
+    await delay(250);
+    jsonStorage.write(KEYS.hours, readHours().filter((entry) => entry.id !== id));
+    return { success: true };
+  },
 
   async listBlackoutDates(spaceId) {
     await delay(200);
     return readBlackouts().filter((row) => row.space === spaceId).map(toBlackoutDate);
   },
-
   async createBlackoutDate(spaceId, values) {
     await delay(300);
     const record = { id: createId('blk'), space: spaceId, ...toBlackoutDatePayload(values) };
     jsonStorage.write(KEYS.blackouts, [...readBlackouts(), record]);
     return toBlackoutDate(record);
   },
-
   async deleteBlackoutDate(_spaceId, id) {
     await delay(300);
     jsonStorage.write(KEYS.blackouts, readBlackouts().filter((entry) => entry.id !== id));
     return { success: true };
   },
 
-  /* --------------------------------------------------------------- bookings -- */
+  async listImages(spaceId) {
+    await delay(200);
+    return readImages().filter((row) => row.space === spaceId).map(toSpaceImage);
+  },
+  async uploadImage(spaceId, { caption = '', order = 0 }) {
+    await delay(400);
+    const record = { id: createId('img'), space: spaceId, image: '', order, caption, created_at: new Date().toISOString() };
+    jsonStorage.write(KEYS.images, [...readImages(), record]);
+    return toSpaceImage(record);
+  },
+  async deleteImage(_spaceId, id) {
+    await delay(250);
+    jsonStorage.write(KEYS.images, readImages().filter((entry) => entry.id !== id));
+    return { success: true };
+  },
 
   async listBookings(params = {}) {
     await delay(300);
-    const rows = readBookings().filter((row) => (params.spaceId ? row.space === params.spaceId : true));
-    const result = paginate(rows, params, {
-      searchFields: ['guest_name', 'guest_email', 'space_name'],
-      filterFields: ['status'],
-    });
+    const rows = readBookings().filter((row) => (params.spaceId ? row.space === params.spaceId : true) && (params.status ? row.status === params.status : true));
+    const result = paginate(rows, params, { searchFields: ['guest_name', 'guest_email', 'space_name'], filterFields: [] });
     return { ...result, items: result.items.map(toSpaceBooking) };
   },
-
   async getBooking(id) {
     await delay(200);
     const row = readBookings().find((entry) => entry.id === id);
     if (!row) throw new ApiError('Booking not found.', 404);
     return toSpaceBooking(row);
   },
-
-  async listApprovalQueue(params = {}) {
-    await delay(280);
-    const rows = readBookings().filter((row) => row.status === 'pending_host_approval');
-    const result = paginate(rows, params, { searchFields: ['guest_name', 'space_name'], filterFields: [] });
-    return { ...result, items: result.items.map(toSpaceBooking) };
-  },
-
-  async decideBooking(id, { status, reason }) {
+  async approveBooking(id) {
     await delay(350);
     const rows = readBookings();
     const index = rows.findIndex((entry) => entry.id === id);
     if (index < 0) throw new ApiError('Booking not found.', 404);
-
-    rows[index] = {
-      ...rows[index],
-      status,
-      decided_at: new Date().toISOString(),
-      decline_reason: status === 'declined' ? reason ?? '' : '',
-    };
+    rows[index] = { ...rows[index], status: 'confirmed' };
+    jsonStorage.write(KEYS.bookings, rows);
+    return toSpaceBooking(rows[index]);
+  },
+  async declineBooking(id, reason) {
+    await delay(350);
+    const rows = readBookings();
+    const index = rows.findIndex((entry) => entry.id === id);
+    if (index < 0) throw new ApiError('Booking not found.', 404);
+    rows[index] = { ...rows[index], status: 'declined', decline_reason: reason ?? '' };
     jsonStorage.write(KEYS.bookings, rows);
     return toSpaceBooking(rows[index]);
   },
 };
-
-/** No real backend exists yet — every method documents the future integration seam. */
-const realSpaces = new Proxy(
-  {},
-  {
-    get: (_target, method) => () => {
-      throw new Error(`spaceService.${String(method)}: Spaces has no real backend yet.`);
-    },
-  },
-);
 
 const backend = env.useMockSpaces ? mockSpaces : realSpaces;
 
@@ -299,28 +421,30 @@ export const spaceService = {
   createSpace: (values) => backend.createSpace(values),
   updateSpace: (id, values) => backend.updateSpace(id, values),
   setSpaceStatus: (id, status) => backend.setSpaceStatus(id, status),
-  deleteSpace: (id) => backend.deleteSpace(id),
 
   getLayouts: (spaceId) => backend.listLayouts(spaceId),
   createLayout: (spaceId, values) => backend.createLayout(spaceId, values),
-  updateLayout: (spaceId, id, values) => backend.updateLayout(spaceId, id, values),
   deleteLayout: (spaceId, id) => backend.deleteLayout(spaceId, id),
 
   getAddons: (spaceId) => backend.listAddons(spaceId),
   createAddon: (spaceId, values) => backend.createAddon(spaceId, values),
-  updateAddon: (spaceId, id, values) => backend.updateAddon(spaceId, id, values),
   deleteAddon: (spaceId, id) => backend.deleteAddon(spaceId, id),
 
   getOperatingHours: (spaceId) => backend.listOperatingHours(spaceId),
-  updateOperatingHours: (spaceId, weekRows) => backend.updateOperatingHours(spaceId, weekRows),
+  createOperatingHoursRow: (spaceId, values) => backend.createOperatingHoursRow(spaceId, values),
+  deleteOperatingHoursRow: (spaceId, id) => backend.deleteOperatingHoursRow(spaceId, id),
 
   getBlackoutDates: (spaceId) => backend.listBlackoutDates(spaceId),
   createBlackoutDate: (spaceId, values) => backend.createBlackoutDate(spaceId, values),
   deleteBlackoutDate: (spaceId, id) => backend.deleteBlackoutDate(spaceId, id),
 
+  getImages: (spaceId) => backend.listImages(spaceId),
+  uploadImage: (spaceId, payload) => backend.uploadImage(spaceId, payload),
+  deleteImage: (spaceId, id) => backend.deleteImage(spaceId, id),
+
   getSpaceBookings: (params) => backend.listBookings(params),
   getSpaceBooking: (id) => backend.getBooking(id),
-  getApprovalQueue: (params) => backend.listApprovalQueue(params),
-  approveBooking: (id) => backend.decideBooking(id, { status: 'confirmed' }),
-  declineBooking: (id, reason) => backend.decideBooking(id, { status: 'declined', reason }),
+  getApprovalQueue: (params) => backend.listBookings({ ...params, status: 'pending_host_approval' }),
+  approveBooking: (id) => backend.approveBooking(id),
+  declineBooking: (id, reason) => backend.declineBooking(id, reason),
 };
