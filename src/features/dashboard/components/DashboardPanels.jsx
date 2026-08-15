@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ListChecks } from 'lucide-react';
+import { ListChecks } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Avatar, AvatarCell } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { cn } from '@/utils/classNames';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { paths } from '@/routes/paths';
 
@@ -131,41 +130,3 @@ export const HousekeeperTasksPanel = ({ tasks = [] }) => (
     )}
   </Card>
 );
-
-/* -------------------------------------------------------------------------- */
-
-const ALERT_TONES = {
-  danger: 'border-l-danger text-danger',
-  warn: 'border-l-warn text-warn',
-  info: 'border-l-brand-600 text-brand-600',
-};
-
-/** The alert strip above the KPI row. */
-export const AlertStrip = ({ alerts = [] }) => {
-  if (!alerts.length) return null;
-
-  return (
-    <div className="space-y-2">
-      {alerts.slice(0, 3).map((alert) => (
-        <div
-          key={alert.id}
-          className={cn(
-            'flex flex-wrap items-center gap-2.5 rounded-lg border border-l-[3px] border-line bg-surface px-3.5 py-2.5',
-            ALERT_TONES[alert.tone] ?? ALERT_TONES.info,
-          )}
-        >
-          <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-
-          <p className="min-w-[12rem] flex-1 text-[12px]">
-            <span className="font-semibold text-ink">{alert.title}</span>
-            <span className="ml-2 text-ink-muted">{alert.description}</span>
-          </p>
-
-          <Button size="xs" variant="secondary" to={alert.to} className="shrink-0">
-            {alert.action}
-          </Button>
-        </div>
-      ))}
-    </div>
-  );
-};

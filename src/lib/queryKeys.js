@@ -13,6 +13,8 @@ export const queryKeys = {
   dashboard: {
     all: ['dashboard'],
     overview: () => ['dashboard', 'overview'],
+    revenueOverview: (params = {}) => ['dashboard', 'revenue-overview', params],
+    verifications: () => ['dashboard', 'verifications'],
   },
   analytics: {
     all: ['analytics'],
@@ -100,6 +102,11 @@ export const queryKeys = {
     settings: () => ['system', 'settings'],
     maintenance: () => ['system', 'maintenance'],
     announcements: () => ['system', 'announcements'],
+    notificationPreferences: (userId) => ['system', 'notification-preferences', userId],
+  },
+  notifications: {
+    all: ['notifications'],
+    list: (userId) => ['notifications', 'list', userId],
   },
   /** Country/state reference data — `utils/countries.py`, static-ish, shared across features. */
   geo: {

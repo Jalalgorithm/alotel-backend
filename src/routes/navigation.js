@@ -86,6 +86,7 @@ export const NAV_GROUPS = [
     id: 'system',
     label: 'System',
     items: [
+      { id: 'notifications', label: 'Notifications', to: paths.notifications, icon: 'Bell', capability: C.notificationsView },
       { id: 'settings', label: 'Settings', to: paths.settings, icon: 'Settings', capability: C.settingsManage },
       { id: 'help', label: 'Help', to: paths.help, icon: 'CircleHelp', capability: C.helpView },
     ],

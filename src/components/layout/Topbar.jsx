@@ -5,6 +5,7 @@ import { cn } from '@/utils/classNames';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/features/auth';
+import { useMarkNotificationRead } from '@/features/notifications';
 import { useUIStore } from '@/stores/uiStore';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useHotkey } from '@/hooks/useHotkey';
@@ -12,9 +13,10 @@ import { ROLES, CAPABILITIES } from '@/lib/mock/people';
 import { formatRelative } from '@/utils/format';
 import { paths } from '@/routes/paths';
 
-/** Notification tray — the same alert set the dashboard surfaces. */
-const NotificationTray = ({ alerts, onClose }) => {
+/** Notification tray — a preview of the real inbox (`useMyNotifications`); "View all" opens the full page. */
+const NotificationTray = ({ notifications, onMarkRead, onClose }) => {
   const trayRef = useClickOutside(onClose, true);
+  const unreadCount = notifications.filter((entry) => !entry.isRead).length;
 
   return (
     <div
@@ -23,35 +25,49 @@ const NotificationTray = ({ alerts, onClose }) => {
     >
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <p className="text-[13px] font-semibold">Notifications</p>
-        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
-          {alerts.length} new
-        </span>
+        {unreadCount > 0 && (
+          <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
+            {unreadCount} new
+          </span>
+        )}
       </div>
 
       <ul className="scrollbar-slim max-h-80 overflow-y-auto">
-        {alerts.map((alert) => (
-          <li key={alert.id}>
-            <Link
-              to={alert.to}
-              onClick={onClose}
-              className="flex gap-2.5 border-b border-line px-4 py-3 transition-colors last:border-b-0 hover:bg-line-soft"
-            >
-              <span
-                aria-hidden="true"
+        {notifications.length === 0 ? (
+          <li className="px-4 py-6 text-center text-[11.5px] text-ink-muted">Nothing yet.</li>
+        ) : (
+          notifications.slice(0, 8).map((entry) => (
+            <li key={entry.id}>
+              <button
+                type="button"
+                onClick={() => !entry.isRead && onMarkRead(entry.id)}
                 className={cn(
-                  'mt-1 size-2 shrink-0 rounded-full',
-                  alert.tone === 'danger' ? 'bg-danger' : alert.tone === 'warn' ? 'bg-warn' : 'bg-brand-600',
+                  'flex w-full gap-2.5 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-line-soft',
+                  !entry.isRead && 'bg-brand-50/40',
                 )}
-              />
-              <span className="min-w-0">
-                <span className="block text-[12px] font-semibold text-ink">{alert.title}</span>
-                <span className="block text-[11px] text-ink-muted">{alert.description}</span>
-                <span className="mt-0.5 block text-[10px] text-ink-muted">{formatRelative(alert.at)}</span>
-              </span>
-            </Link>
-          </li>
-        ))}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn('mt-1 size-2 shrink-0 rounded-full', entry.isRead ? 'bg-line' : 'bg-brand-600')}
+                />
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-semibold text-ink">{entry.title}</span>
+                  <span className="line-clamp-2 block text-[11px] text-ink-muted">{entry.body}</span>
+                  <span className="mt-0.5 block text-[10px] text-ink-muted">{formatRelative(entry.createdAt)}</span>
+                </span>
+              </button>
+            </li>
+          ))
+        )}
       </ul>
+
+      <Link
+        to={paths.notifications}
+        onClick={onClose}
+        className="block border-t border-line px-4 py-2.5 text-center text-[11.5px] font-semibold text-brand-700 hover:underline"
+      >
+        View all notifications
+      </Link>
     </div>
   );
 };
@@ -60,14 +76,16 @@ const NotificationTray = ({ alerts, onClose }) => {
  * Top bar: drawer trigger, command search, primary action, notifications and
  * the account chip — matching the Figma admin header.
  */
-export const Topbar = ({ alerts = [] }) => {
+export const Topbar = ({ notifications = [] }) => {
   const navigate = useNavigate();
   const { user, can } = useAuth();
   const openDrawer = useUIStore((state) => state.openDrawer);
   const openCommand = useUIStore((state) => state.openCommand);
+  const { markRead } = useMarkNotificationRead();
 
   const [isTrayOpen, setIsTrayOpen] = useState(false);
   const role = ROLES.find((entry) => entry.id === user?.role);
+  const unreadCount = notifications.filter((entry) => !entry.isRead).length;
 
   useHotkey('k', openCommand);
 
@@ -114,17 +132,19 @@ export const Topbar = ({ alerts = [] }) => {
           <button
             type="button"
             onClick={() => setIsTrayOpen((open) => !open)}
-            aria-label={`Notifications (${alerts.length} unread)`}
+            aria-label={`Notifications (${unreadCount} unread)`}
             aria-expanded={isTrayOpen}
             className="relative rounded-full p-2 text-ink-soft transition-colors hover:bg-black/5 hover:text-ink"
           >
             <Bell className="size-4" />
-            {alerts.length > 0 && (
+            {unreadCount > 0 && (
               <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-danger ring-2 ring-surface" />
             )}
           </button>
 
-          {isTrayOpen && <NotificationTray alerts={alerts} onClose={() => setIsTrayOpen(false)} />}
+          {isTrayOpen && (
+            <NotificationTray notifications={notifications} onMarkRead={markRead} onClose={() => setIsTrayOpen(false)} />
+          )}
         </div>
 
         <button

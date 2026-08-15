@@ -42,14 +42,40 @@ const mockVerifications = {
   },
 };
 
+/** `KYCFullCheck` (pending list row) → the shape the dashboard panel renders. */
+const toVerification = (raw) => ({
+  id: raw.kyc_check_id,
+  bookingId: raw.booking_id,
+  guestId: raw.guest_id,
+  guest: raw.guest_name,
+  provider: raw.provider,
+  status: raw.status,
+  createdAt: raw.created_at,
+});
+
+/**
+ * `GET /kyc/full/pending/` (list) and `POST /kyc/full/approve/` (decide) —
+ * the real identity/ownership verification queue. Previously pointed at a
+ * `/verifications` path that doesn't exist on this backend.
+ */
 const realVerifications = {
-  list: async () => (await apiClient.get('/verifications')).data,
-  decide: async (id, decision) => (await apiClient.patch(`/verifications/${id}`, { decision })).data,
+  list: async () => {
+    const { data } = await apiClient.get('/kyc/full/pending/');
+    return (data?.results ?? []).map(toVerification);
+  },
+  decide: async (id, decision, reviewNotes) => {
+    const { data } = await apiClient.post('/kyc/full/approve/', {
+      kyc_check_id: id,
+      decision: decision === 'Approved' ? 'approved' : 'rejected',
+      ...(reviewNotes ? { review_notes: reviewNotes } : {}),
+    });
+    return data;
+  },
 };
 
-const backend = env.useMock ? mockVerifications : realVerifications;
+const backend = env.useMockVerifications ? mockVerifications : realVerifications;
 
 export const verificationService = {
   list: () => backend.list(),
-  decide: (id, decision) => backend.decide(id, decision),
+  decide: (id, decision, reviewNotes) => backend.decide(id, decision, reviewNotes),
 };

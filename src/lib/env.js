@@ -55,6 +55,18 @@ export const env = {
   /** Maintenance oversight (`/operations/maintenance/*`) is a real, working endpoint — defaults to the live API regardless of the global flag. Flip on only for offline dev. */
   useMockMaintenance: toBool(import.meta.env.VITE_USE_MOCK_MAINTENANCE, false),
 
+  /** Identity verification queue (`/kyc/full/...`) — real, working endpoint. Defaults to it regardless of the global flag. */
+  useMockVerifications: toBool(import.meta.env.VITE_USE_MOCK_VERIFICATIONS, false),
+
+  /** System announcements (`/admin/announcements/`) — real. Defaults to it regardless of the global flag. */
+  useMockAnnouncements: toBool(import.meta.env.VITE_USE_MOCK_ANNOUNCEMENTS, false),
+
+  /** Admin settings (`/admin/system/config/`) and per-user notification preferences (`/notifications/preferences/<id>/`) — both real. */
+  useMockSettings: toBool(import.meta.env.VITE_USE_MOCK_SETTINGS, false),
+
+  /** The signed-in admin's own notification inbox (`/notifications/<user_id>/`) — real. */
+  useMockNotifications: toBool(import.meta.env.VITE_USE_MOCK_NOTIFICATIONS, false),
+
   mockLatency: Number(import.meta.env.VITE_MOCK_LATENCY ?? 500),
   appName: import.meta.env.VITE_APP_NAME || 'Alotel Spaces Admin',
   isDev: import.meta.env.DEV,

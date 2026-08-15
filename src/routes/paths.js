@@ -12,6 +12,7 @@ export const paths = {
 
   dashboard: '/',
   analytics: '/analytics',
+  notifications: '/notifications',
 
   // Property management
   properties: '/properties',

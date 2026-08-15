@@ -51,43 +51,22 @@ const mockDashboard = {
     };
   },
 
-  /** The notification tray + the alert strip above the dashboard. */
-  async alerts() {
-    await delay(150);
-
-    const pendingKyc = bookings.filter((entry) => entry.kyc === 'Pending');
-    const overdueContracts = bookings.filter((entry) => entry.contract === 'Overdue');
-    const depositReviews = checkoutReports.filter((entry) => entry.status === 'Pending Review');
-
-    return clone([
-      ...overdueContracts.map((booking) => ({
-        id: `alert-contract-${booking.id}`,
-        tone: 'danger',
-        title: `Contract overdue — ${booking.guest}`,
-        description: `${booking.property} · sent over 72h ago`,
-        action: 'Re-send',
-        to: '/contracts',
-        at: '2026-08-03T18:05:00.000Z',
-      })),
-      ...pendingKyc.map((booking) => ({
-        id: `alert-kyc-${booking.id}`,
-        tone: 'warn',
-        title: `KYC pending — ${booking.guest}`,
-        description: `${booking.property} · check-in ${booking.checkIn}`,
-        action: 'Send reminder',
-        to: '/bookings',
-        at: '2026-08-04T07:30:00.000Z',
-      })),
-      ...depositReviews.map((report) => ({
-        id: `alert-deposit-${report.id}`,
-        tone: 'info',
-        title: 'Deposit review ready',
-        description: `${report.property} · 24h window closing`,
-        action: 'Review now',
-        to: '/checkout-reports',
-        at: '2026-08-04T06:00:00.000Z',
-      })),
-    ]);
+  /** Backs the Revenue Overview chart when `VITE_USE_MOCK_DASHBOARD=true`. */
+  async revenueOverview() {
+    await delay(300);
+    return clone({
+      start_date: null,
+      end_date: null,
+      series: [
+        { day: 'Mon', revenue: '1200.00' },
+        { day: 'Tue', revenue: '1450.00' },
+        { day: 'Wed', revenue: '980.00' },
+        { day: 'Thu', revenue: '1600.00' },
+        { day: 'Fri', revenue: '2100.00' },
+        { day: 'Sat', revenue: '2450.00' },
+        { day: 'Sun', revenue: '1800.00' },
+      ],
+    });
   },
 };
 
@@ -99,6 +78,17 @@ const mockDashboard = {
  */
 const realDashboard = {
   overview: async () => (await apiClient.get('/admin/dashboard/')).data,
+
+  /** `GET /admin/dashboard/revenue-overview/` — Mon–Sun totals for the given date range. */
+  revenueOverview: async ({ startDate, endDate } = {}) => {
+    const { data } = await apiClient.get('/admin/dashboard/revenue-overview/', {
+      params: {
+        ...(startDate ? { start_date: startDate } : {}),
+        ...(endDate ? { end_date: endDate } : {}),
+      },
+    });
+    return data;
+  },
 };
 
 const dashboardBackend = env.useMockDashboard ? mockDashboard : realDashboard;
@@ -107,12 +97,13 @@ export const dashboardService = {
   /** Real `/admin/dashboard/` — see `realDashboard.overview` for the exact shape. */
   getOverview: () => dashboardBackend.overview(),
 
+  /** Real `/admin/dashboard/revenue-overview/` — see `realDashboard.revenueOverview` for the exact shape. */
+  getRevenueOverview: (params) => dashboardBackend.revenueOverview(params),
+
   /**
-   * Sidebar counters and the alert tray have no backend equivalent yet
-   * (there's no `/dashboard/badges` or `/dashboard/alerts` endpoint) — always
-   * mock, independent of `VITE_USE_MOCK_DASHBOARD`, until each counter has a
-   * real source to derive from.
+   * Sidebar counters have no backend equivalent yet (there's no
+   * `/dashboard/badges` endpoint) — always mock, independent of
+   * `VITE_USE_MOCK_DASHBOARD`, until each counter has a real source to derive from.
    */
   getBadges: () => mockDashboard.badges(),
-  getAlerts: () => mockDashboard.alerts(),
 };

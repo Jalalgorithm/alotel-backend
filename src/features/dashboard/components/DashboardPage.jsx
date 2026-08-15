@@ -1,13 +1,19 @@
 import { format } from 'date-fns';
-import { CalendarDays, Clock } from 'lucide-react';
+import { CalendarDays, Clock, Download, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CardSkeleton, Skeleton } from '@/components/ui/Skeleton';
+import { Button } from '@/components/ui/Button';
 import { StatCard } from './StatCard';
 import { QuickActions } from './QuickActions';
-import { AlertStrip, CheckInsPanel, HousekeeperTasksPanel, RecentBookingsPanel } from './DashboardPanels';
-import { useAlerts, useDashboardOverview } from '../hooks/useDashboard';
+import { CheckInsPanel, HousekeeperTasksPanel, RecentBookingsPanel } from './DashboardPanels';
+import { AnnouncementsCard, MaintenanceRequestCard, MaintenanceSpendCard, PendingVerificationsCard, RevenueOverviewCard } from './DashboardWidgets';
+import { useDashboardOverview } from '../hooks/useDashboard';
 import { useAuth } from '@/features/auth';
 import { useBookings } from '@/features/bookings';
+import { useProperties } from '@/features/properties';
+import { useExportAnalytics } from '@/features/analytics';
+import { useLiveClock } from '@/hooks/useLiveClock';
+import { CAPABILITIES } from '@/lib/mock/people';
 
 /** Card key → display label, matches `/admin/dashboard/`'s `cards` object exactly. */
 const CARD_LABELS = {
@@ -34,18 +40,9 @@ const CARD_ICONS = {
   users_count: 'building',
 };
 
-/** Order the cards render in — the API returns an object, not an array, so the order isn't guaranteed. */
-const CARD_ORDER = [
-  'active_bookings',
-  'occupancy_rate',
-  'revenue_mtd',
-  'pending_checkins',
-  'pending_checkouts',
-  'unresolved_issues',
-  'properties_created',
-  'staff_count',
-  'users_count',
-];
+/** The 3 headline cards shown in the primary KPI row (alongside the Total Properties tile) — the rest render in a secondary row. */
+const PRIMARY_CARD_ORDER = ['active_bookings', 'occupancy_rate', 'revenue_mtd'];
+const SECONDARY_CARD_ORDER = ['pending_checkins', 'pending_checkouts', 'unresolved_issues', 'properties_created', 'staff_count', 'users_count'];
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -74,14 +71,17 @@ const toCheckInEntry = (booking) => ({
  * gets today's task list (no guest PII, so no booking panels for that role).
  */
 export const DashboardPage = () => {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const { data, isLoading } = useDashboardOverview();
-  const { data: alerts = [] } = useAlerts();
+  const { exportReport, isPending: isExporting } = useExportAnalytics();
 
   const role = data?.role;
   const isHousekeeper = role === 'housekeeper';
-  const cardEntries = data?.cards
-    ? CARD_ORDER.filter((key) => key in data.cards).map((key) => [key, data.cards[key]])
+  const primaryCards = data?.cards
+    ? PRIMARY_CARD_ORDER.filter((key) => key in data.cards).map((key) => [key, data.cards[key]])
+    : [];
+  const secondaryCards = data?.cards
+    ? SECONDARY_CARD_ORDER.filter((key) => key in data.cards).map((key) => [key, data.cards[key]])
     : [];
 
   // Recent bookings / today's arrivals reuse the already-real bookings admin list —
@@ -93,7 +93,14 @@ export const DashboardPage = () => {
     { enabled: canSeeBookings },
   );
 
-  const now = new Date();
+  const canSeeProperties = !isLoading && !isHousekeeper && can(CAPABILITIES.propertiesView);
+  const { data: propertyTotals } = useProperties({ pageSize: 1 }, { enabled: canSeeProperties });
+
+  const canSeeRevenue = !isLoading && can(CAPABILITIES.financeView);
+  const canSeeMaintenance = !isLoading && can(CAPABILITIES.maintenanceView);
+  const canSeeVerifications = !isLoading && can(CAPABILITIES.bookingsManage);
+
+  const now = useLiveClock();
 
   return (
     <div className="space-y-5">
@@ -106,15 +113,36 @@ export const DashboardPage = () => {
               <CalendarDays className="size-3.5" aria-hidden="true" />
               {format(now, 'EEEE, MMM d, yyyy')}
             </span>
-            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
+            <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted tabular-nums">
               <Clock className="size-3.5" aria-hidden="true" />
-              {format(now, 'h:mma')}
+              {format(now, 'h:mm:ssa')}
             </span>
           </>
         }
+        actions={
+          !isHousekeeper &&
+          can(CAPABILITIES.analyticsView) && (
+            <>
+              <Button
+                variant="secondary"
+                leftIcon={<FileText className="size-3.5" aria-hidden="true" />}
+                isLoading={isExporting}
+                onClick={() => exportReport({ format: 'pdf' })}
+              >
+                Generate Report
+              </Button>
+              <Button
+                variant="primary"
+                leftIcon={<Download className="size-3.5" aria-hidden="true" />}
+                isLoading={isExporting}
+                onClick={() => exportReport({ format: 'csv' })}
+              >
+                Export Data
+              </Button>
+            </>
+          )
+        }
       />
-
-      <AlertStrip alerts={alerts} />
 
       {isHousekeeper ? (
         <HousekeeperTasksPanel
@@ -127,11 +155,16 @@ export const DashboardPage = () => {
         />
       ) : (
         <>
-          {/* KPI row — 9 cards for Super Admin, 4 for Facility Manager; whichever the API actually returned. */}
+          {/* Primary KPI row — Total Properties + the 3 headline cards the screenshot shows. */}
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {isLoading
-              ? Array.from({ length: 4 }, (_, index) => <CardSkeleton key={index} />)
-              : cardEntries.map(([key, card]) => (
+            {isLoading ? (
+              Array.from({ length: 4 }, (_, index) => <CardSkeleton key={index} />)
+            ) : (
+              <>
+                {canSeeProperties && (
+                  <StatCard label="Total Properties" value={propertyTotals?.total ?? '—'} icon="building" />
+                )}
+                {primaryCards.map(([key, card]) => (
                   <StatCard
                     key={key}
                     label={CARD_LABELS[key] ?? key}
@@ -140,7 +173,25 @@ export const DashboardPage = () => {
                     icon={CARD_ICONS[key]}
                   />
                 ))}
+              </>
+            )}
           </section>
+
+          {/* Secondary operational cards — real, just not part of the screenshot's headline row. */}
+          {!isLoading && secondaryCards.length > 0 && (
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {secondaryCards.map(([key, card]) => (
+                <StatCard
+                  key={key}
+                  label={CARD_LABELS[key] ?? key}
+                  value={card.unit === '%' ? `${card.value}%` : card.value}
+                  subtext={card.sub_text}
+                  icon={CARD_ICONS[key]}
+                  className="p-3.5"
+                />
+              ))}
+            </section>
+          )}
 
           <QuickActions />
 
@@ -153,10 +204,25 @@ export const DashboardPage = () => {
             ) : (
               <>
                 <RecentBookingsPanel bookings={(recentBookings?.items ?? []).map(toBookingRow)} />
-                <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />
+                {canSeeRevenue ? <RevenueOverviewCard /> : <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />}
               </>
             )}
           </section>
+
+          {!isLoading && (
+            <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              {canSeeMaintenance && <MaintenanceSpendCard />}
+              {canSeeRevenue && <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />}
+              {canSeeVerifications && <PendingVerificationsCard />}
+            </section>
+          )}
+
+          {!isLoading && (
+            <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {canSeeMaintenance && <MaintenanceRequestCard />}
+              <AnnouncementsCard />
+            </section>
+          )}
         </>
       )}
     </div>

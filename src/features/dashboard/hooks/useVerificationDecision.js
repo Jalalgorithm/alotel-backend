@@ -1,9 +1,16 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { verificationService } from '../services/verificationService';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
+
+/** The pending identity/ownership verification queue — `PendingVerificationsCard`'s data source. */
+export const useVerifications = () =>
+  useQuery({
+    queryKey: queryKeys.dashboard.verifications(),
+    queryFn: verificationService.list,
+  });
 
 /**
  * Approve / reject a pending verification straight from the dashboard.
@@ -19,7 +26,7 @@ export const useVerificationDecision = () => {
     mutationFn: ({ id, decision }) => verificationService.decide(id, decision),
     onSuccess: (_result, { decision, guest }) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.verifications() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.verifications() });
       toast.success(
         decision === 'Approved' ? 'Verification approved' : 'Verification rejected',
         `${guest}'s document has been ${decision.toLowerCase()}.`,

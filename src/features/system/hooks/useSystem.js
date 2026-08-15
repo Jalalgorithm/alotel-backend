@@ -3,12 +3,18 @@ import { systemService } from '../services/systemService';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
+import { useAuth } from '@/features/auth';
 
-export const useSettings = () =>
-  useQuery({
+/** `userId` is needed to read the signed-in admin's own notification preferences alongside the shared config store. */
+export const useSettings = () => {
+  const { user } = useAuth();
+
+  return useQuery({
     queryKey: queryKeys.system.settings(),
-    queryFn: systemService.getSettings,
+    queryFn: () => systemService.getSettings(user?.id),
+    enabled: Boolean(user),
   });
+};
 
 /**
  * Persist a settings change.
@@ -17,10 +23,11 @@ export const useSettings = () =>
  * toggling 2FA off should not be able to walk away believing it stuck.
  */
 export const useSaveSettings = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: systemService.saveSettings,
+    mutationFn: (patch) => systemService.saveSettings(patch, user?.id),
     onMutate: async (patch) => {
       // Optimistic: the switch moves immediately, then reconciles.
       await queryClient.cancelQueries({ queryKey: queryKeys.system.settings() });
@@ -48,3 +55,29 @@ export const useHelpArticles = () =>
     queryFn: systemService.getHelp,
     staleTime: Infinity,
   });
+
+/* -------------------------------------------------------------------------- */
+/* Announcements — `GET/POST /admin/announcements/`                           */
+/* -------------------------------------------------------------------------- */
+
+export const useAnnouncements = () =>
+  useQuery({
+    queryKey: queryKeys.system.announcements(),
+    queryFn: systemService.getAnnouncements,
+  });
+
+/** Super Admin only — enforced server-side; the form that calls this should be hidden for anyone else. */
+export const useCreateAnnouncement = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: systemService.createAnnouncement,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.system.announcements() });
+      toast.success('Announcement posted');
+    },
+    onError: (error) => toast.error('Could not post announcement', getErrorMessage(error)),
+  });
+
+  return { createAnnouncement: mutation.mutate, isPending: mutation.isPending };
+};

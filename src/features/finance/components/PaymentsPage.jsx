@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui/Alert';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { usePayments } from '../hooks/useFinance';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { PaymentDetailModal } from './PaymentDetailModal';
 
 /** `PaymentTransaction.STATUS_CHOICES` / `PROVIDER_CHOICES` / `TYPE_CHOICES`. */
 const STATUS_OPTIONS = [
@@ -43,6 +44,7 @@ export const PaymentsPage = () => {
   const [status, setStatus] = useState('All');
   const [provider, setProvider] = useState('All');
   const [page, setPage] = useState(1);
+  const [selectedPayment, setSelectedPayment] = useState(null);
 
   const debouncedBookingId = useDebouncedValue(bookingId);
   const { data, isFetching } = usePayments({
@@ -145,12 +147,15 @@ export const PaymentsPage = () => {
             columns={columns}
             rows={data?.items ?? []}
             isLoading={isFetching && !data}
+            onRowClick={setSelectedPayment}
             emptyTitle="No payments match these filters"
           />
         </div>
       </Card>
 
       <Pagination page={data?.page ?? 1} totalPages={data?.totalPages ?? 1} onChange={setPage} />
+
+      <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />
     </div>
   );
 };

@@ -21,6 +21,7 @@ const load = (loader, name) => lazy(() => loader().then((module) => ({ default: 
 
 const DashboardPage = load(() => import('@/features/dashboard'), 'DashboardPage');
 const AnalyticsPage = load(() => import('@/features/analytics'), 'AnalyticsPage');
+const NotificationsPage = load(() => import('@/features/notifications'), 'NotificationsPage');
 
 const PropertiesPage = load(() => import('@/features/properties'), 'PropertiesPage');
 const PropertyWizardPage = load(() => import('@/features/properties'), 'PropertyWizardPage');
@@ -112,6 +113,7 @@ const SCREENS = [
   { path: paths.roles, element: <RolesPage />, capability: C.rolesView },
   { path: paths.auditLog, element: <AuditLogPage />, capability: C.auditView },
 
+  { path: paths.notifications, element: <NotificationsPage />, capability: C.notificationsView },
   { path: paths.settings, element: <SettingsPage />, capability: C.settingsManage },
   { path: paths.help, element: <HelpPage />, capability: C.helpView },
 ];

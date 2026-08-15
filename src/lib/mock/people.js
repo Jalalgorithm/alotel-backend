@@ -14,6 +14,8 @@
 export const CAPABILITIES = {
   dashboardView: 'dashboard.view',
   analyticsView: 'analytics.view',
+  /** Every staff level gets this — it's the signed-in admin's own inbox, not a domain permission. */
+  notificationsView: 'notifications.view',
 
   propertiesView: 'properties.view',
   propertiesManage: 'properties.manage',
@@ -79,6 +81,7 @@ export const ROLES = [
     color: '#2a78d6',
     capabilities: [
       C.dashboardView,
+      C.notificationsView,
       C.propertiesView,
       C.unitsView,
       C.unitsManage,
@@ -113,7 +116,7 @@ export const ROLES = [
     description:
       'Room status only. Sees no guest personal data, no bookings, no financials — the minimum needed to service a unit.',
     color: '#eb6834',
-    capabilities: [C.housekeepingView, C.housekeepingManage, C.unitsView, C.helpView],
+    capabilities: [C.notificationsView, C.housekeepingView, C.housekeepingManage, C.unitsView, C.helpView],
     // Housekeeping is where the work actually happens, so send cleaners there
     // rather than to whichever permitted screen happens to sit highest in the nav.
     home: '/housekeeping',

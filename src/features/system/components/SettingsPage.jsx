@@ -1,4 +1,5 @@
-import { Bell, CreditCard, FileSignature, Plug, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
+import { Bell, CreditCard, FileSignature, Megaphone, Plug, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -7,7 +8,10 @@ import { ToggleRow } from '@/components/ui/Toggle';
 import { Alert } from '@/components/ui/Alert';
 import { Avatar } from '@/components/ui/Avatar';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useSaveSettings, useSettings } from '../hooks/useSystem';
+import { Button } from '@/components/ui/Button';
+import { Input, Textarea } from '@/components/ui/Input';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { useAnnouncements, useCreateAnnouncement, useSaveSettings, useSettings } from '../hooks/useSystem';
 import { useAuth } from '@/features/auth';
 import { ROLES } from '@/lib/mock/people';
 import { formatDate } from '@/utils/format';
@@ -18,6 +22,54 @@ const SECTION_ICONS = {
   payments: CreditCard,
   contracts: FileSignature,
   integrations: Plug,
+  announcements: Megaphone,
+};
+
+/** Super Admin only — `POST /admin/announcements/` is `IsSuperAdmin` server-side. */
+const AnnouncementsSection = () => {
+  const { data: announcements = [], isLoading } = useAnnouncements();
+  const { createAnnouncement, isPending } = useCreateAnnouncement();
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (!title.trim() || !body.trim()) return;
+    createAnnouncement(
+      { title: title.trim(), body: body.trim() },
+      { onSuccess: () => { setTitle(''); setBody(''); } },
+    );
+  };
+
+  return (
+    <Section id="announcements" title="Announcements" subtitle="Posted to every admin's dashboard.">
+      <form onSubmit={submit} className="space-y-3 px-4 py-3.5">
+        <Input label="Title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="System Update" />
+        <Textarea label="Message" value={body} onChange={(event) => setBody(event.target.value)} placeholder="What changed and why it matters." />
+        <Button type="submit" variant="primary" size="sm" isLoading={isPending} disabled={!title.trim() || !body.trim()}>
+          Post announcement
+        </Button>
+      </form>
+
+      <div className="px-4 py-3.5">
+        {isLoading ? (
+          <Skeleton className="h-16 rounded-lg" />
+        ) : announcements.length ? (
+          <ul className="space-y-2.5">
+            {announcements.map((entry) => (
+              <li key={entry.id} className="rounded-lg border border-line bg-canvas p-3">
+                <p className="text-[12.5px] font-semibold text-ink">{entry.title}</p>
+                <p className="mt-0.5 text-[11.5px] text-ink-muted">{entry.body}</p>
+                <p className="mt-1 text-[10.5px] text-ink-muted">{formatDate(entry.createdAt)}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState title="No announcements yet" description="Post one above — it appears on every admin's dashboard." />
+        )}
+      </div>
+    </Section>
+  );
 };
 
 const Section = ({ id, title, subtitle, children }) => {
@@ -212,6 +264,8 @@ export const SettingsPage = () => {
           />
         ))}
       </Section>
+
+      {user?.role === 'L1' && <AnnouncementsSection />}
     </div>
   );
 };

@@ -6,7 +6,7 @@ import { CommandPalette } from './CommandPalette';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { useUIStore } from '@/stores/uiStore';
 import { useNavBadges } from '@/features/dashboard';
-import { useAlerts } from '@/features/dashboard';
+import { useMyNotifications } from '@/features/notifications';
 
 /**
  * The portal shell: docked sidebar on desktop, overlay drawer below `lg`,
@@ -21,7 +21,7 @@ export const AdminLayout = () => {
   const closeDrawer = useUIStore((state) => state.closeDrawer);
 
   const { data: badges = {} } = useNavBadges();
-  const { data: alerts = [] } = useAlerts();
+  const { data: notifications = [] } = useMyNotifications();
 
   // Close the mobile drawer whenever navigation happens.
   useEffect(() => {
@@ -61,7 +61,7 @@ export const AdminLayout = () => {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar alerts={alerts} />
+        <Topbar notifications={notifications} />
 
         <main className="scrollbar-slim flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[100rem] p-4 sm:p-5 lg:p-6">

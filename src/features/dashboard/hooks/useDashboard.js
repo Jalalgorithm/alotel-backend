@@ -11,6 +11,13 @@ export const useDashboardOverview = () =>
     queryFn: dashboardService.getOverview,
   });
 
+/** Revenue Overview chart — Mon–Sun totals for a given `{ startDate, endDate }` range. */
+export const useRevenueOverview = (params = {}) =>
+  useQuery({
+    queryKey: queryKeys.dashboard.revenueOverview(params),
+    queryFn: () => dashboardService.getRevenueOverview(params),
+  });
+
 /**
  * Sidebar counters.
  *
@@ -24,18 +31,6 @@ export const useNavBadges = () => {
     queryKey: [...queryKeys.dashboard.all, 'badges'],
     queryFn: dashboardService.getBadges,
     enabled: isAuthenticated && can(CAPABILITIES.dashboardView),
-    staleTime: 1000 * 60,
-  });
-};
-
-/** Alert strip + notification tray. */
-export const useAlerts = () => {
-  const { isAuthenticated, can } = useAuth();
-
-  return useQuery({
-    queryKey: [...queryKeys.dashboard.all, 'alerts'],
-    queryFn: dashboardService.getAlerts,
-    enabled: isAuthenticated && can(CAPABILITIES.bookingsView),
     staleTime: 1000 * 60,
   });
 };

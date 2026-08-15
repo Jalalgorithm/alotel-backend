@@ -12,11 +12,12 @@ import { paths } from '@/routes/paths';
  * `placeholderData` holds the current page on screen while the next one loads,
  * so filtering never flashes an empty table.
  */
-export const useProperties = (params = {}) =>
+export const useProperties = (params = {}, options = {}) =>
   useQuery({
     queryKey: queryKeys.properties.list(params),
     queryFn: () => propertyService.getProperties(params),
     placeholderData: keepPreviousData,
+    ...options,
   });
 
 export const useProperty = (id) =>
