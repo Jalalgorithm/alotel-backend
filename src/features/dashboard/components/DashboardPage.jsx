@@ -1,9 +1,11 @@
 import { format } from 'date-fns';
-import { CalendarDays, Clock, Download, FileText } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Clock, Download, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CardSkeleton, Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
 import { cn } from '@/utils/classNames';
+import { getErrorMessage } from '@/utils/errors';
 import { StatCard } from './StatCard';
 import { QuickActions } from './QuickActions';
 import { CheckInsPanel, HousekeeperTasksPanel, RecentBookingsPanel } from './DashboardPanels';
@@ -74,7 +76,7 @@ const toCheckInEntry = (booking) => ({
  */
 export const DashboardPage = () => {
   const { user, can } = useAuth();
-  const { data, isLoading } = useDashboardOverview();
+  const { data, isLoading, isError, error } = useDashboardOverview();
   const { exportReport, isPending: isExporting } = useExportAnalytics();
 
   const role = data?.role;
@@ -155,8 +157,19 @@ export const DashboardPage = () => {
         />
       ) : (
         <>
+          {/*
+           * `/admin/dashboard/` failing (network error, expired session, a 500)
+           * used to leave the KPI row and Cost Breakdown silently empty with no
+           * explanation — this surfaces it instead of looking like missing data.
+           */}
+          {isError && (
+            <Alert variant="error" icon={<AlertTriangle className="size-4" aria-hidden="true" />}>
+              Couldn't load dashboard figures — {getErrorMessage(error)}
+            </Alert>
+          )}
+
           {/* KPI row — Total Properties + the 3 headline cards, each with the mockup's delta. */}
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {isLoading ? (
               Array.from({ length: 4 }, (_, index) => <CardSkeleton key={index} />)
             ) : (
@@ -178,6 +191,11 @@ export const DashboardPage = () => {
                     icon={CARD_ICONS[key]}
                   />
                 ))}
+                {/* Backend didn't return a card this role should have (or the call failed) — show it as unavailable rather than just dropping the tile. */}
+                {!isError &&
+                  PRIMARY_CARD_ORDER.filter((key) => !primaryCards.some(([cardKey]) => cardKey === key)).map((key) => (
+                    <StatCard key={key} label={CARD_LABELS[key] ?? key} value="—" subtext="Not available for this role" icon={CARD_ICONS[key]} />
+                  ))}
               </>
             )}
           </section>
@@ -185,11 +203,9 @@ export const DashboardPage = () => {
           <QuickActions />
 
           {/* Recent Bookings + Revenue Overview + Cost Breakdown — one row, matching the mockup's proportions. */}
-          <section className={cn('grid grid-cols-1 gap-4', canSeeRevenue && 'xl:grid-cols-[1.4fr_1fr_0.9fr]')}>
+          <section className={cn('grid grid-cols-1 gap-4', canSeeRevenue && 'lg:grid-cols-[1.4fr_1fr_0.9fr]')}>
             {isLoading ? (
-              <>
-                <Skeleton className="h-64 rounded-card xl:col-span-3" />
-              </>
+              <Skeleton className="h-64 rounded-card lg:col-span-3" />
             ) : (
               <>
                 <RecentBookingsPanel bookings={(recentBookings?.items ?? []).map(toBookingRow)} />
@@ -205,7 +221,7 @@ export const DashboardPage = () => {
 
           {/* Check-ins Today / Pending Verifications / Maintenance Requests / System Announcements — one row. */}
           {!isLoading && (
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />
               {canSeeVerifications && <PendingVerificationsCard />}
               {canSeeMaintenance && <MaintenanceRequestCard />}
