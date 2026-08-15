@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { cn } from '@/utils/classNames';
 import { getErrorMessage } from '@/utils/errors';
+import { formatPercent } from '@/utils/format';
 import { StatCard } from './StatCard';
 import { QuickActions } from './QuickActions';
 import { CheckInsPanel, HousekeeperTasksPanel, RecentBookingsPanel } from './DashboardPanels';
@@ -35,16 +36,16 @@ const CARD_ICONS = {
 const PRIMARY_CARD_ORDER = ['active_bookings', 'occupancy_rate', 'revenue_mtd'];
 
 /**
- * Month-over-month deltas the mockup shows on every KPI tile. `/admin/dashboard/`
- * has no comparable-period figure yet (flagged to the backend as a real gap —
- * see the handoff notes), so these are clearly-placeholder numbers, not derived
- * from anything real, kept only so the tiles read the way the design intends.
+ * Turn a card's `delta_pct` (nullable — no prior-period baseline to compare
+ * against) into `StatCard`'s `{trend, delta}` pair. `null` falls through to
+ * `StatCard`'s own `subtext` display (the card's `sub_text`) instead.
  */
-const MOCK_DELTAS = {
-  properties: '+12% this month',
-  active_bookings: '+18% this week',
-  occupancy_rate: '+18% vs last month',
-  revenue_mtd: '+22% vs last month',
+const deltaFor = (card) => {
+  if (!card || card.delta_pct == null) return {};
+  return {
+    trend: card.delta_pct < 0 ? 'down' : 'up',
+    delta: `${card.delta_pct > 0 ? '+' : ''}${formatPercent(card.delta_pct)} vs last period`,
+  };
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -178,7 +179,6 @@ export const DashboardPage = () => {
                   <StatCard
                     label="Total Properties"
                     value={propertyTotals?.total ?? '—'}
-                    delta={MOCK_DELTAS.properties}
                     icon="building"
                   />
                 )}
@@ -187,8 +187,9 @@ export const DashboardPage = () => {
                     key={key}
                     label={CARD_LABELS[key] ?? key}
                     value={card.unit === '%' ? `${card.value}%` : card.value}
-                    delta={MOCK_DELTAS[key]}
+                    subtext={card.sub_text}
                     icon={CARD_ICONS[key]}
+                    {...deltaFor(card)}
                   />
                 ))}
                 {/* Backend didn't return a card this role should have (or the call failed) — show it as unavailable rather than just dropping the tile. */}

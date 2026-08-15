@@ -21,15 +21,16 @@ export const PAYMENT_METHODS = ['Bank Transfer', 'Card', 'USSD'];
 /* Owner payouts                                                               */
 /* -------------------------------------------------------------------------- */
 
+/** Shaped like `PayoutSerializer` (real `payments.Payout`) — no owner/gross/commission/bank fields, those don't exist server-side. */
 export const payouts = [
-  { id: 'po_501', owner: 'Lagos Portfolio Ltd', initials: 'LP', color: '#12603F', properties: 4, period: 'July 2026', currency: 'NGN', gross: 5420000, commission: 600000, net: 4820000, status: 'Paid', scheduledFor: '2026-08-03', bank: 'GTBank ····4471' },
-  { id: 'po_502', owner: 'Casa Iberia SL', initials: 'CI', color: '#2a78d6', properties: 3, period: 'July 2026', currency: 'EUR', gross: 8940, commission: 1341, net: 7599, status: 'Scheduled', scheduledFor: '2026-08-07', bank: 'CaixaBank ····9920' },
-  { id: 'po_503', owner: 'Marina Holdings FZE', initials: 'MH', color: '#6D28D9', properties: 2, period: 'July 2026', currency: 'AED', gross: 41200, commission: 6180, net: 35020, status: 'Processing', scheduledFor: '2026-08-05', bank: 'Emirates NBD ····1180' },
-  { id: 'po_504', owner: 'Wharf Living UK', initials: 'WL', color: '#eb6834', properties: 5, period: 'July 2026', currency: 'GBP', gross: 12480, commission: 1872, net: 10608, status: 'Paid', scheduledFor: '2026-08-02', bank: 'Barclays ····7732' },
-  { id: 'po_505', owner: 'Hudson Rentals LLC', initials: 'HR', color: '#0F766E', properties: 4, period: 'July 2026', currency: 'USD', gross: 9860, commission: 1479, net: 8381, status: 'Scheduled', scheduledFor: '2026-08-09', bank: 'Chase ····2214' },
+  { id: 'po_501', propertyName: 'VI Luxury Flat', hostEmail: 'lagosportfolio@example.com', amount: 4820000, currency: 'NGN', status: 'Released', periodStart: '2026-07-01', periodEnd: '2026-07-31', releasedAt: '2026-08-03T09:00:00.000Z' },
+  { id: 'po_502', propertyName: 'Gothic Quarter 2-Bed', hostEmail: 'casaiberia@example.com', amount: 7599, currency: 'EUR', status: 'Pending', periodStart: '2026-07-01', periodEnd: '2026-07-31', releasedAt: null },
+  { id: 'po_503', propertyName: 'Dubai Marina Suite', hostEmail: 'marinaholdings@example.com', amount: 35020, currency: 'AED', status: 'Pending', periodStart: '2026-07-01', periodEnd: '2026-07-31', releasedAt: null },
+  { id: 'po_504', propertyName: 'Canary Wharf Studio', hostEmail: 'wharfliving@example.com', amount: 10608, currency: 'GBP', status: 'Released', periodStart: '2026-07-01', periodEnd: '2026-07-31', releasedAt: '2026-08-02T09:00:00.000Z' },
+  { id: 'po_505', propertyName: 'Manhattan Studio', hostEmail: 'hudsonrentals@example.com', amount: 8381, currency: 'USD', status: 'Pending', periodStart: '2026-07-01', periodEnd: '2026-07-31', releasedAt: null },
 ];
 
-export const PAYOUT_STATUSES = ['All', 'Paid', 'Processing', 'Scheduled'];
+export const PAYOUT_STATUSES = ['All', 'Pending', 'Released', 'Failed'];
 
 /* -------------------------------------------------------------------------- */
 /* Invoices                                                                    */

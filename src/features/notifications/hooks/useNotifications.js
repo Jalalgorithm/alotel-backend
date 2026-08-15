@@ -24,9 +24,41 @@ export const useMarkNotificationRead = () => {
 
   const mutation = useMutation({
     mutationFn: notificationService.markRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.list(user?.id) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.list(user?.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.unreadCount() });
+    },
     onError: (error) => toast.error('Could not update notification', getErrorMessage(error)),
   });
 
   return { markRead: mutation.mutate, isPending: mutation.isPending };
+};
+
+/** Bell badge count — self-scoped, independent of the full inbox list so it stays cheap to poll. */
+export const useUnreadCount = () => {
+  const { isAuthenticated } = useAuth();
+
+  return useQuery({
+    queryKey: queryKeys.notifications.unreadCount(),
+    queryFn: notificationService.getUnreadCount,
+    enabled: isAuthenticated,
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60,
+  });
+};
+
+export const useMarkAllRead = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: notificationService.markAllRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.list(user?.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.unreadCount() });
+    },
+    onError: (error) => toast.error('Could not mark all as read', getErrorMessage(error)),
+  });
+
+  return { markAllRead: mutation.mutate, isPending: mutation.isPending };
 };

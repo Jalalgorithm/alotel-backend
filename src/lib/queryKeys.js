@@ -14,6 +14,7 @@ export const queryKeys = {
     all: ['dashboard'],
     overview: () => ['dashboard', 'overview'],
     revenueOverview: (params = {}) => ['dashboard', 'revenue-overview', params],
+    costBreakdown: (params = {}) => ['dashboard', 'cost-breakdown', params],
     verifications: () => ['dashboard', 'verifications'],
   },
   analytics: {
@@ -62,6 +63,7 @@ export const queryKeys = {
     invoices: (filters = {}) => ['finance', 'invoices', filters],
     taxRules: (filters = {}) => ['finance', 'tax-rules', filters],
     coverageAlerts: () => ['finance', 'coverage-alerts'],
+    expenses: (filters = {}) => ['finance', 'expenses', filters],
     deposit: (bookingId) => ['finance', 'deposit', bookingId],
     fxRates: (base) => ['finance', 'fx-rates', base],
   },
@@ -107,6 +109,7 @@ export const queryKeys = {
   notifications: {
     all: ['notifications'],
     list: (userId) => ['notifications', 'list', userId],
+    unreadCount: () => ['notifications', 'unread-count'],
   },
   /** Country/state reference data — `utils/countries.py`, static-ish, shared across features. */
   geo: {

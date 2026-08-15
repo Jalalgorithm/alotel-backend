@@ -129,14 +129,42 @@ export const workerSchema = z
     path: ['companyName'],
   });
 
-/** `MaintenanceTicketCreateSerializer`. */
-export const maintenanceTicketSchema = z.object({
-  propertyId: z.string().min(1, 'Select a property'),
-  category: z.string().min(1, 'Category is required'),
-  description: z.string().min(3, 'Describe the issue'),
-  priority: z.enum(['low', 'medium', 'high', 'urgent'], { message: 'Select a priority' }),
-  assignedWorkerId: z.string().optional().default(''),
+/** `PayoutCreateSerializer` — scheduling a new payout to a property's host. Super Admin only. */
+export const schedulePayoutSchema = z
+  .object({
+    propertyId: z.string().min(1, 'Select a property'),
+    amount: z.coerce.number({ message: 'Enter an amount' }).positive('Must be greater than 0'),
+    currency: z.string().min(1, 'Select a currency').max(3, 'Use a 3-letter code'),
+    periodStart: z.string().min(1, 'Select a start date'),
+    periodEnd: z.string().min(1, 'Select an end date'),
+  })
+  .refine((values) => values.periodEnd >= values.periodStart, {
+    message: 'End date must be on or after the start date',
+    path: ['periodEnd'],
+  });
+
+/** `ExpenseEntry` — manual cost log for a Cost Breakdown category with no automatic source. */
+export const logExpenseSchema = z.object({
+  category: z.enum(['operation', 'staff', 'marketing', 'others'], { message: 'Select a category' }),
+  amount: z.coerce.number({ message: 'Enter an amount' }).positive('Must be greater than 0'),
+  date: z.string().min(1, 'Select a date'),
+  note: z.string().optional().default(''),
 });
+
+/** `MaintenanceTicketCreateSerializer` — exactly one of `propertyId`/`spaceId` (space-linked tickets are Super-Admin-only server-side). */
+export const maintenanceTicketSchema = z
+  .object({
+    propertyId: z.string().optional().default(''),
+    spaceId: z.string().optional().default(''),
+    category: z.string().min(1, 'Category is required'),
+    description: z.string().min(3, 'Describe the issue'),
+    priority: z.enum(['low', 'medium', 'high', 'urgent'], { message: 'Select a priority' }),
+    assignedWorkerId: z.string().optional().default(''),
+  })
+  .refine((values) => Boolean(values.propertyId) !== Boolean(values.spaceId), {
+    message: 'Select a property',
+    path: ['propertyId'],
+  });
 
 /** `MaintenanceTicketCostSerializer`. */
 export const ticketCostSchema = z.object({

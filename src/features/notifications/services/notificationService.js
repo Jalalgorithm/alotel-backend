@@ -18,11 +18,22 @@ const mockNotifications = {
     await delay(150);
     return { id, status: 'read', read_at: new Date().toISOString() };
   },
+  async unreadCount() {
+    await delay(100);
+    return { unread_count: 0 };
+  },
+  async markAllRead() {
+    await delay(200);
+    return { marked_read: 0 };
+  },
 };
 
 const realNotifications = {
   list: async (userId) => (await apiClient.get(`/notifications/${userId}/`)).data,
   markRead: async (id) => (await apiClient.put(`/notifications/${id}/read/`)).data,
+  /** Self-scoped — no `user_id` path param, unlike `list`. */
+  unreadCount: async () => (await apiClient.get('/notifications/unread-count/')).data,
+  markAllRead: async () => (await apiClient.post('/notifications/read-all/')).data,
 };
 
 const backend = env.useMockNotifications ? mockNotifications : realNotifications;
@@ -44,4 +55,6 @@ const toNotification = (raw) => ({
 export const notificationService = {
   getMyNotifications: async (userId) => (await backend.list(userId)).map(toNotification),
   markRead: async (id) => toNotification(await backend.markRead(id)),
+  getUnreadCount: async () => (await backend.unreadCount()).unread_count ?? 0,
+  markAllRead: async () => (await backend.markAllRead()).marked_read ?? 0,
 };

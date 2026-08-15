@@ -4,6 +4,7 @@ export { WorkerDetailPage } from './components/WorkerDetailPage';
 export { TicketTablePage } from './components/TicketTablePage';
 export { TicketDetailPage } from './components/TicketDetailPage';
 export { PropertyMaintenanceTab } from './components/PropertyMaintenanceTab';
+export { SpaceMaintenanceTab } from './components/SpaceMaintenanceTab';
 
 export { maintenanceService } from './services/maintenanceService';
 export * from './hooks/useMaintenanceWorkers';

@@ -5,7 +5,7 @@ import { cn } from '@/utils/classNames';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/features/auth';
-import { useMarkNotificationRead } from '@/features/notifications';
+import { useMarkAllRead, useMarkNotificationRead, useUnreadCount } from '@/features/notifications';
 import { useUIStore } from '@/stores/uiStore';
 import { useClickOutside } from '@/hooks/useClickOutside';
 import { useHotkey } from '@/hooks/useHotkey';
@@ -14,7 +14,7 @@ import { formatRelative } from '@/utils/format';
 import { paths } from '@/routes/paths';
 
 /** Notification tray — a preview of the real inbox (`useMyNotifications`); "View all" opens the full page. */
-const NotificationTray = ({ notifications, onMarkRead, onClose }) => {
+const NotificationTray = ({ notifications, onMarkRead, onMarkAllRead, isMarkingAllRead, onClose }) => {
   const trayRef = useClickOutside(onClose, true);
   const unreadCount = notifications.filter((entry) => !entry.isRead).length;
 
@@ -23,12 +23,24 @@ const NotificationTray = ({ notifications, onMarkRead, onClose }) => {
       ref={trayRef}
       className="animate-fade-up absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-card border border-line bg-surface shadow-raised"
     >
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <p className="text-[13px] font-semibold">Notifications</p>
+      <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <div className="flex items-center gap-2">
+          <p className="text-[13px] font-semibold">Notifications</p>
+          {unreadCount > 0 && (
+            <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
+              {unreadCount} new
+            </span>
+          )}
+        </div>
         {unreadCount > 0 && (
-          <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn">
-            {unreadCount} new
-          </span>
+          <button
+            type="button"
+            onClick={onMarkAllRead}
+            disabled={isMarkingAllRead}
+            className="shrink-0 text-[10.5px] font-semibold text-brand-700 hover:underline disabled:opacity-60"
+          >
+            Mark all read
+          </button>
         )}
       </div>
 
@@ -82,10 +94,14 @@ export const Topbar = ({ notifications = [] }) => {
   const openDrawer = useUIStore((state) => state.openDrawer);
   const openCommand = useUIStore((state) => state.openCommand);
   const { markRead } = useMarkNotificationRead();
+  const { markAllRead, isPending: isMarkingAllRead } = useMarkAllRead();
+  const { data: realUnreadCount } = useUnreadCount();
 
   const [isTrayOpen, setIsTrayOpen] = useState(false);
   const role = ROLES.find((entry) => entry.id === user?.role);
-  const unreadCount = notifications.filter((entry) => !entry.isRead).length;
+  // Prefer the self-scoped unread-count endpoint; fall back to the list-derived
+  // count while it's still loading, so the badge doesn't flash "0" on mount.
+  const unreadCount = realUnreadCount ?? notifications.filter((entry) => !entry.isRead).length;
 
   useHotkey('k', openCommand);
 
@@ -143,7 +159,13 @@ export const Topbar = ({ notifications = [] }) => {
           </button>
 
           {isTrayOpen && (
-            <NotificationTray notifications={notifications} onMarkRead={markRead} onClose={() => setIsTrayOpen(false)} />
+            <NotificationTray
+              notifications={notifications}
+              onMarkRead={markRead}
+              onMarkAllRead={markAllRead}
+              isMarkingAllRead={isMarkingAllRead}
+              onClose={() => setIsTrayOpen(false)}
+            />
           )}
         </div>
 

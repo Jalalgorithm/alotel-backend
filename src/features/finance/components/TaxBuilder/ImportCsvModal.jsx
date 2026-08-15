@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle2, Download } from 'lucide-react';
+import { AlertCircle, Download } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { Alert } from '@/components/ui/Alert';
 import { CSV_TEMPLATE_COLUMNS } from '@/lib/taxSchema';
 import { getErrorMessage } from '@/utils/errors';
-import { importTaxRuleCsvRow } from '../../hooks/useFinance';
+import { bulkImportTaxRules } from '../../hooks/useFinance';
 
 /** Minimal RFC4180-subset parser — quoted fields with embedded commas, doubled-quote escaping. Not built for arbitrary hostile CSVs, just the template this modal itself generates. */
 const parseCsvLine = (line) => {
@@ -65,32 +65,34 @@ const downloadTemplate = () => {
 };
 
 /**
- * Every imported row lands in `pending_review` — there is no bulk-import
- * backend endpoint, so this parses client-side and issues one
- * `POST /properties/taxes/` per row (`importTaxRuleCsvRow`), sequentially,
- * with a per-row success/failure summary rather than one pass/fail result.
+ * `POST /properties/taxes/bulk-import/` — the raw file is sent as-is; the
+ * server parses and validates it. All-or-nothing: any invalid row rejects the
+ * whole file with a per-line error list and creates nothing, unlike the old
+ * per-row loop this replaced (which could partially succeed). Client-side
+ * parsing below is only for the row-count preview shown before submitting.
  */
 export const ImportCsvModal = ({ isOpen, onClose }) => {
   const queryClient = useQueryClient();
+  const [file, setFile] = useState(null);
   const [fileName, setFileName] = useState('');
   const [rows, setRows] = useState([]);
   const [parseError, setParseError] = useState('');
   const [isImporting, setIsImporting] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [results, setResults] = useState(null);
+  const [result, setResult] = useState(null);
 
   const reset = () => {
+    setFile(null);
     setFileName('');
     setRows([]);
     setParseError('');
-    setProgress(0);
-    setResults(null);
+    setResult(null);
   };
 
-  const handleFile = (file) => {
+  const handleFile = (selected) => {
     reset();
-    if (!file) return;
-    setFileName(file.name);
+    if (!selected) return;
+    setFile(selected);
+    setFileName(selected.name);
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -106,27 +108,22 @@ export const ImportCsvModal = ({ isOpen, onClose }) => {
       }
     };
     reader.onerror = () => setParseError('Could not read that file.');
-    reader.readAsText(file);
+    reader.readAsText(selected);
   };
 
   const runImport = async () => {
     setIsImporting(true);
-    setProgress(0);
-    const outcomes = [];
-
-    for (const row of rows) {
-      try {
-        // Deliberately sequential (not Promise.all) — see module doc comment.
-        await importTaxRuleCsvRow(row);
-        outcomes.push({ row, success: true });
-      } catch (error) {
-        outcomes.push({ row, success: false, error: getErrorMessage(error) });
-      }
-      setProgress((current) => current + 1);
+    try {
+      const { importedCount } = await bulkImportTaxRules({ file, rows });
+      queryClient.invalidateQueries({ queryKey: ['finance', 'tax-rules'] });
+      setResult({ success: true, importedCount });
+    } catch (error) {
+      setResult({
+        success: false,
+        message: getErrorMessage(error),
+        rowErrors: error?.response?.data?.row_errors ?? [],
+      });
     }
-
-    queryClient.invalidateQueries({ queryKey: ['finance', 'tax-rules'] });
-    setResults(outcomes);
     setIsImporting(false);
   };
 
@@ -135,15 +132,12 @@ export const ImportCsvModal = ({ isOpen, onClose }) => {
     onClose();
   };
 
-  const successCount = results?.filter((r) => r.success).length ?? 0;
-  const failureCount = results ? results.length - successCount : 0;
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={close}
       title="Import tax rules from CSV"
-      description="Every imported row lands in Pending review. Nothing is activated by an import."
+      description="Every imported row lands in Pending review. The whole file is all-or-nothing — if any row fails validation, nothing is imported."
       size="lg"
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -151,10 +145,10 @@ export const ImportCsvModal = ({ isOpen, onClose }) => {
             Download template
           </Button>
           <div className="flex gap-2">
-            <Button onClick={close}>{results ? 'Done' : 'Cancel'}</Button>
-            {!results && (
-              <Button variant="primary" isLoading={isImporting} disabled={!rows.length} onClick={runImport}>
-                {isImporting ? `Importing ${progress} of ${rows.length}…` : `Import ${rows.length} row${rows.length === 1 ? '' : 's'}`}
+            <Button onClick={close}>{result ? 'Done' : 'Cancel'}</Button>
+            {!result?.success && (
+              <Button variant="primary" isLoading={isImporting} disabled={!file} onClick={runImport}>
+                {isImporting ? 'Importing…' : `Import ${rows.length} row${rows.length === 1 ? '' : 's'}`}
               </Button>
             )}
           </div>
@@ -166,29 +160,29 @@ export const ImportCsvModal = ({ isOpen, onClose }) => {
 
         {parseError && <Alert variant="error">{parseError}</Alert>}
 
-        {rows.length > 0 && !results && (
+        {rows.length > 0 && !result && (
           <p className="text-[12px] text-ink-muted">
             Found {rows.length} row{rows.length === 1 ? '' : 's'} in <span className="font-semibold text-ink">{fileName}</span>.
           </p>
         )}
 
-        {results && (
+        {result?.success && (
+          <Alert variant="success">
+            {result.importedCount} rule{result.importedCount === 1 ? '' : 's'} imported, all landed in Pending review.
+          </Alert>
+        )}
+
+        {result && !result.success && (
           <div className="space-y-2">
-            <Alert variant={failureCount ? 'warn' : 'success'}>
-              {successCount} imported{failureCount ? `, ${failureCount} failed` : ''}.
-            </Alert>
-            {failureCount > 0 && (
+            <Alert variant="error">{result.message}</Alert>
+            {result.rowErrors.length > 0 && (
               <div className="max-h-48 space-y-1.5 overflow-y-auto">
-                {results.map((outcome, index) => (
-                  <div key={index} className="flex items-start gap-2 rounded-lg border border-line bg-white px-3 py-2 text-[11.5px]">
-                    {outcome.success ? (
-                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-ok" aria-hidden="true" />
-                    ) : (
-                      <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-danger" aria-hidden="true" />
-                    )}
+                {result.rowErrors.map((rowError) => (
+                  <div key={rowError.line} className="flex items-start gap-2 rounded-lg border border-line bg-white px-3 py-2 text-[11.5px]">
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-danger" aria-hidden="true" />
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-ink">{outcome.row.rule_name || outcome.row.country || `Row`}</p>
-                      {!outcome.success && <p className="text-danger">{outcome.error}</p>}
+                      <p className="font-semibold text-ink">Line {rowError.line}</p>
+                      <p className="text-danger">{rowError.errors.join(' ')}</p>
                     </div>
                   </div>
                 ))}

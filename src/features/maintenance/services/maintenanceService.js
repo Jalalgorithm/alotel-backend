@@ -82,6 +82,7 @@ const realMaintenance = {
     if (params.priority) query.priority = params.priority;
     if (params.category) query.category = params.category;
     if (params.propertyId) query.property = params.propertyId;
+    if (params.spaceId) query.space_id = params.spaceId;
     if (params.assignedWorkerId) query.assigned_worker = params.assignedWorkerId;
 
     const { data } = await apiClient.get('/operations/maintenance/tickets/', { params: query });
@@ -103,8 +104,21 @@ const realMaintenance = {
     return toTicket(data);
   },
 
+  /** Plain JSON, unless a receipt scan is attached — then `FormData`, same switch `uploadTicketPhoto` already makes. */
   async logTicketCost(ticketId, values) {
-    const { data } = await apiClient.post(`/operations/maintenance/tickets/${ticketId}/costs/`, toTicketCostPayload(values));
+    const payload = toTicketCostPayload(values);
+    let body = payload;
+
+    if (values.receiptFile) {
+      const form = new FormData();
+      Object.entries(payload).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) form.append(key, value);
+      });
+      form.append('receipt_file', values.receiptFile);
+      body = form;
+    }
+
+    const { data } = await apiClient.post(`/operations/maintenance/tickets/${ticketId}/costs/`, body);
     return toTicketCost(data);
   },
 

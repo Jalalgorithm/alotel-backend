@@ -193,8 +193,10 @@ export const toCoverageAlert = (raw) => ({
 });
 
 /* -------------------------------------------------------------------------- */
-/* CSV import — no bulk backend endpoint exists; one `POST /properties/taxes/` */
-/* per row, forced into the same pending-review path as an AI suggestion.      */
+/* CSV import — `POST /properties/taxes/bulk-import/` takes the raw file      */
+/* (multipart) and parses/validates server-side, all-or-nothing. The mock     */
+/* path below still goes row-by-row through `POST /properties/taxes/`, forced */
+/* into the same pending-review path as an AI suggestion.                     */
 /* -------------------------------------------------------------------------- */
 
 /** Header row for the downloadable template, and the columns the parser reads back — mirrors `TaxRuleCreateUpdateSerializer`'s writable fields (minus `guest_segment`, too complex for a flat file). */

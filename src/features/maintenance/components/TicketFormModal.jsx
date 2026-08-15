@@ -11,11 +11,24 @@ import { useProperties } from '@/features/properties/hooks/useProperties';
 import { useMaintenanceWorkers } from '../hooks/useMaintenanceWorkers';
 import { useCreateTicket } from '../hooks/useMaintenanceTickets';
 
-const emptyValues = (propertyId = '') => ({ propertyId, category: '', description: '', priority: 'medium', assignedWorkerId: '' });
+const emptyValues = (propertyId = '', spaceId = '') => ({
+  propertyId: spaceId ? '' : propertyId,
+  spaceId,
+  category: '',
+  description: '',
+  priority: 'medium',
+  assignedWorkerId: '',
+});
 
-/** Create a ticket — `MaintenanceTicketCreateSerializer`. `propertyId` pre-fills and locks the property when opened from a Property detail page's Maintenance tab. */
-export const TicketFormModal = ({ isOpen, onClose, propertyId, propertyName }) => {
-  const { data: propertiesData } = useProperties({ pageSize: 100, status: 'published' });
+/**
+ * Create a ticket — `MaintenanceTicketCreateSerializer`. `propertyId` pre-fills
+ * and locks the property when opened from a Property detail page's Maintenance
+ * tab; `spaceId` does the same for a Space's Maintenance tab (Super-Admin-only
+ * server-side — the caller is responsible for only rendering that entry point
+ * for Super Admins). Exactly one of the two is ever passed.
+ */
+export const TicketFormModal = ({ isOpen, onClose, propertyId, propertyName, spaceId, spaceName }) => {
+  const { data: propertiesData } = useProperties({ pageSize: 100, status: 'published' }, { enabled: !spaceId });
   const { data: workersData } = useMaintenanceWorkers({ status: 'active', pageSize: 100 });
   const { createTicket, isPending } = useCreateTicket();
 
@@ -24,11 +37,11 @@ export const TicketFormModal = ({ isOpen, onClose, propertyId, propertyName }) =
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm({ resolver: zodResolver(maintenanceTicketSchema), defaultValues: emptyValues(propertyId) });
+  } = useForm({ resolver: zodResolver(maintenanceTicketSchema), defaultValues: emptyValues(propertyId, spaceId) });
 
   useEffect(() => {
-    if (isOpen) reset(emptyValues(propertyId));
-  }, [isOpen, propertyId, reset]);
+    if (isOpen) reset(emptyValues(propertyId, spaceId));
+  }, [isOpen, propertyId, spaceId, reset]);
 
   const submit = (values) => createTicket(values, { onSuccess: onClose });
 
@@ -46,7 +59,9 @@ export const TicketFormModal = ({ isOpen, onClose, propertyId, propertyName }) =
       }
     >
       <form className="space-y-3.5" noValidate>
-        {propertyId ? (
+        {spaceId ? (
+          <Input label="Space" value={spaceName} readOnly />
+        ) : propertyId ? (
           <Input label="Property" value={propertyName} readOnly />
         ) : (
           <Select

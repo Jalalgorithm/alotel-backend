@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -6,7 +6,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -50,22 +50,33 @@ const StatusStepper = ({ status, onSelect, canManage }) => {
   );
 };
 
+const emptyCostForm = { costType: 'materials', amount: '', note: '', invoiceReference: '', receiptFile: null };
+
 const CostLogForm = ({ ticketId }) => {
   const { logCost, isPending } = useLogTicketCost(ticketId);
-  const [form, setForm] = useState({ costType: 'materials', amount: '', note: '', invoiceReference: '' });
+  const [form, setForm] = useState(emptyCostForm);
 
   const submit = () => {
     if (!form.amount) return;
-    logCost(form, { onSuccess: () => setForm({ costType: 'materials', amount: '', note: '', invoiceReference: '' }) });
+    logCost(form, { onSuccess: () => setForm(emptyCostForm) });
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-2.5">
-      <Select label="Type" options={TICKET_COST_TYPES} value={form.costType} onChange={(e) => setForm((p) => ({ ...p, costType: e.target.value }))} containerClassName="w-32" />
-      <Input label="Amount" type="number" min="0" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} containerClassName="w-28" />
-      <Input label="Note" value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} containerClassName="flex-1 min-w-40" />
-      <Input label="Invoice ref" value={form.invoiceReference} onChange={(e) => setForm((p) => ({ ...p, invoiceReference: e.target.value }))} containerClassName="w-32" />
-      <Button leftIcon={<Plus className="size-3.5" aria-hidden="true" />} isLoading={isPending} onClick={submit}>Log cost</Button>
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-end gap-2.5">
+        <Select label="Type" options={TICKET_COST_TYPES} value={form.costType} onChange={(e) => setForm((p) => ({ ...p, costType: e.target.value }))} containerClassName="w-32" />
+        <Input label="Amount" type="number" min="0" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} containerClassName="w-28" />
+        <Input label="Note" value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} containerClassName="flex-1 min-w-40" />
+        <Input label="Invoice ref" value={form.invoiceReference} onChange={(e) => setForm((p) => ({ ...p, invoiceReference: e.target.value }))} containerClassName="w-32" />
+        <Button leftIcon={<Plus className="size-3.5" aria-hidden="true" />} isLoading={isPending} onClick={submit}>Log cost</Button>
+      </div>
+      <FileDropzone
+        accept="image/*,.pdf"
+        hint="Receipt scan (optional) — JPG, PNG or PDF"
+        fileName={form.receiptFile?.name}
+        compact
+        onFileSelected={(file) => setForm((p) => ({ ...p, receiptFile: file }))}
+      />
     </div>
   );
 };
@@ -79,6 +90,12 @@ export const TicketDetailPage = () => {
 
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.maintenanceManage);
+
+  const [notesDraft, setNotesDraft] = useState('');
+  useEffect(() => {
+    setNotesDraft(ticket?.resolutionNotes ?? '');
+  }, [ticket?.id, ticket?.resolutionNotes]);
+  const notesDirty = ticket && notesDraft !== (ticket.resolutionNotes ?? '');
 
   if (isLoading) {
     return (
@@ -138,6 +155,22 @@ export const TicketDetailPage = () => {
         </Card>
       </div>
 
+      <Card className="p-4">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Resolution notes</p>
+        {canManage ? (
+          <div className="space-y-2">
+            <Textarea rows={3} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="What was done to resolve this — visible once the ticket moves to Resolved or Closed." />
+            {notesDirty && (
+              <Button size="sm" onClick={() => updateTicket(ticket.id, { resolution_notes: notesDraft })}>
+                Save notes
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-[12.5px] leading-5 text-ink-soft">{ticket.resolutionNotes || 'No resolution notes yet.'}</p>
+        )}
+      </Card>
+
       <Card>
         <CardHeader title="Cost log" subtitle={`Total so far: ${ticket.totalCost.toLocaleString()}`} />
         <div className="space-y-3 border-t border-line p-4">
@@ -149,6 +182,11 @@ export const TicketDetailPage = () => {
                   <div className="min-w-0">
                     <p className="font-semibold text-ink">{TICKET_COST_TYPES.find((c) => c.value === cost.costType)?.label} · {cost.note || 'No note'}</p>
                     {cost.invoiceReference && <p className="text-[11px] text-ink-muted">Invoice: {cost.invoiceReference}</p>}
+                    {cost.receiptUrl && (
+                      <a href={cost.receiptUrl} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-brand-700 hover:underline">
+                        View receipt
+                      </a>
+                    )}
                   </div>
                   <span className="shrink-0 font-semibold tabular-nums">{cost.amount.toLocaleString()}</span>
                 </div>

@@ -18,6 +18,13 @@ export const usePayouts = (params = {}) =>
     placeholderData: keepPreviousData,
   });
 
+/** Payout display fields differ between the mock fixture (`owner`/`period`) and the real API (`propertyName`/`periodStart`/`periodEnd`) — read either. */
+const payoutToastDetail = (payout) => {
+  const who = payout.owner ?? payout.propertyName ?? 'Payout';
+  const when = payout.period ?? [payout.periodStart, payout.periodEnd].filter(Boolean).join(' – ');
+  return when ? `${who} · ${when}` : who;
+};
+
 export const useReleasePayout = () => {
   const queryClient = useQueryClient();
 
@@ -25,7 +32,7 @@ export const useReleasePayout = () => {
     mutationFn: financeService.releasePayout,
     onSuccess: (payout) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
-      toast.success('Payout released', `${payout.owner} · ${payout.period}`);
+      toast.success('Payout released', payoutToastDetail(payout));
     },
     onError: (error) => toast.error('Could not release payout', getErrorMessage(error)),
   });
@@ -33,11 +40,47 @@ export const useReleasePayout = () => {
   return { releasePayout: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables };
 };
 
+/** Schedule a new payout — Super Admin only. */
+export const useSchedulePayout = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: financeService.createPayout,
+    onSuccess: (payout) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+      toast.success('Payout scheduled', payoutToastDetail(payout));
+    },
+    onError: (error) => toast.error('Could not schedule payout', getErrorMessage(error)),
+  });
+
+  return { schedulePayout: mutation.mutate, isPending: mutation.isPending };
+};
+
 export const useRevenue = () =>
   useQuery({
     queryKey: queryKeys.finance.invoices(),
     queryFn: financeService.getRevenue,
   });
+
+/* -------------------------------------------------------------------------- */
+/* Expenses (Cost Breakdown's manual categories)                              */
+/* -------------------------------------------------------------------------- */
+
+export const useLogExpense = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: financeService.createExpense,
+    onSuccess: () => {
+      // Cost Breakdown lives under `dashboard`, not `finance` — invalidate both prefixes.
+      queryClient.invalidateQueries({ queryKey: ['dashboard', 'cost-breakdown'] });
+      toast.success('Expense logged');
+    },
+    onError: (error) => toast.error('Could not log expense', getErrorMessage(error)),
+  });
+
+  return { logExpense: mutation.mutate, isPending: mutation.isPending };
+};
 
 /* --------------------------------------------------------------- tax rules */
 
@@ -201,6 +244,13 @@ export const useConfirmNoTax = () => {
  * to hook onto across N independent requests).
  */
 export const importTaxRuleCsvRow = (row) => financeService.createTaxRuleFromCsvRow(row);
+
+/**
+ * Bulk CSV import — one request for the whole file (real path) rather than
+ * `importTaxRuleCsvRow`'s per-row loop. Not a `useMutation` for the same
+ * reason as `importTaxRuleCsvRow`: the modal drives its own loading state.
+ */
+export const bulkImportTaxRules = (payload) => financeService.bulkImportTaxRules(payload);
 
 /* -------------------------------------------------------------------------- */
 /* Payment operations                                                          */

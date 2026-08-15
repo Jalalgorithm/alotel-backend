@@ -68,6 +68,16 @@ const mockDashboard = {
       ],
     });
   },
+
+  /** Backs the Cost Breakdown donut when `VITE_USE_MOCK_DASHBOARD=true` — reuses the existing category-split fixture. */
+  async costBreakdown() {
+    await delay(280);
+    return clone({
+      period_start: null,
+      period_end: null,
+      breakdown: costBreakdown.map((entry) => ({ category: entry.label, amount: String(entry.value) })),
+    });
+  },
 };
 
 /**
@@ -89,6 +99,22 @@ const realDashboard = {
     });
     return data;
   },
+
+  /**
+   * `GET /admin/dashboard/cost-breakdown/` — spend by category, defaulting to
+   * month-to-date. Maintenance is derived server-side from ticket costs;
+   * Operation/Staff/Marketing/Others come from the manual `ExpenseEntry` log
+   * (`financeService.getExpenses`/`createExpense`).
+   */
+  costBreakdown: async ({ startDate, endDate } = {}) => {
+    const { data } = await apiClient.get('/admin/dashboard/cost-breakdown/', {
+      params: {
+        ...(startDate ? { start_date: startDate } : {}),
+        ...(endDate ? { end_date: endDate } : {}),
+      },
+    });
+    return data;
+  },
 };
 
 const dashboardBackend = env.useMockDashboard ? mockDashboard : realDashboard;
@@ -99,6 +125,9 @@ export const dashboardService = {
 
   /** Real `/admin/dashboard/revenue-overview/` — see `realDashboard.revenueOverview` for the exact shape. */
   getRevenueOverview: (params) => dashboardBackend.revenueOverview(params),
+
+  /** Real `/admin/dashboard/cost-breakdown/` — see `realDashboard.costBreakdown` for the exact shape. */
+  getCostBreakdown: (params) => dashboardBackend.costBreakdown(params),
 
   /**
    * Sidebar counters have no backend equivalent yet (there's no

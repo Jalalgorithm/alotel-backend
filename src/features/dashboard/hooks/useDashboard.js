@@ -18,6 +18,13 @@ export const useRevenueOverview = (params = {}) =>
     queryFn: () => dashboardService.getRevenueOverview(params),
   });
 
+/** Cost Breakdown donut — spend by category for a given `{ startDate, endDate }` range (defaults to month-to-date). */
+export const useCostBreakdown = (params = {}) =>
+  useQuery({
+    queryKey: queryKeys.dashboard.costBreakdown(params),
+    queryFn: () => dashboardService.getCostBreakdown(params),
+  });
+
 /**
  * Sidebar counters.
  *

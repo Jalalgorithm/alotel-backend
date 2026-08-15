@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/utils/classNames';
 import { formatRelative } from '@/utils/format';
-import { useMarkNotificationRead, useMyNotifications } from '../hooks/useNotifications';
+import { useMarkAllRead, useMarkNotificationRead, useMyNotifications } from '../hooks/useNotifications';
 
 const CHANNEL_LABEL = { email: 'Email', sms: 'SMS', in_app: 'In-App' };
 
@@ -15,6 +15,7 @@ const CHANNEL_LABEL = { email: 'Email', sms: 'SMS', in_app: 'In-App' };
 export const NotificationsPage = () => {
   const { data: notifications = [], isLoading } = useMyNotifications();
   const { markRead, isPending } = useMarkNotificationRead();
+  const { markAllRead, isPending: isMarkingAllRead } = useMarkAllRead();
 
   const unread = notifications.filter((entry) => !entry.isRead);
 
@@ -28,6 +29,13 @@ export const NotificationsPage = () => {
             <Badge variant="warn" dot>
               {unread.length} unread
             </Badge>
+          )
+        }
+        actions={
+          unread.length > 0 && (
+            <Button size="sm" variant="secondary" isLoading={isMarkingAllRead} leftIcon={<Check className="size-3.5" aria-hidden="true" />} onClick={() => markAllRead()}>
+              Mark all read
+            </Button>
           )
         }
       />

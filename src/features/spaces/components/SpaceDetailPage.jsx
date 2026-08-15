@@ -15,6 +15,7 @@ import { formatCurrency } from '@/utils/format';
 import { toast } from '@/stores/uiStore';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
+import { SpaceMaintenanceTab } from '@/features/maintenance';
 import { paths } from '@/routes/paths';
 import { currencyForSpace, locationLabel, slotUnitSuffix, SPACE_STATUSES, STATUS_BADGE_VARIANT } from '@/lib/spaceSchema';
 import { useSetSpaceStatus, useSpace, useSpaceImageMutations, useSpaceImages } from '../hooks/useSpaces';
@@ -32,29 +33,36 @@ const TABS = [
   { id: 'hours', label: 'Hours & Blackouts' },
   { id: 'bookings', label: 'Bookings' },
   /**
-   * Always visible so the module reads as complete, but inert — Maintenance's
-   * real backend only links to Property today (no Space FK yet), so this tab
-   * has no data to show until that ships. See `PropertyMaintenanceTab` for
-   * the working equivalent on the Property detail page.
+   * Space-linked maintenance tickets are Super-Admin-only server-side — no
+   * `assigned_spaces` scoping concept exists for Facility Managers the way it
+   * does for Properties. Always shown so the module reads as complete; gated
+   * to Super Admins below.
    */
-  { id: 'maintenance', label: 'Maintenance', disabled: true },
+  { id: 'maintenance', label: 'Maintenance' },
 ];
+
+/** Max images per space, server-enforced — mirrored here for a proactive "5/5 used" note instead of only surfacing it as an upload error. */
+const MAX_SPACE_IMAGES = 5;
 
 const PhotosTab = ({ spaceId, canManage }) => {
   const { data: images = [], isLoading } = useSpaceImages(spaceId);
   const { uploadImage, isUploading, deleteImage, pendingId } = useSpaceImageMutations(spaceId);
+  const atCap = images.length >= MAX_SPACE_IMAGES;
 
   return (
     <Card>
       <div className="space-y-4 p-4">
-        {canManage && (
-          <FileDropzone
-            accept="image/*"
-            hint="JPG or PNG, up to 20MB"
-            compact
-            onFileSelected={(file) => file && uploadImage({ file, order: images.length })}
-          />
-        )}
+        {canManage &&
+          (atCap ? (
+            <p className="text-[11.5px] text-ink-muted">{MAX_SPACE_IMAGES}/{MAX_SPACE_IMAGES} photos used — remove one to add another.</p>
+          ) : (
+            <FileDropzone
+              accept="image/*"
+              hint={`JPG or PNG, up to 20MB · ${images.length}/${MAX_SPACE_IMAGES} used`}
+              compact
+              onFileSelected={(file) => file && uploadImage({ file, order: images.length })}
+            />
+          ))}
         {isUploading && <p className="text-[11px] text-ink-muted">Uploading…</p>}
 
         {isLoading ? (
@@ -95,8 +103,9 @@ export const SpaceDetailPage = () => {
 
   const { setStatus, isPending: isStatusPending } = useSetSpaceStatus();
 
-  const { can } = useAuth();
+  const { can, role } = useAuth();
   const canManage = can(CAPABILITIES.spacesManage);
+  const isSuperAdmin = role === 'L1';
 
   useEffect(() => {
     setIsEditing(false);
@@ -228,12 +237,15 @@ export const SpaceDetailPage = () => {
       {tab === 'addons' && <AddonsTab spaceId={space.id} canManage={canManage} currency={currency} />}
       {tab === 'hours' && <HoursBlackoutsTab spaceId={space.id} canManage={canManage} />}
       {tab === 'bookings' && <BookingsTab spaceId={space.id} canManage={canManage} />}
-      {tab === 'maintenance' && (
-        <Alert variant="info" title="Not available yet">
-          Maintenance oversight currently only links to Properties — Space support ships once the backend adds a Space
-          reference to its ticket and assignment models.
-        </Alert>
-      )}
+      {tab === 'maintenance' &&
+        (isSuperAdmin ? (
+          <SpaceMaintenanceTab spaceId={space.id} spaceName={space.title} />
+        ) : (
+          <Alert variant="info" title="Super Admin only">
+            Space-linked maintenance tickets are Super Admin only — there's no Facility Manager assignment concept for
+            Spaces the way there is for Properties.
+          </Alert>
+        ))}
 
       <EditSpaceModal isOpen={isEditing} onClose={() => setIsEditing(false)} space={space} />
     </div>

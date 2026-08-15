@@ -74,6 +74,8 @@ const STATUS_VARIANT = {
   Processing: 'info',
   Scheduled: 'info',
   Due: 'warn',
+  // Payouts (`payments.Payout.status`)
+  Released: 'ok',
   // Staff
   Inactive: 'danger',
   // Priorities

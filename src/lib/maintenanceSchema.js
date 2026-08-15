@@ -119,10 +119,12 @@ export const toTicketCost = (raw) => ({
   amount: toNumber(raw.amount),
   note: raw.note ?? '',
   invoiceReference: raw.invoice_reference ?? '',
+  receiptUrl: raw.receipt_file ?? null,
   loggedBy: raw.logged_by,
   createdAt: raw.created_at,
 });
 
+/** Plain object when there's no receipt to attach; the caller switches to `FormData` when `receiptFile` is present. */
 export const toTicketCostPayload = (values) => ({
   cost_type: values.costType,
   amount: String(Number(values.amount) || 0),
@@ -144,6 +146,8 @@ export const toTicket = (raw) => {
     id: raw.id,
     propertyId: raw.property,
     propertyName: raw.property_name ?? '',
+    /** `space` FK — Super-Admin-only tickets linked to a Space instead of a Property. Exactly one of the two is ever set. */
+    spaceId: raw.space,
     category: raw.category ?? '',
     description: raw.description ?? '',
     priority: raw.priority ?? 'medium',
@@ -151,6 +155,7 @@ export const toTicket = (raw) => {
     assignedWorkerId: raw.assigned_worker,
     assignedWorkerName: raw.assigned_worker_name ?? '',
     createdBy: raw.created_by,
+    resolutionNotes: raw.resolution_notes ?? '',
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
     resolvedAt: raw.resolved_at,
@@ -160,8 +165,9 @@ export const toTicket = (raw) => {
   };
 };
 
+/** Exactly one of `property_id`/`space_id` — space-linked tickets are Super-Admin-only server-side. */
 export const toTicketPayload = (values) => ({
-  property_id: values.propertyId,
+  ...(values.spaceId ? { space_id: values.spaceId } : { property_id: values.propertyId }),
   category: values.category?.trim() ?? '',
   description: values.description?.trim() ?? '',
   priority: values.priority,

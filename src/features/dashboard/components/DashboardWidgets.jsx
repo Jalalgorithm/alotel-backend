@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek, subWeeks } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Megaphone, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react';
+import { CheckCircle2, Megaphone, Plus, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
@@ -11,11 +11,11 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { BarChart, DonutChart } from '@/components/charts';
 import { formatDate, formatRelative } from '@/utils/format';
 import { paths } from '@/routes/paths';
-import { costBreakdown } from '@/lib/mock/finance';
 import { PRIORITY_BADGE_VARIANT } from '@/lib/maintenanceSchema';
 import { useMaintenanceTickets } from '@/features/maintenance';
 import { useAnnouncements } from '@/features/system';
-import { useRevenueOverview } from '../hooks/useDashboard';
+import { LogExpenseModal } from '@/features/finance';
+import { useCostBreakdown, useRevenueOverview } from '../hooks/useDashboard';
 import { useVerificationDecision, useVerifications } from '../hooks/useVerificationDecision';
 
 const RANGE_PRESETS = {
@@ -69,30 +69,47 @@ export const RevenueOverviewCard = () => {
 };
 
 /**
- * Cost Breakdown donut.
- *
- * No backend endpoint tracks operating spend by category (only a single
- * maintenance `total_spend` figure exists — see `MaintenanceSpendCard`'s old
- * home in git history). This reuses the same `costBreakdown` mock split the
- * Revenue & Invoice screen already shows, clearly a placeholder until
- * `GET /admin/dashboard/cost-breakdown/` (or similar) exists for real.
- * The centre figure is real — it's the dashboard's own occupancy rate.
+ * Cost Breakdown donut — `GET /admin/dashboard/cost-breakdown/`, month-to-date
+ * spend by category. Maintenance is derived server-side from ticket costs;
+ * everything else comes from the manually-logged `ExpenseEntry` model. The
+ * centre figure is real too — it's the dashboard's own occupancy rate.
  */
-export const CostBreakdownCard = ({ occupancyValue }) => (
-  <Card className="flex flex-col">
-    <CardHeader
-      title="Cost Breakdown"
-      action={
-        <Link to={paths.revenue} className="shrink-0 text-[11px] font-semibold text-brand-700 hover:underline">
-          See Details
-        </Link>
-      }
-    />
-    <div className="flex-1 px-4 pb-4">
-      <DonutChart data={costBreakdown} centerValue={occupancyValue ?? '—'} centerLabel="Total occupancy" size={148} />
-    </div>
-  </Card>
-);
+export const CostBreakdownCard = ({ occupancyValue }) => {
+  const [isLogging, setIsLogging] = useState(false);
+  const { data, isLoading } = useCostBreakdown();
+  const chartData = (data?.breakdown ?? []).map((entry) => ({ label: entry.category, value: Number(entry.amount) || 0 }));
+
+  return (
+    <Card className="flex flex-col">
+      <CardHeader
+        title="Cost Breakdown"
+        action={
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsLogging(true)}
+              className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-brand-700 hover:underline"
+            >
+              <Plus className="size-3" aria-hidden="true" /> Log expense
+            </button>
+            <Link to={paths.revenue} className="shrink-0 text-[11px] font-semibold text-brand-700 hover:underline">
+              See Details
+            </Link>
+          </div>
+        }
+      />
+      <div className="flex-1 px-4 pb-4">
+        {isLoading ? (
+          <Skeleton className="h-36 rounded-lg" />
+        ) : (
+          <DonutChart data={chartData} centerValue={occupancyValue ?? '—'} centerLabel="Total occupancy" size={148} />
+        )}
+      </div>
+
+      <LogExpenseModal isOpen={isLogging} onClose={() => setIsLogging(false)} />
+    </Card>
+  );
+};
 
 /** `GET /kyc/full/pending/` + `POST /kyc/full/approve/` — identity/ownership verification queue. */
 export const PendingVerificationsCard = () => {
