@@ -3,10 +3,11 @@ import { CalendarDays, Clock, Download, FileText } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CardSkeleton, Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
+import { cn } from '@/utils/classNames';
 import { StatCard } from './StatCard';
 import { QuickActions } from './QuickActions';
 import { CheckInsPanel, HousekeeperTasksPanel, RecentBookingsPanel } from './DashboardPanels';
-import { AnnouncementsCard, MaintenanceRequestCard, MaintenanceSpendCard, PendingVerificationsCard, RevenueOverviewCard } from './DashboardWidgets';
+import { AnnouncementsCard, CostBreakdownCard, MaintenanceRequestCard, PendingVerificationsCard, RevenueOverviewCard } from './DashboardWidgets';
 import { useDashboardOverview } from '../hooks/useDashboard';
 import { useAuth } from '@/features/auth';
 import { useBookings } from '@/features/bookings';
@@ -19,30 +20,30 @@ import { CAPABILITIES } from '@/lib/mock/people';
 const CARD_LABELS = {
   active_bookings: 'Active Bookings',
   occupancy_rate: 'Occupancy Rate',
-  revenue_mtd: 'Revenue (MTD)',
-  pending_checkins: 'Pending Check-ins',
-  pending_checkouts: 'Pending Check-outs',
-  unresolved_issues: 'Unresolved Issues',
-  properties_created: 'Properties Created',
-  staff_count: 'Staff Count',
-  users_count: 'Registered Users',
+  revenue_mtd: 'Monthly Revenue',
 };
 
 const CARD_ICONS = {
   active_bookings: 'calendar',
   occupancy_rate: 'gauge',
   revenue_mtd: 'wallet',
-  pending_checkins: 'calendar',
-  pending_checkouts: 'calendar',
-  unresolved_issues: 'building',
-  properties_created: 'building',
-  staff_count: 'building',
-  users_count: 'building',
 };
 
-/** The 3 headline cards shown in the primary KPI row (alongside the Total Properties tile) — the rest render in a secondary row. */
+/** The 3 headline cards shown alongside the Total Properties tile — matches the dashboard mockup's 4-tile row exactly. */
 const PRIMARY_CARD_ORDER = ['active_bookings', 'occupancy_rate', 'revenue_mtd'];
-const SECONDARY_CARD_ORDER = ['pending_checkins', 'pending_checkouts', 'unresolved_issues', 'properties_created', 'staff_count', 'users_count'];
+
+/**
+ * Month-over-month deltas the mockup shows on every KPI tile. `/admin/dashboard/`
+ * has no comparable-period figure yet (flagged to the backend as a real gap —
+ * see the handoff notes), so these are clearly-placeholder numbers, not derived
+ * from anything real, kept only so the tiles read the way the design intends.
+ */
+const MOCK_DELTAS = {
+  properties: '+12% this month',
+  active_bookings: '+18% this week',
+  occupancy_rate: '+18% vs last month',
+  revenue_mtd: '+22% vs last month',
+};
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -66,9 +67,10 @@ const toCheckInEntry = (booking) => ({
 
 /**
  * Landing screen. Renders one of three shapes depending on
- * `/admin/dashboard/`'s role-based response: Super Admin gets 9 KPI cards,
- * Facility Manager gets 4 operational cards (no financials), Housekeeper
- * gets today's task list (no guest PII, so no booking panels for that role).
+ * `/admin/dashboard/`'s role-based response: Super Admin gets the full 4-tile
+ * KPI row + financials, Facility Manager gets the same layout minus anything
+ * `financeView`-gated, Housekeeper gets today's task list (no guest PII, so no
+ * booking panels for that role).
  */
 export const DashboardPage = () => {
   const { user, can } = useAuth();
@@ -80,9 +82,7 @@ export const DashboardPage = () => {
   const primaryCards = data?.cards
     ? PRIMARY_CARD_ORDER.filter((key) => key in data.cards).map((key) => [key, data.cards[key]])
     : [];
-  const secondaryCards = data?.cards
-    ? SECONDARY_CARD_ORDER.filter((key) => key in data.cards).map((key) => [key, data.cards[key]])
-    : [];
+  const occupancyCard = data?.cards?.occupancy_rate;
 
   // Recent bookings / today's arrivals reuse the already-real bookings admin list —
   // Housekeepers can't call it (IsLevel1Or2), so these stay disabled for that role.
@@ -115,7 +115,7 @@ export const DashboardPage = () => {
             </span>
             <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted tabular-nums">
               <Clock className="size-3.5" aria-hidden="true" />
-              {format(now, 'h:mm:ssa')}
+              {format(now, 'h:mma')}
             </span>
           </>
         }
@@ -155,21 +155,26 @@ export const DashboardPage = () => {
         />
       ) : (
         <>
-          {/* Primary KPI row — Total Properties + the 3 headline cards the screenshot shows. */}
+          {/* KPI row — Total Properties + the 3 headline cards, each with the mockup's delta. */}
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {isLoading ? (
               Array.from({ length: 4 }, (_, index) => <CardSkeleton key={index} />)
             ) : (
               <>
                 {canSeeProperties && (
-                  <StatCard label="Total Properties" value={propertyTotals?.total ?? '—'} icon="building" />
+                  <StatCard
+                    label="Total Properties"
+                    value={propertyTotals?.total ?? '—'}
+                    delta={MOCK_DELTAS.properties}
+                    icon="building"
+                  />
                 )}
                 {primaryCards.map(([key, card]) => (
                   <StatCard
                     key={key}
                     label={CARD_LABELS[key] ?? key}
                     value={card.unit === '%' ? `${card.value}%` : card.value}
-                    subtext={card.sub_text}
+                    delta={MOCK_DELTAS[key]}
                     icon={CARD_ICONS[key]}
                   />
                 ))}
@@ -177,48 +182,32 @@ export const DashboardPage = () => {
             )}
           </section>
 
-          {/* Secondary operational cards — real, just not part of the screenshot's headline row. */}
-          {!isLoading && secondaryCards.length > 0 && (
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {secondaryCards.map(([key, card]) => (
-                <StatCard
-                  key={key}
-                  label={CARD_LABELS[key] ?? key}
-                  value={card.unit === '%' ? `${card.value}%` : card.value}
-                  subtext={card.sub_text}
-                  icon={CARD_ICONS[key]}
-                  className="p-3.5"
-                />
-              ))}
-            </section>
-          )}
-
           <QuickActions />
 
-          <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {/* Recent Bookings + Revenue Overview + Cost Breakdown — one row, matching the mockup's proportions. */}
+          <section className={cn('grid grid-cols-1 gap-4', canSeeRevenue && 'xl:grid-cols-[1.4fr_1fr_0.9fr]')}>
             {isLoading ? (
               <>
-                <Skeleton className="h-64 rounded-card" />
-                <Skeleton className="h-64 rounded-card" />
+                <Skeleton className="h-64 rounded-card xl:col-span-3" />
               </>
             ) : (
               <>
                 <RecentBookingsPanel bookings={(recentBookings?.items ?? []).map(toBookingRow)} />
-                {canSeeRevenue ? <RevenueOverviewCard /> : <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />}
+                {canSeeRevenue && (
+                  <>
+                    <RevenueOverviewCard />
+                    <CostBreakdownCard occupancyValue={occupancyCard ? `${occupancyCard.value}%` : undefined} />
+                  </>
+                )}
               </>
             )}
           </section>
 
+          {/* Check-ins Today / Pending Verifications / Maintenance Requests / System Announcements — one row. */}
           {!isLoading && (
-            <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-              {canSeeMaintenance && <MaintenanceSpendCard />}
-              {canSeeRevenue && <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />}
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <CheckInsPanel checkIns={(arrivals?.items ?? []).map(toCheckInEntry)} />
               {canSeeVerifications && <PendingVerificationsCard />}
-            </section>
-          )}
-
-          {!isLoading && (
-            <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {canSeeMaintenance && <MaintenanceRequestCard />}
               <AnnouncementsCard />
             </section>

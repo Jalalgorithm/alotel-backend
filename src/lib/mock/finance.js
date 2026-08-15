@@ -66,11 +66,11 @@ export const revenueByDay = [
 
 /** Operating cost split backing the "Cost Breakdown" donut. */
 export const costBreakdown = [
-  { label: 'Operations', value: 40 },
-  { label: 'Staff', value: 26 },
-  { label: 'Marketing', value: 18 },
-  { label: 'Utilities', value: 10 },
-  { label: 'Other', value: 6, isOther: true },
+  { label: 'Operation', value: 40 },
+  { label: 'Staff', value: 25 },
+  { label: 'Marketing', value: 15 },
+  { label: 'Maintenance', value: 10 },
+  { label: 'Others', value: 10, isOther: true },
 ];
 
 /* -------------------------------------------------------------------------- */

@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { endOfMonth, endOfWeek, format, startOfMonth, startOfWeek, subWeeks } from 'date-fns';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ThumbsDown, ThumbsUp, Wrench, XCircle } from 'lucide-react';
+import { CheckCircle2, Megaphone, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { BarChart } from '@/components/charts';
+import { BarChart, DonutChart } from '@/components/charts';
 import { formatDate, formatRelative } from '@/utils/format';
 import { paths } from '@/routes/paths';
-import { PRIORITY_BADGE_VARIANT, STATUS_BADGE_VARIANT, TICKET_STATUSES } from '@/lib/maintenanceSchema';
-import { useMaintenanceDashboard, useMaintenanceTickets } from '@/features/maintenance';
+import { costBreakdown } from '@/lib/mock/finance';
+import { PRIORITY_BADGE_VARIANT } from '@/lib/maintenanceSchema';
+import { useMaintenanceTickets } from '@/features/maintenance';
 import { useAnnouncements } from '@/features/system';
 import { useRevenueOverview } from '../hooks/useDashboard';
 import { useVerificationDecision, useVerifications } from '../hooks/useVerificationDecision';
@@ -67,28 +68,31 @@ export const RevenueOverviewCard = () => {
   );
 };
 
-/** `/operations/maintenance/dashboard/` — total spend for the property scope, no category breakdown available server-side. */
-export const MaintenanceSpendCard = () => {
-  const { data, isLoading } = useMaintenanceDashboard();
-
-  if (isLoading) return <Skeleton className="h-full min-h-[9rem] rounded-card" />;
-
-  return (
-    <Card className="p-4">
-      <span className="flex size-9 items-center justify-center rounded-lg bg-brand-50">
-        <Wrench className="size-4 text-brand-600" aria-hidden="true" />
-      </span>
-      <p className="mt-3 font-display text-[26px] font-bold leading-none text-ink">
-        {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(data?.totalSpend ?? 0)}
-      </p>
-      <p className="mt-1.5 text-[12px] text-ink-soft">Maintenance spend this period</p>
-      <p className="mt-2 text-[11px] text-ink-muted">
-        {data?.openCount ?? 0} open ticket{data?.openCount === 1 ? '' : 's'}
-        {data?.avgResolutionHours != null ? ` · ${data.avgResolutionHours}h avg resolution` : ''}
-      </p>
-    </Card>
-  );
-};
+/**
+ * Cost Breakdown donut.
+ *
+ * No backend endpoint tracks operating spend by category (only a single
+ * maintenance `total_spend` figure exists — see `MaintenanceSpendCard`'s old
+ * home in git history). This reuses the same `costBreakdown` mock split the
+ * Revenue & Invoice screen already shows, clearly a placeholder until
+ * `GET /admin/dashboard/cost-breakdown/` (or similar) exists for real.
+ * The centre figure is real — it's the dashboard's own occupancy rate.
+ */
+export const CostBreakdownCard = ({ occupancyValue }) => (
+  <Card className="flex flex-col">
+    <CardHeader
+      title="Cost Breakdown"
+      action={
+        <Link to={paths.revenue} className="shrink-0 text-[11px] font-semibold text-brand-700 hover:underline">
+          See Details
+        </Link>
+      }
+    />
+    <div className="flex-1 px-4 pb-4">
+      <DonutChart data={costBreakdown} centerValue={occupancyValue ?? '—'} centerLabel="Total occupancy" size={148} />
+    </div>
+  </Card>
+);
 
 /** `GET /kyc/full/pending/` + `POST /kyc/full/approve/` — identity/ownership verification queue. */
 export const PendingVerificationsCard = () => {
@@ -173,9 +177,8 @@ export const MaintenanceRequestCard = () => {
                 <p className="truncate text-[12.5px] font-semibold text-ink">{ticket.category || 'Maintenance ticket'}</p>
                 <p className="truncate text-[10.5px] text-ink-muted">{ticket.propertyName}</p>
               </div>
-              <Badge variant={PRIORITY_BADGE_VARIANT[ticket.priority] ?? 'neutral'}>{ticket.priority}</Badge>
-              <Badge variant={STATUS_BADGE_VARIANT[ticket.status] ?? 'neutral'} dot>
-                {TICKET_STATUSES.find((s) => s.value === ticket.status)?.label ?? ticket.status}
+              <Badge variant={PRIORITY_BADGE_VARIANT[ticket.priority] ?? 'neutral'} className="capitalize">
+                {ticket.priority}
               </Badge>
             </li>
           ))}
@@ -201,11 +204,16 @@ export const AnnouncementsCard = () => {
         </div>
       ) : announcements.length ? (
         <ul className="divide-y divide-line border-t border-line">
-          {announcements.slice(0, 3).map((entry) => (
-            <li key={entry.id} className="px-4 py-2.5">
-              <p className="text-[12.5px] font-semibold text-ink">{entry.title}</p>
-              <p className="mt-0.5 text-[11px] text-ink-muted">{entry.body}</p>
-              <p className="mt-1 text-[10px] text-ink-muted">{formatDate(entry.createdAt)}</p>
+          {announcements.slice(0, 4).map((entry) => (
+            <li key={entry.id} className="flex items-start gap-3 px-4 py-2.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-50">
+                <Megaphone className="size-3.5 text-brand-600" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12.5px] font-semibold text-ink">{entry.title}</p>
+                <p className="mt-0.5 truncate text-[11px] text-ink-muted">{entry.body}</p>
+              </div>
+              <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-muted">{formatDate(entry.createdAt)}</span>
             </li>
           ))}
         </ul>
