@@ -221,10 +221,20 @@ const GenerateReportSection = ({ bookingId, damageItems }) => {
   );
 };
 
-const ManualDepositOverride = ({ bookingId, currency }) => {
+/**
+ * Super Admin bypass. Gated on the same rules `DepositCaptureView`/
+ * `DepositReleaseView`/`DepositDeductView` actually enforce (`payments/views.py`):
+ * capture only makes sense while `status === 'held'` (a `preauth_hold` not yet
+ * captured); release/deduct both draw from the same `available` balance and
+ * both 400 once `status === 'released'`.
+ */
+const ManualDepositOverride = ({ bookingId, currency, deposit }) => {
   const { captureDeposit, deductDeposit, releaseDeposit, isPending } = usePaymentActions();
   const [reason, setReason] = useState('');
   const [amount, setAmount] = useState('');
+
+  const canCapture = deposit?.collection_method !== 'upfront_charge' && deposit?.status === 'held';
+  const isReleased = deposit?.status === 'released';
 
   return (
     <Card>
@@ -235,9 +245,15 @@ const ManualDepositOverride = ({ bookingId, currency }) => {
           <Input label="Reason (for deduction)" value={reason} onChange={(e) => setReason(e.target.value)} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button isLoading={isPending} onClick={() => captureDeposit({ bookingId, amount: amount || undefined })}>Capture</Button>
-          <Button variant="dangerSoft" isLoading={isPending} disabled={!amount} onClick={() => deductDeposit({ bookingId, amount, reason })}>Deduct</Button>
-          <Button variant="primary" isLoading={isPending} onClick={() => releaseDeposit({ bookingId })}>Release remainder</Button>
+          <Button isLoading={isPending} disabled={!canCapture} onClick={() => captureDeposit({ bookingId, amount: amount || undefined })}>
+            {canCapture ? 'Capture' : 'Captured'}
+          </Button>
+          <Button variant="dangerSoft" isLoading={isPending} disabled={!amount || isReleased} onClick={() => deductDeposit({ bookingId, amount, reason })}>
+            Deduct
+          </Button>
+          <Button variant="primary" isLoading={isPending} disabled={isReleased} onClick={() => releaseDeposit({ bookingId })}>
+            {isReleased ? 'Released' : 'Release remainder'}
+          </Button>
         </div>
       </div>
     </Card>
@@ -276,7 +292,7 @@ export const CheckoutReportDetailModal = ({ isOpen, onClose, booking }) => {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           {[
             ['Deposit status', deposit?.status ?? '—', 'bg-line-soft text-ink'],
-            ['Held', deposit ? formatCurrency(Number(deposit.amount_captured ?? deposit.amount_authorized ?? 0), deposit.currency ?? booking.currency) : '—', 'bg-line-soft text-ink'],
+            ['Held', deposit ? formatCurrency(Number(deposit.amount_captured) || Number(deposit.amount_authorized) || 0, deposit.currency ?? booking.currency) : '—', 'bg-line-soft text-ink'],
             ['Deducted', deposit ? formatCurrency(Number(deposit.amount_deducted ?? 0), deposit.currency ?? booking.currency) : '—', 'bg-warn-soft text-warn'],
             ['Released', deposit ? formatCurrency(Number(deposit.amount_released ?? 0), deposit.currency ?? booking.currency) : '—', 'bg-ok-soft text-ok'],
           ].map(([label, value, tone]) => (
@@ -329,7 +345,7 @@ export const CheckoutReportDetailModal = ({ isOpen, onClose, booking }) => {
 
         <GenerateReportSection bookingId={bookingId} damageItems={damageItems.length ? damageItems : [{ currency: booking.currency }]} />
 
-        {canOverride && <ManualDepositOverride bookingId={bookingId} currency={booking.currency} />}
+        {canOverride && <ManualDepositOverride bookingId={bookingId} currency={booking.currency} deposit={deposit} />}
       </div>
     </Modal>
   );

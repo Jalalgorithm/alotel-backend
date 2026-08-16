@@ -113,14 +113,18 @@ const PaymentOperations = ({ booking, currency }) => {
             ) : (
               <Button
                 size="sm"
-                disabled={isPending}
+                disabled={isPending || deposit.status !== 'held'}
                 onClick={() => captureDeposit({ bookingId: booking.id, amount: amount || undefined })}
               >
-                Capture deposit
+                {deposit.status === 'held' ? 'Capture deposit' : 'Deposit captured'}
               </Button>
             )}
-            <Button size="sm" disabled={isPending} onClick={() => releaseDeposit({ bookingId: booking.id })}>
-              Release deposit
+            <Button
+              size="sm"
+              disabled={isPending || deposit.status === 'released'}
+              onClick={() => releaseDeposit({ bookingId: booking.id })}
+            >
+              {deposit.status === 'released' ? 'Deposit released' : 'Release deposit'}
             </Button>
           </>
         ) : (
@@ -139,7 +143,7 @@ const PaymentOperations = ({ booking, currency }) => {
       <p className="mt-2 text-[11px] text-ink-muted">
         {deposit
           ? (() => {
-              const held = Number(deposit.amount_captured ?? deposit.amount_authorized ?? 0);
+              const held = Number(deposit.amount_captured) || Number(deposit.amount_authorized) || 0;
               return `Deposit ${deposit.status ?? 'on file'}${held ? ` · ${formatCurrency(held, deposit.currency ?? currency)}` : ''}.`;
             })()
           : 'No deposit is currently held against this booking.'}{' '}
