@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, ExternalLink, Sparkles } from 'lucide-react';
-import { Card, CardHeader } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -13,18 +13,26 @@ const COUNTRY_OPTIONS = TAX_COUNTRIES.map((value) => ({ value, label: TAX_COUNTR
 const emptyQuery = () => ({ country: '', state: '', city: '' });
 
 /**
- * Persistent sidebar card — Gemini-backed tax rate research
- * (`POST /properties/taxes/suggest/`). Read-only on the backend; "Add rule"
- * is what actually creates a `TaxRule` (`source`/`status` both
- * `ai_suggested`), so several suggestions can be reviewed and added one at a
- * time without losing the others.
+ * AI-backed tax rate research (`POST /properties/taxes/suggest/`), on demand
+ * behind a button rather than a permanent sidebar slot. Read-only on the
+ * backend; "Add rule" is what actually creates a `TaxRule` (`source`/`status`
+ * both `ai_suggested`), so several suggestions can be reviewed and added one
+ * at a time without losing the others — closing and reopening the modal
+ * always starts a fresh search.
  */
-export const AiTaxCompanionPanel = () => {
+export const AiTaxCompanionModal = ({ isOpen, onClose }) => {
   const [query, setQuery] = useState(emptyQuery());
   const [addedIds, setAddedIds] = useState(() => new Set());
 
-  const { suggest, suggestions, isPending: isSuggesting } = useSuggestTaxRules();
+  const { suggest, suggestions, isPending: isSuggesting, reset: resetSuggestions } = useSuggestTaxRules();
   const { addSuggestion, isPending: isAdding, pendingId } = useCreateTaxRuleFromSuggestion();
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setQuery(emptyQuery());
+    setAddedIds(new Set());
+    resetSuggestions();
+  }, [isOpen, resetSuggestions]);
 
   const runSearch = () => {
     if (!query.country) return;
@@ -38,12 +46,14 @@ export const AiTaxCompanionPanel = () => {
   };
 
   return (
-    <Card>
-      <CardHeader
-        title="AI Tax Companion"
-        subtitle="Researches published rates and drafts rules. It cannot save anything — every suggestion goes through the form, where you decide."
-      />
-      <div className="space-y-3 border-t border-line p-4">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="AI Tax Companion"
+      description="Researches published rates and drafts rules. It cannot save anything — every suggestion goes through the form, where you decide."
+      size="lg"
+    >
+      <div className="space-y-3">
         <Select
           label="Country"
           placeholder="Select"
@@ -132,6 +142,6 @@ export const AiTaxCompanionPanel = () => {
           </div>
         )}
       </div>
-    </Card>
+    </Modal>
   );
 };

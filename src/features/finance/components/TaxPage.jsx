@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pencil, Plus, ThumbsDown, ThumbsUp, Trash2, Upload } from 'lucide-react';
+import { Pencil, Plus, Sparkles, ThumbsDown, ThumbsUp, Trash2, Upload } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { DataTable } from '@/components/ui/DataTable';
@@ -11,7 +11,7 @@ import { GUEST_SEGMENTS, REVIEWABLE_STATUSES, scopeLabel, SOURCE_LABELS, STATUS_
 import { TaxRuleModal } from './TaxBuilder/TaxRuleModal';
 import { RejectRuleModal } from './TaxBuilder/RejectRuleModal';
 import { CoverageAlertsPanel } from './TaxBuilder/CoverageAlertsPanel';
-import { AiTaxCompanionPanel } from './TaxBuilder/AiTaxCompanionPanel';
+import { AiTaxCompanionModal } from './TaxBuilder/AiTaxCompanionModal';
 import { ImportCsvModal } from './TaxBuilder/ImportCsvModal';
 
 const appliesToLabel = (guestSegment) =>
@@ -27,6 +27,7 @@ export const TaxPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [rejectingRule, setRejectingRule] = useState(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isAiCompanionOpen, setIsAiCompanionOpen] = useState(false);
 
   const openCreate = () => {
     setEditingRule(null);
@@ -116,6 +117,9 @@ export const TaxPage = () => {
         subtitle="Rules are checked fresh every time a price is calculated — not once when a property is published."
         actions={
           <>
+            <Button leftIcon={<Sparkles className="size-3.5" aria-hidden="true" />} onClick={() => setIsAiCompanionOpen(true)}>
+              AI Tax Companion
+            </Button>
             <Button leftIcon={<Upload className="size-3.5" aria-hidden="true" />} onClick={() => setIsImportOpen(true)}>
               Import CSV
             </Button>
@@ -156,7 +160,6 @@ export const TaxPage = () => {
 
         <div className="space-y-5">
           <CoverageAlertsPanel />
-          <AiTaxCompanionPanel />
         </div>
       </div>
 
@@ -177,6 +180,8 @@ export const TaxPage = () => {
       />
 
       <ImportCsvModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
+
+      <AiTaxCompanionModal isOpen={isAiCompanionOpen} onClose={() => setIsAiCompanionOpen(false)} />
     </div>
   );
 };

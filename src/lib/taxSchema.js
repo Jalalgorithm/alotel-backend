@@ -167,9 +167,12 @@ export const toAiSuggestionPayload = (suggestion) => ({
   county: '',
   city: suggestion.city || '',
   guest_segment: [],
-  tax_type: suggestion.tax_type,
+  // Gemini's free-text output isn't guaranteed to match the backend's strict enum —
+  // coerce to a safe default the same way `toCsvRowPayload` already does, rather
+  // than forwarding it as-is and risking a 400 the "Add rule" button can't recover from.
+  tax_type: suggestion.tax_type === 'fixed' ? 'fixed' : 'percentage',
   value: String(Number(suggestion.value) || 0),
-  frequency: suggestion.frequency,
+  frequency: suggestion.frequency === 'per_booking' ? 'per_booking' : 'per_night',
   display_label: suggestion.display_label || '',
   status: 'ai_suggested',
   source: 'ai_suggested',
