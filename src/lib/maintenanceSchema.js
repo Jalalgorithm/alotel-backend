@@ -148,6 +148,7 @@ export const toTicket = (raw) => {
     propertyName: raw.property_name ?? '',
     /** `space` FK — Super-Admin-only tickets linked to a Space instead of a Property. Exactly one of the two is ever set. */
     spaceId: raw.space,
+    spaceName: raw.space_title ?? '',
     category: raw.category ?? '',
     description: raw.description ?? '',
     priority: raw.priority ?? 'medium',

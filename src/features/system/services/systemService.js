@@ -85,6 +85,24 @@ const CONFIG_KEYS = {
 /** UI toggle key → `NotificationPreference` field — these three are dictated by the real serializer. */
 const NOTIFICATION_PREF_KEYS = { notifyEmail: 'email_enabled', notifySms: 'sms_enabled', notifyInApp: 'in_app_enabled' };
 
+/** Static UI copy per integration — `GET /admin/integrations/` reports live status, not what each one is for. */
+const INTEGRATION_DESCRIPTIONS = {
+  stripe_identity: 'KYC for stays under 6 months · ~$1.50/check',
+  dropbox_sign: 'E-signature API · eIDAS + ESIGN compliant',
+  flutterwave: 'Nigeria payments · NGN · bank transfer + USSD',
+  onfido: 'Full KYC + AML for stays 6+ months',
+  sendgrid: 'Transactional email provider',
+};
+
+/** `GET /admin/integrations/`'s `{key: {label, configured, note?}}` → the array shape `SettingsPage.jsx` renders. */
+const toIntegrationList = (raw) =>
+  Object.entries(raw ?? {}).map(([id, entry]) => ({
+    id,
+    name: entry.label,
+    description: entry.note || INTEGRATION_DESCRIPTIONS[id] || '',
+    status: entry.configured ? 'Connected' : 'Not configured',
+  }));
+
 const parseConfigValue = (raw, fallback) => {
   if (typeof fallback === 'boolean') return raw === 'true' || raw === true;
   return raw ?? fallback;
@@ -99,9 +117,10 @@ const parseConfigValue = (raw, fallback) => {
  */
 const realSystem = {
   async getSettings(userId) {
-    const [{ data: configData }, prefs] = await Promise.all([
+    const [{ data: configData }, prefs, integrationsList] = await Promise.all([
       apiClient.get('/admin/system/config/'),
       userId ? realSystem.getNotificationPreferences(userId).catch(() => null) : Promise.resolve(null),
+      realSystem.getIntegrations().catch(() => []),
     ]);
     const rows = Array.isArray(configData) ? configData : (configData?.results ?? []);
     const byKey = Object.fromEntries(rows.map((row) => [row.key, row.value]));
@@ -116,7 +135,13 @@ const realSystem = {
       settings.notifyInApp = Boolean(prefs.in_app_enabled);
     }
 
-    return { settings, integrations: clone(integrations) };
+    return { settings, integrations: integrationsList };
+  },
+
+  /** `GET /admin/integrations/` — live configured/not status, `IsLevel1`. */
+  async getIntegrations() {
+    const { data } = await apiClient.get('/admin/integrations/');
+    return toIntegrationList(data);
   },
 
   /** Every control saves one key at a time — see `SettingsPage`'s `set()`/`setValue()` helpers. */

@@ -11,7 +11,6 @@ import { DataTable } from '@/components/ui/DataTable';
 import { formatDate } from '@/utils/format';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useMaintenanceTickets } from '../hooks/useMaintenanceTickets';
-import { useMaintenanceNames } from '../hooks/useMaintenanceNames';
 import { PRIORITY_BADGE_VARIANT, STATUS_BADGE_VARIANT, TICKET_PRIORITIES, TICKET_STATUSES } from '@/lib/maintenanceSchema';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
@@ -37,20 +36,11 @@ export const TicketTablePage = () => {
     priority: priority === 'All' ? undefined : priority,
     page,
   });
-  const { propertyName, spaceName, workerName } = useMaintenanceNames();
 
   const withReset = (setter) => (value) => {
     setter(value);
     setPage(1);
   };
-
-  /** `MaintenanceTicketSerializer` never returns an expanded name — exactly one of property/space is ever set. */
-  const listingLabel = (row) =>
-    row.propertyName ||
-    (row.propertyId && propertyName(row.propertyId)) ||
-    (row.spaceId && spaceName(row.spaceId)) ||
-    row.propertyId ||
-    row.spaceId;
 
   const columns = [
     {
@@ -63,17 +53,13 @@ export const TicketTablePage = () => {
           </span>
           <div className="min-w-0">
             <p className="truncate text-[12.5px] font-semibold text-ink">{row.category}</p>
-            <p className="truncate text-[10.5px] text-ink-muted">{listingLabel(row)}</p>
+            <p className="truncate text-[10.5px] text-ink-muted">{row.propertyName || row.spaceName || row.propertyId || row.spaceId}</p>
           </div>
         </div>
       ),
     },
     { key: 'priority', header: 'Priority', render: (row) => <Badge variant={PRIORITY_BADGE_VARIANT[row.priority]}>{TICKET_PRIORITIES.find((p) => p.value === row.priority)?.label}</Badge> },
-    {
-      key: 'assignedWorkerName',
-      header: 'Assigned to',
-      render: (row) => row.assignedWorkerName || workerName(row.assignedWorkerId) || <span className="text-ink-muted">Unassigned</span>,
-    },
+    { key: 'assignedWorkerName', header: 'Assigned to', render: (row) => row.assignedWorkerName || <span className="text-ink-muted">Unassigned</span> },
     { key: 'status', header: 'Status', render: (row) => <Badge variant={STATUS_BADGE_VARIANT[row.status]} dot>{TICKET_STATUSES.find((s) => s.value === row.status)?.label}</Badge> },
     { key: 'totalCost', header: 'Cost', align: 'right', render: (row) => (row.totalCost ? row.totalCost.toLocaleString() : '—') },
     { key: 'createdAt', header: 'Created', render: (row) => <span className="whitespace-nowrap text-[11px] text-ink-muted">{formatDate(row.createdAt)}</span> },

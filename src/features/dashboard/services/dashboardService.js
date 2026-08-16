@@ -115,6 +115,26 @@ const realDashboard = {
     });
     return data;
   },
+
+  /**
+   * `GET /admin/dashboard/badges/` — sidebar nav counts. No `units` key —
+   * no Units feature exists server-side, and `Sidebar.jsx` only renders a
+   * badge when its count is `> 0`, so leaving it absent here is a no-op
+   * there rather than needing an invented `0`.
+   */
+  badges: async () => {
+    const { data } = await apiClient.get('/admin/dashboard/badges/');
+    return {
+      properties: data?.properties,
+      reviews: data?.reviews,
+      bookings: data?.bookings,
+      checkins: data?.checkins,
+      checkoutReports: data?.checkout_reports,
+      contracts: data?.contracts,
+      housekeeping: data?.housekeeping,
+      payments: data?.payments,
+    };
+  },
 };
 
 const dashboardBackend = env.useMockDashboard ? mockDashboard : realDashboard;
@@ -129,10 +149,6 @@ export const dashboardService = {
   /** Real `/admin/dashboard/cost-breakdown/` — see `realDashboard.costBreakdown` for the exact shape. */
   getCostBreakdown: (params) => dashboardBackend.costBreakdown(params),
 
-  /**
-   * Sidebar counters have no backend equivalent yet (there's no
-   * `/dashboard/badges` endpoint) — always mock, independent of
-   * `VITE_USE_MOCK_DASHBOARD`, until each counter has a real source to derive from.
-   */
-  getBadges: () => mockDashboard.badges(),
+  /** Real `/admin/dashboard/badges/` — see `realDashboard.badges` for the exact shape. */
+  getBadges: () => dashboardBackend.badges(),
 };
