@@ -207,6 +207,25 @@ export const useCoverageAlerts = () =>
     queryFn: financeService.getCoverageAlerts,
   });
 
+/**
+ * `GET /properties/taxes/coverage/` — one-off spot-check for a location, not
+ * a cached list to keep fresh, so this is a mutation like `useSuggestTaxRules`
+ * rather than a `useQuery`.
+ */
+export const useCheckTaxCoverage = () => {
+  const mutation = useMutation({
+    mutationFn: financeService.checkTaxCoverage,
+    onError: (error) => toast.error('Could not check coverage', getErrorMessage(error)),
+  });
+
+  return {
+    checkCoverage: mutation.mutate,
+    result: mutation.data,
+    isPending: mutation.isPending,
+    reset: mutation.reset,
+  };
+};
+
 /** `POST /properties/taxes/no-tax-confirmation/` — records "this location genuinely has no tax," silencing the alert for that exact scope. */
 export const useConfirmNoTax = () => {
   const queryClient = useQueryClient();

@@ -11,7 +11,9 @@ import { useClickOutside } from '@/hooks/useClickOutside';
 import { useHotkey } from '@/hooks/useHotkey';
 import { ROLES, CAPABILITIES } from '@/lib/mock/people';
 import { formatRelative } from '@/utils/format';
+import { env } from '@/lib/env';
 import { paths } from '@/routes/paths';
+import { EnvBadge } from './EnvBadge';
 
 /** Notification tray — a preview of the real inbox (`useMyNotifications`); "View all" opens the full page. */
 const NotificationTray = ({ notifications, onMarkRead, onMarkAllRead, isMarkingAllRead, onClose }) => {
@@ -132,6 +134,8 @@ export const Topbar = ({ notifications = [] }) => {
       </button>
 
       <div className="flex shrink-0 items-center gap-2">
+        {env.isDev && <EnvBadge />}
+
         {can(CAPABILITIES.propertiesManage) && (
           <Button
             variant="primary"

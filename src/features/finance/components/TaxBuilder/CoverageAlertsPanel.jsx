@@ -1,12 +1,66 @@
 import { useState } from 'react';
-import { ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Search, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { useConfirmNoTax, useCoverageAlerts } from '../../hooks/useFinance';
+import { TAX_COUNTRIES, TAX_COUNTRY_LABELS } from '@/lib/taxSchema';
+import { useCheckTaxCoverage, useConfirmNoTax, useCoverageAlerts } from '../../hooks/useFinance';
 
 const scopeLabel = (alert) => [alert.city, alert.state, alert.country].filter(Boolean).join(', ');
+
+const COUNTRY_OPTIONS = TAX_COUNTRIES.map((value) => ({ value, label: TAX_COUNTRY_LABELS[value] ?? value }));
+
+const emptyLookup = () => ({ country: '', state: '', city: '' });
+
+/** On-demand spot-check for one location — `GET /properties/taxes/coverage/`. */
+const CoverageLookup = () => {
+  const [query, setQuery] = useState(emptyLookup());
+  const { checkCoverage, result, isPending, reset } = useCheckTaxCoverage();
+
+  const run = () => {
+    if (!query.country) return;
+    checkCoverage({ country: query.country, state: query.state.trim() || undefined, city: query.city.trim() || undefined });
+  };
+
+  const update = (patch) => {
+    setQuery((current) => ({ ...current, ...patch }));
+    if (result) reset();
+  };
+
+  return (
+    <div className="space-y-2 border-b border-line pb-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">Check a location</p>
+      <Select
+        placeholder="Country"
+        options={COUNTRY_OPTIONS}
+        value={query.country}
+        onChange={(e) => update({ country: e.target.value })}
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <Input placeholder="State (optional)" value={query.state} onChange={(e) => update({ state: e.target.value })} />
+        <Input placeholder="City (optional)" value={query.city} onChange={(e) => update({ city: e.target.value })} />
+      </div>
+      <Button size="sm" fullWidth isLoading={isPending} disabled={!query.country} leftIcon={<Search className="size-3.5" aria-hidden="true" />} onClick={run}>
+        Check coverage
+      </Button>
+
+      {result && (
+        <div className="rounded-lg border border-line bg-white p-2.5 text-[11.5px]">
+          {result.hasActiveCoverage ? (
+            <Badge variant="ok">Active coverage · {result.matchedRules.length} rule{result.matchedRules.length === 1 ? '' : 's'}</Badge>
+          ) : result.noTaxConfirmed ? (
+            <Badge variant="info">No tax — confirmed</Badge>
+          ) : (
+            <Badge variant="warn">No active coverage</Badge>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const AlertRow = ({ alert }) => {
   const { confirmNoTax, isPending } = useConfirmNoTax();
@@ -67,7 +121,8 @@ export const CoverageAlertsPanel = () => {
   return (
     <Card>
       <CardHeader title="Unconfirmed tax coverage" subtitle="Locations that priced a booking with no active rule." />
-      <div className="border-t border-line p-4">
+      <div className="space-y-3 border-t border-line p-4">
+        <CoverageLookup />
         {isLoading ? (
           <Skeleton className="h-16" />
         ) : alerts.length === 0 ? (

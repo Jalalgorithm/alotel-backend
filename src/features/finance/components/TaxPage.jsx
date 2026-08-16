@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { useTaxRuleMutations, useTaxRules } from '../hooks/useFinance';
 import { GUEST_SEGMENTS, REVIEWABLE_STATUSES, scopeLabel, SOURCE_LABELS, STATUS_BADGE_VARIANT, TAX_STATUSES } from '@/lib/taxSchema';
+import { formatDate } from '@/utils/format';
 import { TaxRuleModal } from './TaxBuilder/TaxRuleModal';
 import { RejectRuleModal } from './TaxBuilder/RejectRuleModal';
 import { CoverageAlertsPanel } from './TaxBuilder/CoverageAlertsPanel';
@@ -70,7 +71,19 @@ export const TaxPage = () => {
     {
       key: 'status',
       header: 'Status',
-      render: (row) => <Badge variant={STATUS_BADGE_VARIANT[row.status] ?? 'neutral'}>{TAX_STATUSES.find((s) => s.value === row.status)?.label ?? row.status}</Badge>,
+      render: (row) => (
+        <div className="min-w-0">
+          <Badge variant={STATUS_BADGE_VARIANT[row.status] ?? 'neutral'}>{TAX_STATUSES.find((s) => s.value === row.status)?.label ?? row.status}</Badge>
+          {row.status === 'active' && row.approvedAt && (
+            <p className="mt-1 truncate text-[10px] text-ink-muted">Approved · {formatDate(row.approvedAt)}</p>
+          )}
+          {row.status === 'rejected' && row.rejectedReason && (
+            <p className="mt-1 truncate text-[10px] text-danger" title={row.rejectedReason}>
+              {row.rejectedReason}
+            </p>
+          )}
+        </div>
+      ),
     },
     { key: 'source', header: 'Source', render: (row) => <span className="text-ink-soft">{SOURCE_LABELS[row.source] ?? row.source}</span> },
     {

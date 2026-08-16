@@ -385,6 +385,22 @@ const realTaxes = {
     return { count: data?.count ?? 0, alerts: (data?.alerts ?? []).map(toCoverageAlert) };
   },
 
+  /**
+   * `GET /properties/taxes/coverage/` — Super Admin only. On-demand spot-check
+   * for one location, distinct from `coverageAlerts` (which only surfaces
+   * locations a *real booking* already priced with no coverage).
+   */
+  async checkCoverage({ country, state, city }) {
+    const { data } = await apiClient.get('/properties/taxes/coverage/', {
+      params: { country, ...(state ? { state } : {}), ...(city ? { city } : {}) },
+    });
+    return {
+      hasActiveCoverage: Boolean(data?.has_active_coverage),
+      matchedRules: data?.matched_rules ?? [],
+      noTaxConfirmed: Boolean(data?.no_tax_confirmed),
+    };
+  },
+
   /** `POST /properties/taxes/no-tax-confirmation/` — idempotent upsert on the exact (country, state, city) scope. */
   async confirmNoTax({ country, state, city, reason }) {
     const { data } = await apiClient.post('/properties/taxes/no-tax-confirmation/', {
@@ -538,6 +554,8 @@ export const financeService = {
   rejectTaxRule: (id, reason) => (env.useMockTaxes ? backend.rejectTaxRule(id, reason) : taxes.reject(id, reason)),
   suggestTaxRules: (payload) => (env.useMockTaxes ? mockFinance.suggestTaxRules(payload) : realTaxes.suggest(payload)),
   getCoverageAlerts: () => (env.useMockTaxes ? mockFinance.coverageAlerts() : realTaxes.coverageAlerts()),
+  /** No offline mock for this one — it's a thin, real-time spot-check with nothing meaningful to fake. */
+  checkTaxCoverage: (payload) => realTaxes.checkCoverage(payload),
   confirmNoTax: (payload) => (env.useMockTaxes ? mockFinance.confirmNoTax(payload) : realTaxes.confirmNoTax(payload)),
   createTaxRuleFromCsvRow: (row) => (env.useMockTaxes ? mockFinance.createTaxRuleFromCsvRow(row) : realTaxes.createFromCsvRow(row)),
   /**

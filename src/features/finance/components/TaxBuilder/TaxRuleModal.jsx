@@ -102,6 +102,14 @@ export const TaxRuleModal = ({ isOpen, onClose, rule, createRule, updateRule, is
       }
     >
       <form className="space-y-3.5" noValidate>
+        {isEditing && rule?.status === 'rejected' && rule?.rejectedReason && (
+          <div className="rounded-lg border border-danger/20 bg-danger-soft p-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-danger">Rejected</p>
+            <p className="mt-1 text-[11.5px] leading-5 text-ink-soft">{rule.rejectedReason}</p>
+            <p className="mt-2 text-[10.5px] text-ink-muted">Saving changes here re-submits it as a manual edit — it stays Rejected until approved separately.</p>
+          </div>
+        )}
+
         {isEditing && rule?.aiGenerated && (
           <div className="rounded-lg border border-line bg-brand-50/40 p-3">
             <div className="flex flex-wrap items-center gap-2">
