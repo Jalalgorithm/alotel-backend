@@ -20,7 +20,8 @@ const appliesToLabel = (guestSegment) =>
 /** Tax Rule Builder v2: country/state/city rules that stack, with a status lifecycle and approve/reject. */
 export const TaxPage = () => {
   const { data: rules = [], isLoading } = useTaxRules({});
-  const { createRule, isCreating, updateRule, deleteRule, approveRule, rejectRule, pendingId } = useTaxRuleMutations();
+  const { createRule, isCreating, updateRule, deleteRule, approveRule, rejectRule, updatingId, deletingId, approvingId, rejectingId } =
+    useTaxRuleMutations();
 
   const [tab, setTab] = useState('all');
   const [editingRule, setEditingRule] = useState(null);
@@ -83,7 +84,7 @@ export const TaxPage = () => {
               <Button
                 size="xs"
                 variant="subtle"
-                isLoading={pendingId === row.id}
+                isLoading={approvingId === row.id}
                 leftIcon={<ThumbsUp className="size-3" aria-hidden="true" />}
                 onClick={() => approveRule(row.id)}
               >
@@ -92,6 +93,7 @@ export const TaxPage = () => {
               <Button
                 size="xs"
                 variant="dangerSoft"
+                isLoading={rejectingId === row.id}
                 leftIcon={<ThumbsDown className="size-3" aria-hidden="true" />}
                 onClick={() => setRejectingRule(row)}
               >
@@ -102,7 +104,7 @@ export const TaxPage = () => {
           <Button size="xs" variant="ghost" aria-label="Edit rule" onClick={() => openEdit(row)}>
             <Pencil className="size-3.5 text-ink-muted" aria-hidden="true" />
           </Button>
-          <Button size="xs" variant="ghost" aria-label="Delete rule" isLoading={pendingId === row.id} onClick={() => deleteRule(row.id)}>
+          <Button size="xs" variant="ghost" aria-label="Delete rule" isLoading={deletingId === row.id} onClick={() => deleteRule(row.id)}>
             <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
           </Button>
         </div>
@@ -169,14 +171,14 @@ export const TaxPage = () => {
         rule={editingRule}
         createRule={createRule}
         updateRule={updateRule}
-        isSaving={isCreating || (Boolean(editingRule) && pendingId === editingRule.id)}
+        isSaving={isCreating || (Boolean(editingRule) && updatingId === editingRule.id)}
       />
 
       <RejectRuleModal
         rule={rejectingRule}
         onClose={() => setRejectingRule(null)}
         onReject={(reason) => rejectRule(rejectingRule.id, reason)}
-        isSaving={pendingId === rejectingRule?.id}
+        isSaving={rejectingId === rejectingRule?.id}
       />
 
       <ImportCsvModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />

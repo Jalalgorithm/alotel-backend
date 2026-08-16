@@ -156,20 +156,18 @@ export const useTaxRuleMutations = () => {
     approveRule: approve.mutate,
     rejectRule: (id, reason) => reject.mutate({ id, reason }),
     /**
-     * Only ever the id of a mutation that is *currently* in flight — react-query
-     * never clears `.variables` once a mutation settles, so deriving this from
-     * variables alone leaves it permanently "stuck" on whichever rule was last
-     * saved, even long after the request finished.
+     * One id per action, not a single shared `pendingId` — a row's Approve and
+     * Delete buttons used to both read the same combined flag, so clicking
+     * either one lit up *both* buttons (and Update/Reject too) for that row.
+     * Each is only ever the id of a mutation that is *currently* in flight —
+     * react-query never clears `.variables` once a mutation settles, so
+     * deriving this from `.variables` alone (without gating on `.isPending`)
+     * would leave it permanently "stuck" on whichever rule was last touched.
      */
-    pendingId: update.isPending
-      ? update.variables?.id
-      : remove.isPending
-        ? remove.variables
-        : approve.isPending
-          ? approve.variables
-          : reject.isPending
-            ? reject.variables?.id
-            : undefined,
+    updatingId: update.isPending ? update.variables?.id : undefined,
+    deletingId: remove.isPending ? remove.variables : undefined,
+    approvingId: approve.isPending ? approve.variables : undefined,
+    rejectingId: reject.isPending ? reject.variables?.id : undefined,
   };
 };
 
