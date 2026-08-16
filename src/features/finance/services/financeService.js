@@ -226,6 +226,15 @@ const mockFinance = {
  * payments screen is built from the admin booking list plus each booking's
  * receipt, rather than from a table the API does not serve.
  */
+/**
+ * `DepositDetailView` returns `{ledger: {...DepositLedgerSerializer fields,
+ * including collection_method...}, claims: [...]}`, not a flat object —
+ * flattened here (field names kept as-is, snake_case) so every caller can
+ * read `deposit.status`/`deposit.collection_method`/`deposit.amount_captured`
+ * etc. directly instead of reaching through `.ledger` themselves.
+ */
+const toDeposit = (raw) => ({ ...(raw?.ledger ?? raw ?? {}), claims: raw?.claims ?? [] });
+
 const realPayments = {
   /**
    * Refund against a booking.
@@ -246,7 +255,7 @@ const realPayments = {
 
   async getDeposit(bookingId) {
     const { data } = await apiClient.get(`/deposits/${bookingId}/`);
-    return data;
+    return toDeposit(data);
   },
 
   /**

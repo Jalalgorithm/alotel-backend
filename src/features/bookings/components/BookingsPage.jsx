@@ -108,13 +108,17 @@ const PaymentOperations = ({ booking, currency }) => {
 
         {deposit ? (
           <>
-            <Button
-              size="sm"
-              disabled={isPending}
-              onClick={() => captureDeposit({ bookingId: booking.id, amount: amount || undefined })}
-            >
-              Capture deposit
-            </Button>
+            {deposit.collection_method === 'upfront_charge' ? (
+              <span className="text-[11.5px] text-ink-muted">Collected upfront — already fully captured.</span>
+            ) : (
+              <Button
+                size="sm"
+                disabled={isPending}
+                onClick={() => captureDeposit({ bookingId: booking.id, amount: amount || undefined })}
+              >
+                Capture deposit
+              </Button>
+            )}
             <Button size="sm" disabled={isPending} onClick={() => releaseDeposit({ bookingId: booking.id })}>
               Release deposit
             </Button>
@@ -134,7 +138,10 @@ const PaymentOperations = ({ booking, currency }) => {
 
       <p className="mt-2 text-[11px] text-ink-muted">
         {deposit
-          ? `Deposit ${deposit.status ?? 'on file'}${deposit.amount ? ` · ${formatCurrency(Number(deposit.amount), deposit.currency ?? currency)}` : ''}.`
+          ? (() => {
+              const held = Number(deposit.amount_captured ?? deposit.amount_authorized ?? 0);
+              return `Deposit ${deposit.status ?? 'on file'}${held ? ` · ${formatCurrency(held, deposit.currency ?? currency)}` : ''}.`;
+            })()
           : 'No deposit is currently held against this booking.'}{' '}
         Leave the amount blank to act on the booking total.
       </p>
