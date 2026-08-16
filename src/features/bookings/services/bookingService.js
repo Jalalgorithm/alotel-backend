@@ -16,6 +16,7 @@ import {
   toAdminListParams,
   toBookingDetail,
   toBookingPage,
+  toBookingRow,
   toGuest,
   toGuestBooking,
   toGuestDetail,
@@ -475,18 +476,14 @@ const mockBookings = {
       filterFields: ['status'],
     });
   },
+};
 
-  async processRefund(id) {
-    await delay(500);
-
-    const rows = readCancellations();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Cancellation not found.', 404);
-
-    rows[index] = { ...rows[index], status: 'Refunded', refundedAt: new Date().toISOString() };
-    jsonStorage.write(KEYS.cancellations, rows);
-    return clone(rows[index]);
-  },
+/** Stable per-id color for the calendar's stay dots — nothing server-side backs a "color" for a booking. */
+const CALENDAR_COLORS = ['#12603F', '#2a78d6', '#6D28D9', '#eb6834', '#0F766E', '#B91C1C', '#7C3AED', '#0EA5E9'];
+const colorForId = (id) => {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
+  return CALENDAR_COLORS[hash % CALENDAR_COLORS.length];
 };
 
 const realBookings = {
@@ -876,20 +873,76 @@ const realBookings = {
     return (data ?? []).map((property) => ({ id: property.id, name: property.name }));
   },
 
-  calendar: async (month) => (await apiClient.get('/calendar', { params: { month } })).data,
-  listCancellations: async (params) => (await apiClient.get('/cancellations', { params })).data,
-  processRefund: async (id) => (await apiClient.post(`/cancellations/${id}/refund`)).data,
+  /**
+   * No `/calendar` endpoint exists server-side — built here from the same
+   * `GET /bookings/admin/list/` `BookingsPage.jsx` already uses, widened by a
+   * 30-day lookback so a stay that started before the requested month still
+   * shows on the nights it occupies within it.
+   */
+  calendar: async (month) => {
+    const monthStart = new Date(`${month}-01T00:00:00`);
+    const lookback = new Date(monthStart);
+    lookback.setDate(lookback.getDate() - 30);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+
+    const { data } = await apiClient.get('/bookings/admin/list/', {
+      params: {
+        check_in_from: lookback.toISOString().slice(0, 10),
+        check_in_to: monthEnd.toISOString().slice(0, 10),
+        page_size: 200,
+      },
+    });
+
+    const nightsByDate = {};
+    (data?.results ?? [])
+      .map(toBookingRow)
+      .filter((row) => !['cancelled', 'refunded'].includes(row.status))
+      .forEach((row) => {
+        if (!row.checkIn || !row.checkOut) return;
+        const start = new Date(row.checkIn);
+        const end = new Date(row.checkOut);
+
+        for (let date = new Date(start); date < end; date.setDate(date.getDate() + 1)) {
+          const key = date.toISOString().slice(0, 10);
+          if (!key.startsWith(month)) continue;
+          nightsByDate[key] = nightsByDate[key] ?? [];
+          nightsByDate[key].push({
+            id: row.id,
+            guest: row.guestName || row.guestEmail,
+            property: row.propertyName,
+            color: colorForId(row.id),
+            status: row.statusLabel,
+          });
+        }
+      });
+
+    return nightsByDate;
+  },
+
+  /**
+   * No dedicated cancellations endpoint exists server-side either — cancelled
+   * bookings are just `GET /bookings/admin/list/?status=cancelled`, the same
+   * list `getBookings` uses. The per-row cancellation reason isn't on this
+   * list payload — `CancellationsPage.jsx` resolves it per row from
+   * `getBookingTimeline`, the same endpoint the booking detail drawer uses.
+   */
+  listCancellations: async (params = {}) => {
+    const query = toAdminListParams({ ...params, status: 'cancelled' });
+    const { data } = await apiClient.get('/bookings/admin/list/', { params: query });
+    return toBookingPage(data, { page: query.page });
+  },
 };
 
 /**
- * Reservations, contracts, inspections (check-in/out) and check-out
- * reporting (damage assessments + `PostCheckoutReport`) are wired to the
- * real API via `bookingsBackend`; the surrounding operations features
- * (guests, housekeeping, calendar) are still mocked and stay on the global
- * `backend` flag.
+ * Reservations, contracts, inspections (check-in/out), check-out reporting,
+ * guests, housekeeping, calendar and cancellations are all wired to the real
+ * API via `bookingsBackend`. Calendar and Cancellations used to sit on the
+ * *global* `useMock` flag via a separate `backend` selector — a leftover from
+ * when they had no real endpoint to call at all — which silently kept them
+ * mocked even with `useMockBookings=false`; both now follow the same flag as
+ * everything else in this file.
  */
 const bookingsBackend = env.useMockBookings ? mockBookings : realBookings;
-const backend = env.useMock ? mockBookings : realBookings;
 
 export const bookingService = {
   getBookings: (params) => bookingsBackend.list(params),
@@ -943,8 +996,7 @@ export const bookingService = {
   updateIssueStatus: (id, patch) => bookingsBackend.updateIssueStatus(id, patch),
   getAssignedProperties: () => bookingsBackend.listAssignedProperties(),
 
-  getCalendar: (month) => backend.calendar(month),
+  getCalendar: (month) => bookingsBackend.calendar(month),
 
-  getCancellations: (params) => backend.listCancellations(params),
-  processRefund: (id) => backend.processRefund(id),
+  getCancellations: (params) => bookingsBackend.listCancellations(params),
 };

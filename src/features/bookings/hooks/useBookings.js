@@ -390,17 +390,19 @@ export const useCancellations = (params = {}) =>
     placeholderData: keepPreviousData,
   });
 
-export const useProcessRefund = () => {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: bookingService.processRefund,
-    onSuccess: (record) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all });
-      toast.success('Refund processed', `${record.guest} · #${record.bookingId}`);
-    },
-    onError: (error) => toast.error('Could not process refund', getErrorMessage(error)),
+/**
+ * A cancelled booking's reason/timestamp isn't on the list payload — there's
+ * no dedicated cancellations endpoint, only `getBookingTimeline` per booking
+ * (the same one the booking detail drawer uses). Bounded fan-out over the
+ * visible page of rows, same pattern as `useCheckoutReportsByBookingIds`.
+ */
+export const useCancellationReasons = (bookingIds = []) =>
+  useQueries({
+    queries: bookingIds.map((bookingId) => ({
+      queryKey: queryKeys.bookings.timeline(bookingId),
+      queryFn: () => bookingService.getBookingTimeline(bookingId),
+      enabled: Boolean(bookingId),
+      staleTime: 1000 * 60,
+      select: (events) => events.find((event) => event.to === 'cancelled') ?? null,
+    })),
   });
-
-  return { processRefund: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables };
-};

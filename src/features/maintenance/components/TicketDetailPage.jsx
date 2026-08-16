@@ -19,6 +19,7 @@ import { paths } from '@/routes/paths';
 import { PRIORITY_BADGE_VARIANT, STATUS_BADGE_VARIANT, TICKET_COST_TYPES, TICKET_PRIORITIES, TICKET_STATUS_FLOW, TICKET_STATUSES } from '@/lib/maintenanceSchema';
 import { useLogTicketCost, useMaintenanceTicket, useUpdateTicket, useUploadTicketPhoto } from '../hooks/useMaintenanceTickets';
 import { useMaintenanceWorkers } from '../hooks/useMaintenanceWorkers';
+import { useMaintenanceNames } from '../hooks/useMaintenanceNames';
 
 const StatusStepper = ({ status, onSelect, canManage }) => {
   const currentIndex = TICKET_STATUS_FLOW.indexOf(status);
@@ -87,6 +88,7 @@ export const TicketDetailPage = () => {
   const { data: workersData } = useMaintenanceWorkers({ status: 'active', pageSize: 100 });
   const { updateTicket } = useUpdateTicket();
   const { uploadPhoto, isPending: isUploading } = useUploadTicketPhoto(ticketId);
+  const { propertyName, spaceName, workerName } = useMaintenanceNames();
 
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.maintenanceManage);
@@ -119,7 +121,13 @@ export const TicketDetailPage = () => {
     <div className="space-y-5">
       <PageHeader
         title={ticket.category}
-        subtitle={ticket.propertyName || ticket.propertyId}
+        subtitle={
+          ticket.propertyName ||
+          (ticket.propertyId && propertyName(ticket.propertyId)) ||
+          (ticket.spaceId && spaceName(ticket.spaceId)) ||
+          ticket.propertyId ||
+          ticket.spaceId
+        }
         meta={
           <>
             <Badge variant={PRIORITY_BADGE_VARIANT[ticket.priority]}>{TICKET_PRIORITIES.find((p) => p.value === ticket.priority)?.label}</Badge>
@@ -150,7 +158,7 @@ export const TicketDetailPage = () => {
               options={(workersData?.items ?? []).map((w) => ({ value: w.id, label: w.name }))}
             />
           ) : (
-            <p className="text-[12.5px] text-ink">{ticket.assignedWorkerName || 'Unassigned'}</p>
+            <p className="text-[12.5px] text-ink">{ticket.assignedWorkerName || workerName(ticket.assignedWorkerId) || 'Unassigned'}</p>
           )}
         </Card>
       </div>
