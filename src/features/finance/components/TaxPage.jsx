@@ -183,7 +183,7 @@ export const TaxPage = () => {
 
       <ImportCsvModal isOpen={isImportOpen} onClose={() => setIsImportOpen(false)} />
 
-      <AiTaxCompanionModal isOpen={isAiCompanionOpen} onClose={() => setIsAiCompanionOpen(false)} />
+      <AiTaxCompanionModal isOpen={isAiCompanionOpen} onClose={() => setIsAiCompanionOpen(false)} createRule={createRule} isCreating={isCreating} />
     </div>
   );
 };

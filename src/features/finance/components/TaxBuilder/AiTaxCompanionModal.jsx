@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
-import { CONFIDENCE_BADGE_VARIANT, TAX_COUNTRIES, TAX_COUNTRY_LABELS } from '@/lib/taxSchema';
-import { useCreateTaxRuleFromSuggestion, useSuggestTaxRules } from '../../hooks/useFinance';
+import { CONFIDENCE_BADGE_VARIANT, suggestionToRuleValues, TAX_COUNTRIES, TAX_COUNTRY_LABELS } from '@/lib/taxSchema';
+import { useSuggestTaxRules } from '../../hooks/useFinance';
 
 const COUNTRY_OPTIONS = TAX_COUNTRIES.map((value) => ({ value, label: TAX_COUNTRY_LABELS[value] ?? value }));
 
@@ -19,18 +19,25 @@ const emptyQuery = () => ({ country: '', state: '', city: '' });
  * both `ai_suggested`), so several suggestions can be reviewed and added one
  * at a time without losing the others — closing and reopening the modal
  * always starts a fresh search.
+ *
+ * `createRule`/`isCreating` are passed down from `TaxPage` — the exact same
+ * `useTaxRuleMutations` mutation the manual `TaxRuleModal` saves through,
+ * not a second mutation of its own. "Add rule" here and "Save rule" there are
+ * now one code path with two different input shapes, not two implementations
+ * of the same thing.
  */
-export const AiTaxCompanionModal = ({ isOpen, onClose }) => {
+export const AiTaxCompanionModal = ({ isOpen, onClose, createRule, isCreating }) => {
   const [query, setQuery] = useState(emptyQuery());
   const [addedIds, setAddedIds] = useState(() => new Set());
+  const [addingSuggestionId, setAddingSuggestionId] = useState(null);
 
   const { suggest, suggestions, isPending: isSuggesting, reset: resetSuggestions } = useSuggestTaxRules();
-  const { addSuggestion, isPending: isAdding, pendingId } = useCreateTaxRuleFromSuggestion();
 
   useEffect(() => {
     if (!isOpen) return;
     setQuery(emptyQuery());
     setAddedIds(new Set());
+    setAddingSuggestionId(null);
     resetSuggestions();
   }, [isOpen, resetSuggestions]);
 
@@ -40,8 +47,13 @@ export const AiTaxCompanionModal = ({ isOpen, onClose }) => {
   };
 
   const add = (suggestion) => {
-    addSuggestion(suggestion, {
-      onSuccess: () => setAddedIds((current) => new Set(current).add(suggestion.suggestion_id)),
+    setAddingSuggestionId(suggestion.suggestion_id);
+    createRule(suggestionToRuleValues(suggestion), {
+      onSuccess: () => {
+        setAddingSuggestionId(null);
+        setAddedIds((current) => new Set(current).add(suggestion.suggestion_id));
+      },
+      onError: () => setAddingSuggestionId(null),
     });
   };
 
@@ -50,7 +62,7 @@ export const AiTaxCompanionModal = ({ isOpen, onClose }) => {
       isOpen={isOpen}
       onClose={onClose}
       title="AI Tax Companion"
-      description="Researches published rates and drafts rules. It cannot save anything — every suggestion goes through the form, where you decide."
+      description="Researches published rates and drafts rules. Adding one lands it as AI Suggested, pending your review — nothing goes live until you approve it in the table."
       size="lg"
     >
       <div className="space-y-3">
@@ -131,7 +143,13 @@ export const AiTaxCompanionModal = ({ isOpen, onClose }) => {
                     {isAdded ? (
                       <Badge variant="ok" icon={<Check className="size-2.5" aria-hidden="true" />}>Added</Badge>
                     ) : (
-                      <Button size="xs" variant="primary" disabled={!hasValue} isLoading={isAdding && pendingId === suggestion.suggestion_id} onClick={() => add(suggestion)}>
+                      <Button
+                        size="xs"
+                        variant="primary"
+                        disabled={!hasValue}
+                        isLoading={isCreating && addingSuggestionId === suggestion.suggestion_id}
+                        onClick={() => add(suggestion)}
+                      >
                         Add rule
                       </Button>
                     )}

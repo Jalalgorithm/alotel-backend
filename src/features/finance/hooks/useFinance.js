@@ -191,25 +191,14 @@ export const useSuggestTaxRules = () => {
   };
 };
 
-/** Turn one AI suggestion into a real tax rule — lands in the existing `ai_suggested` review queue, not live immediately. */
-export const useCreateTaxRuleFromSuggestion = () => {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: financeService.createTaxRuleFromSuggestion,
-    onSuccess: (rule) => {
-      queryClient.invalidateQueries({ queryKey: ['finance', 'tax-rules'] });
-      toast.success('Suggestion added', `${rule.ruleName || rule.country} — sent for review`);
-    },
-    onError: (error) => toast.error('Could not add suggestion', getErrorMessage(error)),
-  });
-
-  return {
-    addSuggestion: mutation.mutate,
-    isPending: mutation.isPending,
-    pendingId: mutation.isPending ? mutation.variables?.suggestion_id : undefined,
-  };
-};
+/**
+ * There is deliberately no `useCreateTaxRuleFromSuggestion` — adding an AI
+ * suggestion reuses `useTaxRuleMutations`'s `createRule` (the same mutation
+ * the manual form uses), via `suggestionToRuleValues` in `taxSchema.js`. Two
+ * separate mutations for what's ultimately one `POST /properties/taxes/` call
+ * was the previous shape, and it's exactly what let the two paths drift out
+ * of sync with each other.
+ */
 
 /** `GET /properties/taxes/coverage-alerts/` — Super Admin only, real-time (not cached long — alerts change as pricing calculations happen). */
 export const useCoverageAlerts = () =>

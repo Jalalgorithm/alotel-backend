@@ -125,58 +125,65 @@ export const toTaxRule = (raw) => ({
 });
 
 /**
- * Build the manual create/update payload — the fields
- * `TaxRuleCreateUpdateSerializer` accepts from this form. `source` is always
- * `'manual'`: submitting through this form (even to edit an AI/CSV-sourced
- * row) is itself the human decision the backend's "AI guides, humans decide"
- * model expects.
+ * Build the create/update payload — the fields `TaxRuleCreateUpdateSerializer`
+ * accepts. One builder for every save, manual or AI-sourced: both the manual
+ * form (`TaxRuleModal`) and the AI Companion (`AiTaxCompanionModal`, via
+ * `suggestionToRuleValues` below) call the *same* `createRule` mutation with
+ * values in this shape, so there's exactly one create code path rather than
+ * two that can quietly drift apart. `source` defaults to `'manual'` —
+ * submitting through the form (even to edit an AI/CSV-sourced row) is itself
+ * the human decision the backend's "AI guides, humans decide" model expects —
+ * `suggestionToRuleValues` is the only caller that overrides it.
+ *
+ * `taxType`/`frequency` are coerced to the backend's exact enum rather than
+ * forwarded as-is: harmless for the form (its `<Select>` can't produce
+ * anything else anyway), but required for AI suggestions, whose free-text
+ * wording from Gemini isn't guaranteed to match.
  */
-export const toTaxRulePayload = ({ ruleName, country, state, county, city, guestSegment, taxType, value, frequency, displayLabel, status }) => ({
+export const toTaxRulePayload = ({
+  ruleName, country, state, county, city, guestSegment, taxType, value, frequency, displayLabel, status,
+  source = 'manual', sourceUrl = '', confidence = '', caveat = '',
+}) => ({
   rule_name: ruleName?.trim() ?? '',
   country,
   state: state?.trim() ?? '',
   county: county?.trim() ?? '',
   city: city?.trim() ?? '',
   guest_segment: guestSegment ?? [],
-  tax_type: taxType,
+  tax_type: taxType === 'fixed' ? 'fixed' : 'percentage',
   value: String(Number(value) || 0),
-  frequency,
+  frequency: frequency === 'per_booking' ? 'per_booking' : 'per_night',
   display_label: displayLabel?.trim() ?? '',
   status: status || 'active',
-  source: 'manual',
+  source,
+  ...(sourceUrl ? { source_url: sourceUrl } : {}),
+  ...(confidence ? { confidence } : {}),
+  ...(caveat ? { caveat } : {}),
 });
 
 /**
- * Turn one `POST /properties/taxes/suggest/` suggestion into a `POST /properties/taxes/`
- * create payload. The suggestion response is already close to
- * `TaxRuleCreateUpdateSerializer`'s shape (`rule_name, country, state, city,
- * tax_type, value, frequency, display_label`), so this mostly passes fields
- * through — the only thing it decides is `source`/`status`, both forced to
- * `'ai_suggested'` so the created row lands directly in the existing
- * `REVIEWABLE_STATUSES` approve/reject queue rather than going live unreviewed.
- *
- * Deliberately separate from `toTaxRulePayload`, which always forces
- * `source: 'manual'` — a human editing a rule through the form is itself the
- * "manual" decision the backend's status model expects, and that path stays
- * untouched by this one.
+ * Turn one `POST /properties/taxes/suggest/` suggestion into the *same*
+ * form-values shape `TaxRuleModal` produces, so `AiTaxCompanionModal`'s "Add
+ * rule" can hand it straight to the shared `createRule` mutation — the exact
+ * mutation, service call and `toTaxRulePayload` the manual form uses, not a
+ * parallel implementation. `source`/`status` are forced to `'ai_suggested'`
+ * so the created row lands directly in the existing `REVIEWABLE_STATUSES`
+ * approve/reject queue rather than going live unreviewed.
  */
-export const toAiSuggestionPayload = (suggestion) => ({
-  rule_name: suggestion.rule_name || '',
+export const suggestionToRuleValues = (suggestion) => ({
+  ruleName: suggestion.rule_name || '',
   country: suggestion.country,
   state: suggestion.state || '',
   county: '',
   city: suggestion.city || '',
-  guest_segment: [],
-  // Gemini's free-text output isn't guaranteed to match the backend's strict enum —
-  // coerce to a safe default the same way `toCsvRowPayload` already does, rather
-  // than forwarding it as-is and risking a 400 the "Add rule" button can't recover from.
-  tax_type: suggestion.tax_type === 'fixed' ? 'fixed' : 'percentage',
-  value: String(Number(suggestion.value) || 0),
-  frequency: suggestion.frequency === 'per_booking' ? 'per_booking' : 'per_night',
-  display_label: suggestion.display_label || '',
+  guestSegment: [],
+  taxType: suggestion.tax_type,
+  value: suggestion.value,
+  frequency: suggestion.frequency,
+  displayLabel: suggestion.display_label || '',
   status: 'ai_suggested',
   source: 'ai_suggested',
-  source_url: suggestion.source_url || '',
+  sourceUrl: suggestion.source_url || '',
   confidence: suggestion.confidence || '',
   caveat: suggestion.caveat || '',
 });

@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
-import { toAiSuggestionPayload, toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
+import { toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
@@ -194,10 +194,6 @@ const mockFinance = {
     };
   },
 
-  async createTaxRuleFromSuggestion(suggestion) {
-    return mockFinance.createTaxRule(toTaxRule(toAiSuggestionPayload(suggestion)));
-  },
-
   /** Always "all clear" — this is fundamentally a real-backend panel, not a rich fixture. */
   async coverageAlerts() {
     await delay(250);
@@ -383,12 +379,6 @@ const realTaxes = {
     return data;
   },
 
-  /** Turn one AI suggestion into a real rule — `source`/`status` both `ai_suggested`, landing it in the existing review queue. */
-  async createFromSuggestion(suggestion) {
-    const { data } = await apiClient.post('/properties/taxes/', toAiSuggestionPayload(suggestion));
-    return toTaxRule(data);
-  },
-
   /** `GET /properties/taxes/coverage-alerts/` — Super Admin only. Locations a real pricing calculation priced with zero active tax coverage. */
   async coverageAlerts() {
     const { data } = await apiClient.get('/properties/taxes/coverage-alerts/');
@@ -547,8 +537,6 @@ export const financeService = {
   approveTaxRule: (id) => (env.useMockTaxes ? backend.approveTaxRule(id) : taxes.approve(id)),
   rejectTaxRule: (id, reason) => (env.useMockTaxes ? backend.rejectTaxRule(id, reason) : taxes.reject(id, reason)),
   suggestTaxRules: (payload) => (env.useMockTaxes ? mockFinance.suggestTaxRules(payload) : realTaxes.suggest(payload)),
-  createTaxRuleFromSuggestion: (suggestion) =>
-    env.useMockTaxes ? mockFinance.createTaxRuleFromSuggestion(suggestion) : realTaxes.createFromSuggestion(suggestion),
   getCoverageAlerts: () => (env.useMockTaxes ? mockFinance.coverageAlerts() : realTaxes.coverageAlerts()),
   confirmNoTax: (payload) => (env.useMockTaxes ? mockFinance.confirmNoTax(payload) : realTaxes.confirmNoTax(payload)),
   createTaxRuleFromCsvRow: (row) => (env.useMockTaxes ? mockFinance.createTaxRuleFromCsvRow(row) : realTaxes.createFromCsvRow(row)),
