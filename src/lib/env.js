@@ -67,6 +67,9 @@ export const env = {
   /** The signed-in admin's own notification inbox (`/notifications/<user_id>/`) — real. */
   useMockNotifications: toBool(import.meta.env.VITE_USE_MOCK_NOTIFICATIONS, false),
 
+  /** AI Tax Companion — calls Gemini directly from the browser (see `taxAiService.js`). */
+  geminiApiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
+
   mockLatency: Number(import.meta.env.VITE_MOCK_LATENCY ?? 500),
   appName: import.meta.env.VITE_APP_NAME || 'Alotel Spaces Admin',
   isDev: import.meta.env.DEV,

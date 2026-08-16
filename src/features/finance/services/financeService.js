@@ -1,6 +1,7 @@
 import { apiClient } from '@/lib/apiClient';
 import { toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
 import { env } from '@/lib/env';
+import { suggestTaxRules as suggestTaxRulesFromGemini } from './taxAiService';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
 import { jsonStorage } from '@/lib/storage';
@@ -375,18 +376,16 @@ const realTaxes = {
   },
 
   /**
-   * `POST /properties/taxes/suggest/` — Super Admin only, Gemini-backed.
-   * Read-only: never writes a `TaxRule`. Country-only is "mode A" (country-wide
+   * Gemini-backed rate research. Called directly from the browser via
+   * `taxAiService` — the backend's own `POST /properties/taxes/suggest/` is
+   * unavailable in this environment (`google-genai` isn't installed in its
+   * virtualenv), so this replaces it with an identical prompt/output shape
+   * rather than waiting on that. Read-only: never writes a `TaxRule` — same
+   * as the backend version, saving is still a separate, real `POST
+   * /properties/taxes/` call. Country-only is "mode A" (country-wide
    * research); country+state(+city) is "mode B" (narrower, more specific).
    */
-  async suggest({ country, state, city }) {
-    const body = { country };
-    if (state) body.state = state;
-    if (city) body.city = city;
-
-    const { data } = await apiClient.post('/properties/taxes/suggest/', body);
-    return data;
-  },
+  suggest: (payload) => suggestTaxRulesFromGemini(payload),
 
   /** `GET /properties/taxes/coverage-alerts/` — Super Admin only. Locations a real pricing calculation priced with zero active tax coverage. */
   async coverageAlerts() {
