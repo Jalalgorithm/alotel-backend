@@ -31,11 +31,20 @@ export const env = {
   useMockProperties: toBool(import.meta.env.VITE_USE_MOCK_PROPERTIES, useMock),
 
   /**
-   * Reservations and payments. Separate from the surrounding operations
-   * features (check-in/out, housekeeping, contracts), which are still mocked.
+   * Reservations. Separate from the surrounding operations features
+   * (check-in/out, housekeeping, contracts), which are still mocked.
    */
   useMockBookings: toBool(import.meta.env.VITE_USE_MOCK_BOOKINGS, useMock),
-  useMockPayments: toBool(import.meta.env.VITE_USE_MOCK_PAYMENTS, useMock),
+
+  /**
+   * Payments/refunds/deposits are a real, working backend — defaults to it
+   * regardless of the global flag, matching `useMockMaintenance`/`useMockSpaces`/etc.
+   * Previously fell back to the global flag, which is how a deployment that
+   * never explicitly set `VITE_USE_MOCK_PAYMENTS` (staging) silently ran every
+   * payment action against the offline mock instead of the real API. Flip on
+   * only for offline dev.
+   */
+  useMockPayments: toBool(import.meta.env.VITE_USE_MOCK_PAYMENTS, false),
 
   /** Country tax rules — the builder writes straight to the API. */
   useMockTaxes: toBool(import.meta.env.VITE_USE_MOCK_TAXES, useMock),
