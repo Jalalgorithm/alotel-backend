@@ -14,24 +14,14 @@ import { loginSchema } from '@/utils/validators';
 import { landingPathFor } from '@/routes/navigation';
 import { paths } from '@/routes/paths';
 import { env } from '@/lib/env';
-import { ROLES, staff } from '@/lib/mock/people';
+import { ROLES } from '@/lib/mock/people';
 
-/**
- * Dev-only sign-in shortcuts, one per role level.
- *
- * Mock mode uses the bundled fixtures; live mode uses the accounts created by
- * the backend seed script, so the buttons work either way.
- */
-const DEV_ACCOUNTS = env.useMockAuth
-  ? ROLES.map((role) => {
-      const account = staff.find((member) => member.role === role.id && member.status === 'Active');
-      return { role, email: account?.email, password: account?.password };
-    }).filter((entry) => entry.email)
-  : [
-      { role: ROLES[0], email: 'admin@alotelspaces.com', password: 'Password123' },
-      { role: ROLES[1], email: 'fm@alotelspaces.com', password: 'Password123' },
-      { role: ROLES[2], email: 'hk@alotelspaces.com', password: 'Password123' },
-    ];
+/** Dev-only sign-in shortcuts, one per role level — the accounts created by the backend seed script. */
+const DEV_ACCOUNTS = [
+  { role: ROLES[0], email: 'admin@alotelspaces.com', password: 'Password123' },
+  { role: ROLES[1], email: 'fm@alotelspaces.com', password: 'Password123' },
+  { role: ROLES[2], email: 'hk@alotelspaces.com', password: 'Password123' },
+];
 
 /** Admin sign-in. */
 export const LoginPage = () => {
@@ -129,7 +119,7 @@ export const LoginPage = () => {
             aria-expanded={showDev}
             className="flex w-full items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-muted transition-colors hover:text-ink"
           >
-            {env.useMockAuth ? 'Mock accounts' : 'Dev accounts'}
+            Dev accounts
             <ChevronDown
               aria-hidden="true"
               className={cn('size-3.5 transition-transform', showDev && 'rotate-180')}

@@ -1,57 +1,12 @@
 import { apiClient } from '@/lib/apiClient';
-import { env } from '@/lib/env';
 import { clone, delay } from '@/lib/mock/utils';
-import { jsonStorage } from '@/lib/storage';
-import { defaultSettings, helpArticles, integrations } from '@/lib/mock/system';
-import { announcements as announcementsFixture } from '@/lib/mock/operations';
+import { defaultSettings, helpArticles } from '@/lib/mock/system';
 
-const SETTINGS_KEY = 'alotel.admin.mock.settings';
-
-const readSettings = () => {
-  const stored = jsonStorage.read(SETTINGS_KEY, null);
-  if (stored) return stored;
-  const value = clone(defaultSettings);
-  jsonStorage.write(SETTINGS_KEY, value);
-  return value;
-};
-
-/** `System announcement` (mock fixture) → the same shape `toAnnouncement` produces for the real one. */
-const toMockAnnouncement = (raw) => ({
-  id: raw.id,
-  title: raw.title,
-  body: raw.body,
-  createdBy: null,
-  isActive: true,
-  createdAt: raw.date,
-  updatedAt: raw.date,
-});
-
+/** Help articles — never confirmed against a real `/help` endpoint; stays on fixture data. */
 const mockSystem = {
-  async getSettings() {
-    await delay(220);
-    return { settings: clone(readSettings()), integrations: clone(integrations) };
-  },
-
-  async saveSettings(patch) {
-    await delay(450);
-    const next = { ...readSettings(), ...patch };
-    jsonStorage.write(SETTINGS_KEY, next);
-    return clone(next);
-  },
-
   async getHelp() {
     await delay(180);
     return clone(helpArticles);
-  },
-
-  async getAnnouncements() {
-    await delay(200);
-    return clone(announcementsFixture).map(toMockAnnouncement);
-  },
-
-  async createAnnouncement(payload) {
-    await delay(300);
-    return { id: `ann_${Date.now()}`, createdBy: null, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
   },
 };
 
@@ -109,11 +64,10 @@ const parseConfigValue = (raw, fallback) => {
 };
 
 /**
- * Real backend. `GET/PUT /admin/system/config/` (Super Admin only) persists
- * the security/automation toggles; the three notification toggles are
- * genuinely per-admin, so they go to `GET/PUT /notifications/preferences/<user_id>/`
- * instead. Both are confirmed, working endpoints — there is no `/settings`
- * endpoint on this backend (the previous version of this file pointed at one).
+ * `GET/PUT /admin/system/config/` (Super Admin only) persists the
+ * security/automation toggles; the three notification toggles are genuinely
+ * per-admin, so they go to `GET/PUT /notifications/preferences/<user_id>/`
+ * instead.
  */
 const realSystem = {
   async getSettings(userId) {
@@ -162,8 +116,6 @@ const realSystem = {
 
   getNotificationPreferences: async (userId) => (await apiClient.get(`/notifications/preferences/${userId}/`)).data,
 
-  getHelp: async () => (await apiClient.get('/help')).data,
-
   async getAnnouncements() {
     const { data } = await apiClient.get('/admin/announcements/');
     return (Array.isArray(data) ? data : (data?.results ?? [])).map(toAnnouncement);
@@ -175,15 +127,10 @@ const realSystem = {
   },
 };
 
-const settingsBackend = env.useMockSettings ? mockSystem : realSystem;
-const announcementsBackend = env.useMockAnnouncements ? mockSystem : realSystem;
-// Help articles are untouched by this pass — same `useMock` switch as before.
-const helpBackend = env.useMock ? mockSystem : realSystem;
-
 export const systemService = {
-  getSettings: (userId) => settingsBackend.getSettings(userId),
-  saveSettings: (patch, userId) => settingsBackend.saveSettings(patch, userId),
-  getHelp: () => helpBackend.getHelp(),
-  getAnnouncements: () => announcementsBackend.getAnnouncements(),
-  createAnnouncement: (payload) => announcementsBackend.createAnnouncement(payload),
+  getSettings: (userId) => realSystem.getSettings(userId),
+  saveSettings: (patch, userId) => realSystem.saveSettings(patch, userId),
+  getHelp: () => mockSystem.getHelp(),
+  getAnnouncements: () => realSystem.getAnnouncements(),
+  createAnnouncement: (payload) => realSystem.createAnnouncement(payload),
 };

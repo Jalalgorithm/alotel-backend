@@ -1,35 +1,9 @@
 import { apiClient } from '@/lib/apiClient';
 import { toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
-import { env } from '@/lib/env';
-import { ApiError } from '@/utils/errors';
-import { clone, createId, delay, paginate } from '@/lib/mock/utils';
-import { jsonStorage } from '@/lib/storage';
-import {
-  costBreakdown,
-  invoices,
-  payments,
-  payouts,
-  revenueByMonth,
-  taxRules,
-} from '@/lib/mock/finance';
+import { clone, delay } from '@/lib/mock/utils';
+import { costBreakdown, invoices, revenueByMonth } from '@/lib/mock/finance';
 
 /** Financial service — payments, payouts, invoices and tax rules. */
-
-const KEYS = {
-  payouts: 'alotel.admin.mock.payouts',
-  taxRules: 'alotel.admin.mock.taxRules',
-};
-
-const seeded = (key, source) => {
-  const rows = jsonStorage.read(key, null);
-  if (rows) return rows;
-  const value = clone(source);
-  jsonStorage.write(key, value);
-  return value;
-};
-
-const readPayouts = () => seeded(KEYS.payouts, payouts);
-const readTaxRules = () => seeded(KEYS.taxRules, taxRules);
 
 /**
  * `PayoutSerializer`'s exact fields. Payee is `Property.host` directly — no
@@ -79,142 +53,14 @@ const toPayment = (raw) => ({
   createdAt: raw.created_at,
 });
 
+/**
+ * Revenue & Invoice screen — no confirmed real endpoint for this yet, stays
+ * on fixture data (unlike everything else in this file).
+ */
 const mockFinance = {
-  async listPayments(params) {
-    await delay(300);
-    return paginate(payments, params, {
-      searchFields: ['guest', 'bookingId', 'property', 'reference'],
-      filterFields: ['status', 'method'],
-    });
-  },
-
-  async listPayouts(params) {
-    await delay(300);
-    return paginate(readPayouts(), params, {
-      searchFields: ['propertyName', 'hostEmail'],
-      filterFields: ['status'],
-    });
-  },
-
-  async releasePayout(id) {
-    await delay(500);
-
-    const rows = readPayouts();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Payout not found.', 404);
-
-    rows[index] = { ...rows[index], status: 'Released', releasedAt: new Date().toISOString() };
-    jsonStorage.write(KEYS.payouts, rows);
-    return clone(rows[index]);
-  },
-
   async revenue() {
     await delay(320);
     return clone({ invoices, revenueByMonth, costBreakdown });
-  },
-
-  async listTaxRules(params = {}) {
-    await delay(260);
-    const rows = readTaxRules();
-    const filtered = rows.filter(
-      (rule) =>
-        (!params.country || rule.country === params.country) &&
-        (!params.state || rule.state === params.state) &&
-        (!params.city || rule.city === params.city) &&
-        (!params.status || rule.status === params.status),
-    );
-    return clone(filtered);
-  },
-
-  async createTaxRule(payload) {
-    await delay(450);
-
-    const rule = { id: createId('tax'), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
-    jsonStorage.write(KEYS.taxRules, [...readTaxRules(), rule]);
-    return clone(rule);
-  },
-
-  async updateTaxRule(id, patch) {
-    await delay(350);
-
-    const rows = readTaxRules();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Tax rule not found.', 404);
-
-    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
-    jsonStorage.write(KEYS.taxRules, rows);
-    return clone(rows[index]);
-  },
-
-  async deleteTaxRule(id) {
-    await delay(350);
-    jsonStorage.write(KEYS.taxRules, readTaxRules().filter((entry) => entry.id !== id));
-    return { success: true };
-  },
-
-  async approveTaxRule(id) {
-    await delay(350);
-    return mockFinance.updateTaxRule(id, { status: 'active' });
-  },
-
-  async rejectTaxRule(id, reason) {
-    await delay(350);
-    return mockFinance.updateTaxRule(id, { status: 'rejected', rejectedReason: reason });
-  },
-
-  /**
-   * Shaped like the real `/properties/taxes/suggest/` response (snake_case) —
-   * `AiTaxCompanionPanel` consumes the AI response as-is with no normaliser, so the
-   * mock mirrors that wire shape rather than this file's usual camelCase
-   * convention for everything else.
-   */
-  async suggestTaxRules({ country, state, city }) {
-    await delay(700);
-    const scopeLevel = city ? 'city' : state ? 'state' : 'country';
-    return {
-      mode: `${scopeLevel}_level`,
-      queried: { country, state: state || null, city: city || null },
-      suggestions: [
-        {
-          suggestion_id: 'sugg_mock_1',
-          rule_name: `${city || state || country} Occupancy Tax`,
-          scope_level: scopeLevel,
-          country,
-          state: state || null,
-          city: city || null,
-          tax_type: 'percentage',
-          value: 8.5,
-          frequency: 'per_night',
-          display_label: 'Occupancy Tax',
-          confidence: 'medium',
-          source_url: 'https://example.com/mock-tax-reference',
-          caveat: 'Mock suggestion — GEMINI_API_KEY is not configured on the backend; this is placeholder data for demo purposes.',
-        },
-      ],
-    };
-  },
-
-  /** Always "all clear" — this is fundamentally a real-backend panel, not a rich fixture. */
-  async coverageAlerts() {
-    await delay(250);
-    return { count: 0, alerts: [] };
-  },
-
-  async confirmNoTax(payload) {
-    await delay(300);
-    return { id: createId('ntc'), ...payload, confirmed_by: null, created_at: new Date().toISOString() };
-  },
-
-  async createTaxRuleFromCsvRow(row) {
-    return mockFinance.createTaxRule(toTaxRule(toCsvRowPayload(row)));
-  },
-
-  /** No bulk endpoint in mock mode — goes row-by-row through the same mock create path, mirroring the real bulk endpoint's `{importedCount, rules}` shape. */
-  async bulkImportTaxRules(rows) {
-    await delay(400);
-    const rules = [];
-    for (const row of rows) rules.push(await mockFinance.createTaxRuleFromCsvRow(row));
-    return { importedCount: rules.length, rules };
   },
 };
 
@@ -313,22 +159,6 @@ const realPayments = {
   },
 };
 
-const mockPayments = {
-  refund: async () => ({ detail: 'Mock refund recorded.' }),
-  getDeposit: async (bookingId) => ({ booking_id: bookingId, status: 'held', amount: '150.00', currency: 'GBP' }),
-  preauthDeposit: async () => ({ detail: 'Mock deposit held.' }),
-  captureDeposit: async () => ({ detail: 'Mock deposit captured.' }),
-  releaseDeposit: async () => ({ detail: 'Mock deposit released.' }),
-  deductDeposit: async () => ({ detail: 'Mock deduction recorded.' }),
-  fxRates: async () => ({
-    base: 'GBP',
-    rates: {},
-    supportedCurrencies: ['GBP', 'EUR', 'USD', 'AED', 'NGN'],
-    providerByCurrency: { GBP: 'stripe', EUR: 'stripe', USD: 'stripe', AED: 'stripe', NGN: 'flutterwave' },
-    note: '',
-  }),
-};
-
 /**
  * Tax Rule Builder v2. Public to read (the guest quote depends on it) and
  * Super-Admin-only to change. Rules stack (country + state + city can all
@@ -421,7 +251,7 @@ const realTaxes = {
     return data;
   },
 
-  /** One CSV row → one create call — used by the mock/offline path only; the real path uses `bulkImport` below. */
+  /** One CSV row → one create call. */
   async createFromCsvRow(row) {
     const { data } = await apiClient.post('/properties/taxes/', toCsvRowPayload(row));
     return toTaxRule(data);
@@ -473,22 +303,7 @@ const realFinance = {
   releasePayout: async (id) => (await apiClient.post(`/payouts/${id}/release/`)).data,
   /** `POST /payouts/` — Super Admin only. */
   createPayout: async (payload) => (await apiClient.post('/payouts/', payload)).data,
-  revenue: async () => (await apiClient.get('/revenue')).data,
-  listTaxRules: async () => (await apiClient.get('/tax-rules')).data,
-  createTaxRule: async (payload) => (await apiClient.post('/tax-rules', payload)).data,
-  updateTaxRule: async (id, patch) => (await apiClient.patch(`/tax-rules/${id}`, patch)).data,
-  deleteTaxRule: async (id) => (await apiClient.delete(`/tax-rules/${id}`)).data,
 };
-
-const backend = env.useMock ? mockFinance : realFinance;
-// `payments` is already the imported mock fixture — name the backend distinctly.
-const paymentOps = env.useMockPayments ? mockPayments : realPayments;
-// The payments ledger has its own flag (previously declared but unused — it fell through to the global one).
-const paymentsList = env.useMockPayments ? mockFinance : realFinance;
-// Payouts share the payments flag rather than the global `env.useMock` — they were
-// silently stuck on mock data because `backend` above is keyed off the wrong flag.
-const payoutsBackend = env.useMockPayments ? mockFinance : realFinance;
-const taxes = env.useMockTaxes ? mockFinance : realTaxes;
 
 /** Real payout rows have no free-text search field server-side — filter client-side over the fields the table shows. */
 const filterPayoutRows = (rows, query) => {
@@ -500,40 +315,32 @@ const filterPayoutRows = (rows, query) => {
 };
 
 export const financeService = {
-  /* Payment operations — wired to the real API. */
-  refundBooking: (payload) => paymentOps.refund(payload),
-  getDeposit: (bookingId) => paymentOps.getDeposit(bookingId),
-  preauthDeposit: (payload) => paymentOps.preauthDeposit(payload),
-  captureDeposit: (payload) => paymentOps.captureDeposit(payload),
-  releaseDeposit: (payload) => paymentOps.releaseDeposit(payload),
-  deductDeposit: (payload) => paymentOps.deductDeposit(payload),
-  getFxRates: (base) => paymentOps.fxRates(base),
+  /* Payment operations. */
+  refundBooking: (payload) => realPayments.refund(payload),
+  getDeposit: (bookingId) => realPayments.getDeposit(bookingId),
+  preauthDeposit: (payload) => realPayments.preauthDeposit(payload),
+  captureDeposit: (payload) => realPayments.captureDeposit(payload),
+  releaseDeposit: (payload) => realPayments.releaseDeposit(payload),
+  deductDeposit: (payload) => realPayments.deductDeposit(payload),
+  getFxRates: (base) => realPayments.fxRates(base),
 
-  getPayments: (params) => paymentsList.listPayments(params),
+  getPayments: (params) => realFinance.listPayments(params),
 
-  /* Payouts — wired to the real API by default (`VITE_USE_MOCK_PAYMENTS`). Real
-   * `/payouts/` returns a plain array with no pagination envelope, so it's
-   * normalised into the same `{items, total, ...}` shape every other list uses. */
+  /* Payouts — real `/payouts/` returns a plain array with no pagination
+   * envelope, so it's normalised into the same `{items, total, ...}` shape
+   * every other list uses. */
   getPayouts: async (params = {}) => {
-    if (env.useMockPayments) return payoutsBackend.listPayouts(params);
-    const rows = filterPayoutRows((await payoutsBackend.listPayouts(params)).map(toPayout), params.query);
+    const rows = filterPayoutRows((await realFinance.listPayouts(params)).map(toPayout), params.query);
     return { items: rows, total: rows.length, page: 1, pageSize: rows.length || 1, totalPages: 1 };
   },
-  releasePayout: async (id) => {
-    const payout = await payoutsBackend.releasePayout(id);
-    return env.useMockPayments ? payout : toPayout(payout);
-  },
-  /** Schedule a payout — Super Admin only, real API only (no mock create flow exists). */
-  createPayout: async (values) => {
-    if (env.useMockPayments) throw new ApiError('Scheduling a payout requires the real API.', 400);
-    return toPayout(await payoutsBackend.createPayout(toPayoutPayload(values)));
-  },
+  releasePayout: async (id) => toPayout(await realFinance.releasePayout(id)),
+  /** Schedule a payout — Super Admin only. */
+  createPayout: async (values) => toPayout(await realFinance.createPayout(toPayoutPayload(values))),
 
   /**
    * Manual cost log (`operations.ExpenseEntry`) for the Cost Breakdown categories
    * with no automatic source (Operation/Staff/Marketing/Others — Maintenance is
-   * derived server-side from ticket costs). `IsLevel1Or2`, real API only — this
-   * model is new enough there's no mock fixture for it.
+   * derived server-side from ticket costs). `IsLevel1Or2`, real API only.
    */
   getExpenses: async (params = {}) => {
     const query = {};
@@ -553,26 +360,20 @@ export const financeService = {
     return data;
   },
 
-  getRevenue: () => backend.revenue(),
-  /* Tax rules — wired to the real API. */
-  getTaxRules: (params) => (env.useMockTaxes ? backend.listTaxRules(params) : taxes.list(params)),
-  createTaxRule: (payload) => (env.useMockTaxes ? backend.createTaxRule(payload) : taxes.create(payload)),
-  updateTaxRule: (id, patch) => (env.useMockTaxes ? backend.updateTaxRule(id, patch) : taxes.update(id, patch)),
-  deleteTaxRule: (id) => (env.useMockTaxes ? backend.deleteTaxRule(id) : taxes.remove(id)),
-  approveTaxRule: (id) => (env.useMockTaxes ? backend.approveTaxRule(id) : taxes.approve(id)),
-  rejectTaxRule: (id, reason) => (env.useMockTaxes ? backend.rejectTaxRule(id, reason) : taxes.reject(id, reason)),
-  suggestTaxRules: (payload) => (env.useMockTaxes ? mockFinance.suggestTaxRules(payload) : realTaxes.suggest(payload)),
-  getCoverageAlerts: () => (env.useMockTaxes ? mockFinance.coverageAlerts() : realTaxes.coverageAlerts()),
-  /** No offline mock for this one — it's a thin, real-time spot-check with nothing meaningful to fake. */
+  /** Revenue & Invoice — no confirmed real endpoint yet, stays mocked. */
+  getRevenue: () => mockFinance.revenue(),
+
+  /* Tax rules. */
+  getTaxRules: (params) => realTaxes.list(params),
+  createTaxRule: (payload) => realTaxes.create(payload),
+  updateTaxRule: (id, patch) => realTaxes.update(id, patch),
+  deleteTaxRule: (id) => realTaxes.remove(id),
+  approveTaxRule: (id) => realTaxes.approve(id),
+  rejectTaxRule: (id, reason) => realTaxes.reject(id, reason),
+  suggestTaxRules: (payload) => realTaxes.suggest(payload),
+  getCoverageAlerts: () => realTaxes.coverageAlerts(),
   checkTaxCoverage: (payload) => realTaxes.checkCoverage(payload),
-  confirmNoTax: (payload) => (env.useMockTaxes ? mockFinance.confirmNoTax(payload) : realTaxes.confirmNoTax(payload)),
-  createTaxRuleFromCsvRow: (row) => (env.useMockTaxes ? mockFinance.createTaxRuleFromCsvRow(row) : realTaxes.createFromCsvRow(row)),
-  /**
-   * Bulk CSV import. Real path sends the raw `file`; mock path has no
-   * server-side parser to hand it to, so it replays the already-parsed `rows`
-   * (from the modal's own client-side preview parser) through the per-row
-   * mock create path instead.
-   */
-  bulkImportTaxRules: ({ file, rows }) =>
-    env.useMockTaxes ? mockFinance.bulkImportTaxRules(rows) : realTaxes.bulkImport(file),
+  confirmNoTax: (payload) => realTaxes.confirmNoTax(payload),
+  createTaxRuleFromCsvRow: (row) => realTaxes.createFromCsvRow(row),
+  bulkImportTaxRules: ({ file }) => realTaxes.bulkImport(file),
 };

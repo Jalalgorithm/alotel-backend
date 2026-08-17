@@ -32,7 +32,7 @@ export const SpaceBookingsPage = () => {
   const { data: spacesData } = useSpaces({ pageSize: 100 });
   const { data, isFetching } = useSpaceBookings({
     query: debouncedSearch,
-    status,
+    status: status === 'All' ? undefined : status,
     spaceId: spaceId === 'All' ? undefined : spaceId,
     page,
   });

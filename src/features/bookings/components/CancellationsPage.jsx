@@ -21,6 +21,7 @@ import { formatCurrency, formatRelative } from '@/utils/format';
 export const CancellationsPage = () => {
   const [search, setSearch] = useState('');
   const [refundingId, setRefundingId] = useState(null);
+  const [refundedIds, setRefundedIds] = useState(() => new Set());
 
   const debouncedSearch = useDebouncedValue(search);
   const { data, isFetching } = useCancellations({ query: debouncedSearch, pageSize: 50 });
@@ -70,22 +71,28 @@ export const CancellationsPage = () => {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (row) => (
-        <Button
-          size="xs"
-          variant="primary"
-          isLoading={isPending && refundingId === row.id}
-          onClick={() => {
-            setRefundingId(row.id);
-            refund(
-              { bookingId: row.id, amount: row.total, currency: row.currency },
-              { onSettled: () => setRefundingId(null) },
-            );
-          }}
-        >
-          Refund
-        </Button>
-      ),
+      render: (row) =>
+        refundedIds.has(row.id) ? (
+          <StatusBadge status="Refunded" />
+        ) : (
+          <Button
+            size="xs"
+            variant="primary"
+            isLoading={isPending && refundingId === row.id}
+            onClick={() => {
+              setRefundingId(row.id);
+              refund(
+                { bookingId: row.id, amount: row.total, currency: row.currency },
+                {
+                  onSuccess: () => setRefundedIds((prev) => new Set(prev).add(row.id)),
+                  onSettled: () => setRefundingId(null),
+                },
+              );
+            }}
+          >
+            Refund
+          </Button>
+        ),
     },
   ];
 

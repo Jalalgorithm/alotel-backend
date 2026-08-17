@@ -1,8 +1,4 @@
 import { apiClient } from '@/lib/apiClient';
-import { env } from '@/lib/env';
-import { clone, createId, delay, paginate } from '@/lib/mock/utils';
-import { jsonStorage } from '@/lib/storage';
-import { maintenanceWorkers as workersFixture, maintenanceTickets as ticketsFixture } from '@/lib/mock/maintenance';
 import {
   toAssignment,
   toTicket,
@@ -143,119 +139,20 @@ const realMaintenance = {
   },
 };
 
-/* -------------------------------------------------------------------------- */
-/* Offline-dev-only mock — gated by `useMockMaintenance`, off by default       */
-/* -------------------------------------------------------------------------- */
-
-const KEYS = { workers: 'alotel.admin.mock.maintenanceWorkers', tickets: 'alotel.admin.mock.maintenanceTickets' };
-
-const seeded = (key, source) => {
-  const rows = jsonStorage.read(key, null);
-  if (rows) return rows;
-  const value = clone(source);
-  jsonStorage.write(key, value);
-  return value;
-};
-const readWorkers = () => seeded(KEYS.workers, workersFixture);
-const readTickets = () => seeded(KEYS.tickets, ticketsFixture);
-
-const mockMaintenance = {
-  async listWorkers(params = {}) {
-    await delay(250);
-    const result = paginate(readWorkers(), params, { searchFields: ['name', 'company_name'], filterFields: ['employment_type', 'status'] });
-    return { ...result, items: result.items.map(toWorker) };
-  },
-  async getWorker(id) {
-    await delay(200);
-    return toWorker(readWorkers().find((row) => row.id === id));
-  },
-  async createWorker(values) {
-    await delay(350);
-    const record = { id: createId('wrk'), assigned_property_count: 0, ...toWorkerPayload(values) };
-    jsonStorage.write(KEYS.workers, [...readWorkers(), record]);
-    return toWorker(record);
-  },
-  async updateWorker(id, values) {
-    await delay(300);
-    const rows = readWorkers();
-    const index = rows.findIndex((row) => row.id === id);
-    rows[index] = { ...rows[index], ...toWorkerPayload(values) };
-    jsonStorage.write(KEYS.workers, rows);
-    return toWorker(rows[index]);
-  },
-  async assignWorkerToProperty(workerId) {
-    await delay(250);
-    return toAssignment({ id: createId('asg'), worker: workerId, property: null, assigned_at: new Date().toISOString() });
-  },
-  async unassignWorkerFromProperty() {
-    await delay(250);
-    return { success: true };
-  },
-  async listTickets(params = {}) {
-    await delay(250);
-    const result = paginate(readTickets(), params, { searchFields: ['category', 'description'], filterFields: ['status', 'priority'] });
-    return { ...result, items: result.items.map(toTicket) };
-  },
-  async getTicket(id) {
-    await delay(200);
-    return toTicket(readTickets().find((row) => row.id === id));
-  },
-  async createTicket(values) {
-    await delay(350);
-    const record = { id: createId('tkt'), status: 'open', created_at: new Date().toISOString(), costs: [], photos: [], total_cost: '0', ...toTicketPayload(values) };
-    jsonStorage.write(KEYS.tickets, [...readTickets(), record]);
-    return toTicket(record);
-  },
-  async updateTicket(id, values) {
-    await delay(300);
-    const rows = readTickets();
-    const index = rows.findIndex((row) => row.id === id);
-    rows[index] = { ...rows[index], ...values };
-    jsonStorage.write(KEYS.tickets, rows);
-    return toTicket(rows[index]);
-  },
-  async logTicketCost(ticketId, values) {
-    await delay(300);
-    const rows = readTickets();
-    const index = rows.findIndex((row) => row.id === ticketId);
-    const cost = { id: createId('cst'), created_at: new Date().toISOString(), ...toTicketCostPayload(values) };
-    rows[index] = { ...rows[index], costs: [...(rows[index].costs ?? []), cost] };
-    jsonStorage.write(KEYS.tickets, rows);
-    return toTicketCost(cost);
-  },
-  async uploadTicketPhoto(ticketId, { caption = '' }) {
-    await delay(400);
-    const rows = readTickets();
-    const index = rows.findIndex((row) => row.id === ticketId);
-    const photo = { id: createId('pho'), file: '', caption, taken_at_server: new Date().toISOString() };
-    rows[index] = { ...rows[index], photos: [...(rows[index].photos ?? []), photo] };
-    jsonStorage.write(KEYS.tickets, rows);
-    return toTicketPhoto(photo);
-  },
-  async getDashboard() {
-    await delay(250);
-    const tickets = readTickets();
-    const open = tickets.filter((t) => !['resolved', 'closed'].includes(t.status));
-    return { openCount: open.length, avgResolutionHours: 18, totalSpend: 0 };
-  },
-};
-
-const backend = env.useMockMaintenance ? mockMaintenance : realMaintenance;
-
 export const maintenanceService = {
-  getWorkers: (params) => backend.listWorkers(params),
-  getWorker: (id) => backend.getWorker(id),
-  createWorker: (values) => backend.createWorker(values),
-  updateWorker: (id, values) => backend.updateWorker(id, values),
-  assignWorkerToProperty: (workerId, propertyId) => backend.assignWorkerToProperty(workerId, propertyId),
-  unassignWorkerFromProperty: (workerId, assignmentId) => backend.unassignWorkerFromProperty(workerId, assignmentId),
+  getWorkers: (params) => realMaintenance.listWorkers(params),
+  getWorker: (id) => realMaintenance.getWorker(id),
+  createWorker: (values) => realMaintenance.createWorker(values),
+  updateWorker: (id, values) => realMaintenance.updateWorker(id, values),
+  assignWorkerToProperty: (workerId, propertyId) => realMaintenance.assignWorkerToProperty(workerId, propertyId),
+  unassignWorkerFromProperty: (workerId, assignmentId) => realMaintenance.unassignWorkerFromProperty(workerId, assignmentId),
 
-  getTickets: (params) => backend.listTickets(params),
-  getTicket: (id) => backend.getTicket(id),
-  createTicket: (values) => backend.createTicket(values),
-  updateTicket: (id, values) => backend.updateTicket(id, values),
-  logTicketCost: (ticketId, values) => backend.logTicketCost(ticketId, values),
-  uploadTicketPhoto: (ticketId, payload) => backend.uploadTicketPhoto(ticketId, payload),
+  getTickets: (params) => realMaintenance.listTickets(params),
+  getTicket: (id) => realMaintenance.getTicket(id),
+  createTicket: (values) => realMaintenance.createTicket(values),
+  updateTicket: (id, values) => realMaintenance.updateTicket(id, values),
+  logTicketCost: (ticketId, values) => realMaintenance.logTicketCost(ticketId, values),
+  uploadTicketPhoto: (ticketId, payload) => realMaintenance.uploadTicketPhoto(ticketId, payload),
 
-  getDashboard: (params) => backend.getDashboard(params),
+  getDashboard: (params) => realMaintenance.getDashboard(params),
 };

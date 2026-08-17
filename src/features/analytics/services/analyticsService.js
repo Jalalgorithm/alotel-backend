@@ -1,28 +1,4 @@
 import { apiClient } from '@/lib/apiClient';
-import { env } from '@/lib/env';
-import { clone, delay } from '@/lib/mock/utils';
-import { analyticsKpis, channelMix, durationMix, occupancyByRegion, reviewBreakdown } from '@/lib/mock/system';
-import { revenueByMonth } from '@/lib/mock/finance';
-
-const mockAnalytics = {
-  async kpis() {
-    await delay(380);
-
-    return clone({
-      kpis: analyticsKpis,
-      reviewBreakdown,
-      channelMix,
-      durationMix,
-      occupancyByRegion,
-      revenueByMonth,
-    });
-  },
-
-  async export() {
-    await delay(300);
-    return new Blob(['mock export — not wired'], { type: 'text/plain' });
-  },
-};
 
 /**
  * `GET /analytics/kpis/` already returns the full metrics bundle in one call
@@ -55,9 +31,7 @@ const realAnalytics = {
   },
 };
 
-const backend = env.useMockAnalytics ? mockAnalytics : realAnalytics;
-
 export const analyticsService = {
-  getKpis: (filters) => backend.kpis(filters),
-  exportReport: (params) => backend.export(params),
+  getKpis: (filters) => realAnalytics.kpis(filters),
+  exportReport: (params) => realAnalytics.export(params),
 };

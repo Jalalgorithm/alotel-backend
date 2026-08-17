@@ -2,16 +2,7 @@ import { apiClient } from '@/lib/apiClient';
 import { toTemplate, toTemplatePayload } from '@/lib/contractSchema';
 import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
-import { clone, createId, delay, paginate } from '@/lib/mock/utils';
-import { jsonStorage } from '@/lib/storage';
-import {
-  bookings,
-  cancellations,
-  guests,
-  maintenanceRequests,
-  resolveContractType,
-} from '@/lib/mock/operations';
-import { units } from '@/lib/mock/catalogue';
+import { resolveContractType } from '@/lib/mock/operations';
 import {
   toAdminListParams,
   toBookingDetail,
@@ -35,15 +26,6 @@ import {
  * reports, contracts, housekeeping, calendar and cancellations.
  */
 
-const KEYS = {
-  bookings: 'alotel.admin.mock.bookings',
-  damageAssessments: 'alotel.admin.mock.damageAssessments',
-  checkoutReports: 'alotel.admin.mock.checkoutReportsByBooking',
-  cancellations: 'alotel.admin.mock.cancellations',
-  units: 'alotel.admin.mock.units',
-  maintenance: 'alotel.admin.mock.maintenance',
-};
-
 /**
  * Resolve a bare `/media/...` path against the API's own origin. A no-op for
  * already-absolute URLs and for a same-origin deployment (relative `apiUrl`,
@@ -58,424 +40,6 @@ const resolveMediaUrl = (path) => {
   } catch {
     return path;
   }
-};
-
-const seeded = (key, source) => {
-  const rows = jsonStorage.read(key, null);
-  if (rows) return rows;
-  const value = clone(source);
-  jsonStorage.write(key, value);
-  return value;
-};
-
-const readBookings = () => seeded(KEYS.bookings, bookings);
-const readCancellations = () => seeded(KEYS.cancellations, cancellations);
-const readUnits = () => seeded(KEYS.units, units);
-const readMaintenance = () => seeded(KEYS.maintenance, maintenanceRequests);
-
-/** Offline-dev-only stores for damage assessments / reports — keyed by booking id, empty until touched. */
-const readDamageAssessments = () => jsonStorage.read(KEYS.damageAssessments, {});
-const readCheckoutReports = () => jsonStorage.read(KEYS.checkoutReports, {});
-
-const mockBookings = {
-  /* --------------------------------------------------------------- bookings */
-  async list(params) {
-    await delay(320);
-    return paginate(readBookings(), params, {
-      searchFields: ['guest', 'id', 'property', 'email'],
-      filterFields: ['status', 'country'],
-    });
-  },
-
-  async detail(id) {
-    await delay(200);
-    const booking = readBookings().find((entry) => entry.id === id);
-    if (!booking) throw new ApiError('Booking not found.', 404);
-    return clone(booking);
-  },
-
-  async update(id, patch) {
-    await delay(450);
-
-    const rows = readBookings();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Booking not found.', 404);
-
-    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
-    jsonStorage.write(KEYS.bookings, rows);
-    return clone(rows[index]);
-  },
-
-  async timeline(id) {
-    await delay(200);
-    const booking = readBookings().find((entry) => entry.id === id);
-    return booking ? [{ from: '', to: booking.status, reason: '', triggeredBy: null, at: booking.createdAt }] : [];
-  },
-
-  async receipt(id) {
-    await delay(250);
-    const booking = readBookings().find((entry) => entry.id === id);
-    if (!booking) throw new ApiError('Booking not found.', 404);
-
-    return {
-      bookingId: id,
-      status: booking.status,
-      currency: booking.currency ?? 'GBP',
-      totals: { total_due_now: booking.total ?? 0 },
-      lineItems: [],
-      payments: [],
-      generatedAt: new Date().toISOString(),
-    };
-  },
-
-  async confirm(id) {
-    return mockBookings.update(id, { status: 'Confirmed' });
-  },
-
-  /** Manual approval for a non-instant-book property — mirrors the real endpoint's shape. */
-  async approve(id) {
-    const updated = await mockBookings.update(id, { status: 'Confirmed' });
-    return { booking_id: id, status: updated.status, manual_approval_granted: true, manual_approval_granted_at: new Date().toISOString() };
-  },
-
-  async cancelBooking(id, reason) {
-    return mockBookings.update(id, { status: 'Cancelled', reason });
-  },
-
-  /* ----------------------------------------------------------------- guests */
-  async listGuests(params) {
-    await delay(280);
-    return paginate(guests, params, {
-      searchFields: ['name', 'email', 'phone'],
-      filterFields: ['kyc', 'country', 'segment'],
-    });
-  },
-
-  async updateGuest(id, patch) {
-    await delay(300);
-    const guest = guests.find((entry) => entry.id === id);
-    if (!guest) throw new ApiError('Guest not found.', 404);
-    return clone({ ...guest, ...patch });
-  },
-
-  async guestDetail(id) {
-    await delay(280);
-    const guest = guests.find((entry) => entry.id === id);
-    if (!guest) throw new ApiError('Guest not found.', 404);
-    return clone({
-      id: guest.id,
-      name: guest.name,
-      email: guest.email,
-      isActive: guest.isActive ?? true,
-      joinedAt: guest.joinedAt,
-      phone: guest.phone ?? null,
-      kycStatus: (guest.kyc ?? 'none').toLowerCase().replace(/\s+/g, '_'),
-      stayStats: { totalBookings: guest.stays ?? 0, completedStays: guest.stays ?? 0, totalSpend: guest.lifetimeValue ?? 0 },
-    });
-  },
-
-  async guestBookingHistory(id, params = {}) {
-    await delay(280);
-    const guest = guests.find((entry) => entry.id === id);
-    if (!guest) throw new ApiError('Guest not found.', 404);
-
-    let rows = bookings
-      .filter((booking) => booking.email === guest.email)
-      .map((booking) => ({
-        id: booking.id,
-        propertyId: booking.propertyId,
-        propertyName: booking.property,
-        propertyImage: null,
-        checkIn: booking.checkIn,
-        checkOut: booking.checkOut,
-        status: booking.status,
-        nights: booking.nights,
-        currency: booking.currency,
-        createdAt: booking.checkIn,
-      }));
-
-    if (params.status) rows = rows.filter((row) => row.status === params.status);
-    return clone(rows);
-  },
-
-  /**
-   * -------------------------------------------------------- check-out reports
-   * Offline-dev-only — thin by design. The real feature (`operations` app) has
-   * no fixture-worthy equivalent since it's genuinely per-booking; this exists
-   * so `useMockBookings=true` doesn't crash the screen, not to demo the flow.
-   */
-  async getDamageAssessments(bookingId) {
-    await delay(200);
-    return clone(readDamageAssessments()[bookingId] ?? []).map(toDamageAssessment);
-  },
-
-  async createDamageAssessment(bookingId, values) {
-    await delay(350);
-    const store = readDamageAssessments();
-    const rows = store[bookingId] ?? [];
-    const record = {
-      id: createId('dmg'),
-      booking: bookingId,
-      inspection: null,
-      photo: null,
-      deduct_from_deposit: false,
-      approved_cost: null,
-      logged_by: null,
-      logged_at: new Date().toISOString(),
-      ...toDamageAssessmentPayload(values),
-    };
-    jsonStorage.write(KEYS.damageAssessments, { ...store, [bookingId]: [...rows, record] });
-    return toDamageAssessment(record);
-  },
-
-  async updateDamageAssessment(bookingId, damageId, values) {
-    await delay(300);
-    const store = readDamageAssessments();
-    const rows = store[bookingId] ?? [];
-    const index = rows.findIndex((entry) => entry.id === damageId);
-    if (index < 0) throw new ApiError('Damage item not found.', 404);
-
-    rows[index] = { ...rows[index], ...toDamageAssessmentPatch(values) };
-    jsonStorage.write(KEYS.damageAssessments, { ...store, [bookingId]: rows });
-    return toDamageAssessment(rows[index]);
-  },
-
-  async getCheckoutReport(bookingId) {
-    await delay(200);
-    return clone(readCheckoutReports()[bookingId] ?? null);
-  },
-
-  async generateCheckoutReport(bookingId) {
-    await delay(500);
-    const damageItems = readDamageAssessments()[bookingId] ?? [];
-    const deductionTotal = damageItems
-      .filter((item) => item.deduct_from_deposit)
-      .reduce((sum, item) => sum + Number(item.approved_cost ?? item.estimated_cost ?? 0), 0);
-
-    const report = {
-      id: createId('rpt'),
-      booking: bookingId,
-      pdf_url: '',
-      sent_to_guest: false,
-      sent_at: null,
-      admin_signature_url: '',
-      deposit_deduction_total: String(deductionTotal),
-      delivery_log: [],
-      generated_at: new Date().toISOString(),
-      damage_items: damageItems,
-    };
-    jsonStorage.write(KEYS.checkoutReports, { ...readCheckoutReports(), [bookingId]: report });
-    return toCheckoutReport(report);
-  },
-
-  /* -------------------------------------------------------------- contracts */
-  async contractForBooking() {
-    await delay(200);
-    return null;
-  },
-
-  async sendContract() {
-    await delay(400);
-    return { detail: 'Mock contract sent.' };
-  },
-
-  async getContractStatus() {
-    await delay(200);
-    return null;
-  },
-
-  async listContractTemplates() {
-    await delay(200);
-    return [];
-  },
-
-  async createContractTemplate(values) {
-    await delay(400);
-    return { id: createId('tpl'), ...values, isActive: true };
-  },
-
-  async updateContractTemplate(id, patch) {
-    await delay(300);
-    return { id, ...patch };
-  },
-
-  async deleteContractTemplate() {
-    await delay(250);
-    return { success: true };
-  },
-
-  /* ------------------------------------------------------------ inspections */
-  async uploadInspectionPhoto() {
-    await delay(400);
-    return { id: createId('insp'), photos: [] };
-  },
-
-  async getInspectionState() {
-    await delay(200);
-    return { checkin: null, checkout: null };
-  },
-
-  async completeCheckIn() {
-    await delay(400);
-    return { detail: 'Mock check-in completed.', status: 'active' };
-  },
-
-  async completeCheckOut() {
-    await delay(400);
-    return { detail: 'Mock check-out completed.', status: 'completed' };
-  },
-
-  async listContracts() {
-    await delay(280);
-
-    // Same envelope as the real implementation, so the screen renders
-    // identically whichever backend is in play.
-    return {
-      items: clone(
-        readBookings().map((booking) => ({
-          ...booking,
-          contractType: resolveContractType(booking.nights, booking.country),
-          sentAt: booking.contract === 'Not sent' ? null : '2026-08-01',
-          signedAt: booking.contract === 'Signed' ? '2026-08-02' : null,
-        })),
-      ),
-      total: readBookings().length,
-    };
-  },
-
-  /* ----------------------------------------------------------- housekeeping */
-  async todaysRooms() {
-    await delay(250);
-    return {
-      date: new Date().toISOString().slice(0, 10),
-      rooms: readUnits().map((unit) => ({
-        propertyId: unit.propertyId ?? unit.id,
-        propertyName: unit.property,
-        status: { Ready: 'ready', 'Needs Cleaning': 'needs_cleaning', Occupied: 'occupied', Maintenance: 'needs_cleaning' }[unit.status] ?? 'ready',
-        bookingId: null,
-        cleaningTaskId: unit.status === 'Needs Cleaning' ? unit.id : null,
-      })),
-    };
-  },
-
-  async listTasks() {
-    await delay(250);
-    return clone(
-      readMaintenance().map((entry) => ({
-        id: entry.id,
-        propertyId: null,
-        propertyName: entry.property,
-        taskType: 'maintenance',
-        status: entry.status === 'Resolved' ? 'cleaned' : 'pending',
-        notes: entry.title,
-        dueDate: null,
-      })),
-    );
-  },
-
-  async updateTaskStatus(id, patch) {
-    await delay(400);
-
-    const rows = readMaintenance();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Task not found.', 404);
-
-    rows[index] = { ...rows[index], status: patch.status === 'cleaned' || patch.status === 'ready' ? 'Resolved' : 'Open' };
-    jsonStorage.write(KEYS.maintenance, rows);
-    return clone(rows[index]);
-  },
-
-  async reportIssue(payload) {
-    await delay(400);
-    return { id: createId('issue'), status: 'open', ...payload };
-  },
-
-  async listIssues(params = {}) {
-    await delay(250);
-    const severityByPriority = { High: 'high', Medium: 'medium', Low: 'low' };
-    const statusByLabel = { Open: 'open', 'In Progress': 'in_progress', Resolved: 'resolved' };
-
-    let rows = readMaintenance().map((entry) => ({
-      id: entry.id,
-      propertyId: null,
-      propertyName: entry.property,
-      title: entry.title,
-      description: entry.title,
-      severity: severityByPriority[entry.priority] ?? 'medium',
-      status: statusByLabel[entry.status] ?? 'open',
-      createdAt: entry.reportedAt,
-      resolvedAt: entry.status === 'Resolved' ? entry.reportedAt : null,
-    }));
-
-    if (params.status) rows = rows.filter((row) => row.status === params.status);
-    if (params.severity) rows = rows.filter((row) => row.severity === params.severity);
-    return clone(rows);
-  },
-
-  async updateIssueStatus(id, { status }) {
-    await delay(400);
-    const rows = readMaintenance();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Issue not found.', 404);
-
-    const labelByStatus = { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', wont_fix: 'Resolved' };
-    rows[index] = { ...rows[index], status: labelByStatus[status] ?? rows[index].status };
-    jsonStorage.write(KEYS.maintenance, rows);
-    return clone(rows[index]);
-  },
-
-  async listAssignedProperties() {
-    await delay(200);
-    const seen = new Set();
-    return readUnits()
-      .filter((unit) => {
-        const key = unit.propertyId ?? unit.property;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((unit) => ({ id: unit.propertyId ?? unit.id, name: unit.property }));
-  },
-
-  /* --------------------------------------------------------------- calendar */
-  async calendar(month) {
-    await delay(280);
-
-    // Expand each booking into the nights it occupies, so the grid can simply
-    // look up a date key instead of re-deriving ranges per cell.
-    const nightsByDate = {};
-
-    readBookings()
-      .filter((booking) => !['Cancelled'].includes(booking.status))
-      .forEach((booking) => {
-        const start = new Date(booking.checkIn);
-        const end = new Date(booking.checkOut);
-
-        for (let date = new Date(start); date < end; date.setDate(date.getDate() + 1)) {
-          const key = date.toISOString().slice(0, 10);
-          if (!key.startsWith(month)) continue;
-          nightsByDate[key] = nightsByDate[key] ?? [];
-          nightsByDate[key].push({
-            id: booking.id,
-            guest: booking.guest,
-            property: booking.property,
-            color: booking.color,
-            status: booking.status,
-          });
-        }
-      });
-
-    return clone(nightsByDate);
-  },
-
-  /* ---------------------------------------------------------- cancellations */
-  async listCancellations(params) {
-    await delay(260);
-    return paginate(readCancellations(), params, {
-      searchFields: ['guest', 'bookingId', 'property', 'reason'],
-      filterFields: ['status'],
-    });
-  },
 };
 
 /** Stable per-id color for the calendar's stay dots — nothing server-side backs a "color" for a booking. */
@@ -933,70 +497,56 @@ const realBookings = {
   },
 };
 
-/**
- * Reservations, contracts, inspections (check-in/out), check-out reporting,
- * guests, housekeeping, calendar and cancellations are all wired to the real
- * API via `bookingsBackend`. Calendar and Cancellations used to sit on the
- * *global* `useMock` flag via a separate `backend` selector — a leftover from
- * when they had no real endpoint to call at all — which silently kept them
- * mocked even with `useMockBookings=false`; both now follow the same flag as
- * everything else in this file.
- */
-const bookingsBackend = env.useMockBookings ? mockBookings : realBookings;
-
 export const bookingService = {
-  getBookings: (params) => bookingsBackend.list(params),
-  getBooking: (id) => bookingsBackend.detail(id),
-  getBookingTimeline: (id) => bookingsBackend.timeline(id),
-  getBookingReceipt: (id) => bookingsBackend.receipt(id),
-  confirmBooking: (id) => bookingsBackend.confirm(id),
-  approveBooking: (id) => bookingsBackend.approve(id),
-  cancelBooking: (id, reason) => bookingsBackend.cancelBooking(id, reason),
+  getBookings: (params) => realBookings.list(params),
+  getBooking: (id) => realBookings.detail(id),
+  getBookingTimeline: (id) => realBookings.timeline(id),
+  getBookingReceipt: (id) => realBookings.receipt(id),
+  confirmBooking: (id) => realBookings.confirm(id),
+  approveBooking: (id) => realBookings.approve(id),
+  cancelBooking: (id, reason) => realBookings.cancelBooking(id, reason),
 
   /**
-   * Contract and KYC nudges still run on mocks — the API models those through
-   * the compliance endpoints, which are not part of this pass — so they stay
-   * on the mock backend rather than hitting a booking PATCH that does not exist.
+   * There is no general booking PATCH on the real API — every state change
+   * goes through its own endpoint. Nothing in the UI currently calls this
+   * (kept only because `useBookingActions`'s `sendContract`/`remindKyc`
+   * reference it); it correctly 405s if it ever is.
    */
-  updateBooking: (id, patch) => mockBookings.update(id, patch),
+  updateBooking: (id, patch) => realBookings.update(id, patch),
 
-  getGuests: (params) => bookingsBackend.listGuests(params),
-  updateGuest: (id, patch) => bookingsBackend.updateGuest(id, patch),
-  getGuestDetail: (id) => bookingsBackend.guestDetail(id),
-  getGuestBookingHistory: (id, params) => bookingsBackend.guestBookingHistory(id, params),
+  getGuests: (params) => realBookings.listGuests(params),
+  updateGuest: (id, patch) => realBookings.updateGuest(id, patch),
+  getGuestDetail: (id) => realBookings.guestDetail(id),
+  getGuestBookingHistory: (id, params) => realBookings.guestBookingHistory(id, params),
 
-  /*
-   * Contracts follow the bookings flag, not the global one: they are wired to
-   * the real API while the surrounding operations screens are still mocked.
-   */
-  getContracts: (params) => bookingsBackend.listContracts(params),
-  getContractForBooking: (bookingId) => bookingsBackend.contractForBooking(bookingId),
-  getContractStatus: (contractId) => bookingsBackend.getContractStatus(contractId),
-  sendContract: (payload) => bookingsBackend.sendContract(payload),
-  getContractTemplates: () => bookingsBackend.listContractTemplates(),
-  createContractTemplate: (values) => bookingsBackend.createContractTemplate(values),
-  updateContractTemplate: (id, patch) => bookingsBackend.updateContractTemplate(id, patch),
-  deleteContractTemplate: (id) => bookingsBackend.deleteContractTemplate(id),
+  getContracts: (params) => realBookings.listContracts(params),
+  getContractForBooking: (bookingId) => realBookings.contractForBooking(bookingId),
+  getContractStatus: (contractId) => realBookings.getContractStatus(contractId),
+  sendContract: (payload) => realBookings.sendContract(payload),
+  getContractTemplates: () => realBookings.listContractTemplates(),
+  createContractTemplate: (values) => realBookings.createContractTemplate(values),
+  updateContractTemplate: (id, patch) => realBookings.updateContractTemplate(id, patch),
+  deleteContractTemplate: (id) => realBookings.deleteContractTemplate(id),
 
-  uploadInspectionPhoto: (payload) => bookingsBackend.uploadInspectionPhoto(payload),
-  getInspectionState: (bookingId) => bookingsBackend.getInspectionState(bookingId),
-  getDamageAssessments: (bookingId) => bookingsBackend.getDamageAssessments(bookingId),
-  createDamageAssessment: (bookingId, values) => bookingsBackend.createDamageAssessment(bookingId, values),
-  updateDamageAssessment: (bookingId, damageId, values) => bookingsBackend.updateDamageAssessment(bookingId, damageId, values),
-  getCheckoutReport: (bookingId) => bookingsBackend.getCheckoutReport(bookingId),
-  generateCheckoutReport: (bookingId) => bookingsBackend.generateCheckoutReport(bookingId),
-  completeCheckIn: (payload) => bookingsBackend.completeCheckIn(payload),
-  completeCheckOut: (payload) => bookingsBackend.completeCheckOut(payload),
+  uploadInspectionPhoto: (payload) => realBookings.uploadInspectionPhoto(payload),
+  getInspectionState: (bookingId) => realBookings.getInspectionState(bookingId),
+  getDamageAssessments: (bookingId) => realBookings.getDamageAssessments(bookingId),
+  createDamageAssessment: (bookingId, values) => realBookings.createDamageAssessment(bookingId, values),
+  updateDamageAssessment: (bookingId, damageId, values) => realBookings.updateDamageAssessment(bookingId, damageId, values),
+  getCheckoutReport: (bookingId) => realBookings.getCheckoutReport(bookingId),
+  generateCheckoutReport: (bookingId) => realBookings.generateCheckoutReport(bookingId),
+  completeCheckIn: (payload) => realBookings.completeCheckIn(payload),
+  completeCheckOut: (payload) => realBookings.completeCheckOut(payload),
 
-  getTodaysRooms: () => bookingsBackend.todaysRooms(),
-  getTasks: (params) => bookingsBackend.listTasks(params),
-  updateTaskStatus: (id, patch) => bookingsBackend.updateTaskStatus(id, patch),
-  reportIssue: (payload) => bookingsBackend.reportIssue(payload),
-  getIssues: (params) => bookingsBackend.listIssues(params),
-  updateIssueStatus: (id, patch) => bookingsBackend.updateIssueStatus(id, patch),
-  getAssignedProperties: () => bookingsBackend.listAssignedProperties(),
+  getTodaysRooms: () => realBookings.todaysRooms(),
+  getTasks: (params) => realBookings.listTasks(params),
+  updateTaskStatus: (id, patch) => realBookings.updateTaskStatus(id, patch),
+  reportIssue: (payload) => realBookings.reportIssue(payload),
+  getIssues: (params) => realBookings.listIssues(params),
+  updateIssueStatus: (id, patch) => realBookings.updateIssueStatus(id, patch),
+  getAssignedProperties: () => realBookings.listAssignedProperties(),
 
-  getCalendar: (month) => bookingsBackend.calendar(month),
+  getCalendar: (month) => realBookings.calendar(month),
 
-  getCancellations: (params) => bookingsBackend.listCancellations(params),
+  getCancellations: (params) => realBookings.listCancellations(params),
 };

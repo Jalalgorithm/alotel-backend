@@ -1,5 +1,4 @@
 import { apiClient } from '@/lib/apiClient';
-import { env } from '@/lib/env';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
 import { jsonStorage } from '@/lib/storage';
@@ -12,33 +11,20 @@ import {
   toPricingRule,
   toPricingRulePayload,
 } from '@/lib/pricingSchema';
-import {
-  amenityGroups,
-  discountRules,
-  enabledAmenities,
-  pricingConfigs,
-  pricingRules,
-  properties,
-  propertyReviews,
-  units,
-} from '@/lib/mock/catalogue';
+import { amenityGroups, enabledAmenities, units } from '@/lib/mock/catalogue';
 
 /**
  * Property catalogue service — listings, units, amenities, review moderation
  * and pricing rules.
  *
- * Mutations persist to localStorage so a publish/pause or a discount edit
- * survives a reload, which is what makes the screens feel real to test against.
+ * Units and Amenities have no backend concept at all yet, so they stay on a
+ * localStorage-backed fixture (mutations persist across reloads) while
+ * everything else in this file talks to the real API.
  */
 
 const KEYS = {
-  properties: 'alotel.admin.mock.properties',
   units: 'alotel.admin.mock.units',
-  reviews: 'alotel.admin.mock.reviews',
   amenities: 'alotel.admin.mock.amenities',
-  discounts: 'alotel.admin.mock.discounts',
-  pricingConfigs: 'alotel.admin.mock.pricingConfigs',
-  pricingRules: 'alotel.admin.mock.pricingRules',
 };
 
 const seeded = (key, source) => {
@@ -49,222 +35,10 @@ const seeded = (key, source) => {
   return value;
 };
 
-const readProperties = () => seeded(KEYS.properties, properties);
 const readUnits = () => seeded(KEYS.units, units);
-const readReviews = () => seeded(KEYS.reviews, propertyReviews);
 const readAmenities = () => seeded(KEYS.amenities, enabledAmenities);
-const readDiscounts = () => seeded(KEYS.discounts, discountRules);
-const readPricingConfigs = () => seeded(KEYS.pricingConfigs, pricingConfigs);
-const readPricingRules = () => seeded(KEYS.pricingRules, pricingRules);
-
-/**
- * The fixtures predate the API and use their own field names. Rendering them
- * through the same normaliser as live data means components only ever see one
- * property shape, whichever backend is in play.
- */
-const fixtureToWire = (fixture) => ({
-  id: fixture.id,
-  host: 'admin@alotelspaces.com',
-  name: fixture.name,
-  classification: fixture.classification ?? 'Alotel',
-  status: { Live: 'published', Draft: 'draft', Paused: 'archived' }[fixture.status] ?? 'draft',
-  country: fixture.country,
-  state: fixture.state ?? fixture.city,
-  city: fixture.city,
-  address: fixture.address ?? '',
-  coordinates: fixture.coordinates ?? null,
-  location: fixture.location ?? fixture.country,
-  type: fixture.type,
-  bedrooms: fixture.beds ?? fixture.bedrooms ?? 0,
-  bathrooms: String(fixture.baths ?? fixture.bathrooms ?? 1),
-  maxGuests: fixture.maxGuests ?? 2,
-  area: String(fixture.area ?? 0),
-  furnished: fixture.furnished ?? 'Fully Furnished',
-  pets: fixture.pets ?? 'No pets',
-  accessFeatures: fixture.accessibility ?? fixture.accessFeatures ?? [],
-  amenities: fixture.amenities ?? [],
-  baseRate: String(fixture.rate ?? fixture.baseRate ?? 0),
-  minStay: fixture.minStay ?? 1,
-  instantBook: Boolean(fixture.instantBook),
-  thumbNail: null,
-  rating: fixture.rating ?? null,
-  reviewCount: fixture.reviews ?? 0,
-  createdAt: fixture.createdAt ?? new Date().toISOString(),
-});
 
 const mockProperties = {
-  /* ---------------------------------------------------------------- listings */
-  async list(params) {
-    await delay(320);
-    const page = paginate(readProperties(), params, {
-      searchFields: ['name', 'city', 'id'],
-      filterFields: ['country', 'status', 'classification', 'type'],
-    });
-    return { ...page, items: page.items.map((entry) => toProperty(fixtureToWire(entry))) };
-  },
-
-  async detail(id) {
-    await delay(220);
-    const property = readProperties().find((entry) => entry.id === id);
-    if (!property) throw new ApiError('Property not found.', 404);
-    return toProperty(fixtureToWire(clone(property)));
-  },
-
-  async create(payload) {
-    await delay(700);
-
-    const record = {
-      id: `AS-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: 'Draft',
-      occupancy: 0,
-      rating: null,
-      reviews: 0,
-      ...payload,
-      rate: payload.baseRate,
-      beds: payload.bedrooms,
-      baths: payload.bathrooms,
-    };
-
-    jsonStorage.write(KEYS.properties, [record, ...readProperties()]);
-    return toProperty(fixtureToWire(record));
-  },
-
-  async update(id, patch) {
-    await delay(400);
-
-    const rows = readProperties();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Property not found.', 404);
-
-    rows[index] = { ...rows[index], ...patch };
-    jsonStorage.write(KEYS.properties, rows);
-    return toProperty(fixtureToWire(clone(rows[index])));
-  },
-
-  async remove(id) {
-    await delay(350);
-    jsonStorage.write(KEYS.properties, readProperties().filter((entry) => entry.id !== id));
-    return { success: true };
-  },
-
-  /** Fixtures carry image URLs inline rather than on a separate collection. */
-  async images(id) {
-    await delay(200);
-    const property = readProperties().find((entry) => entry.id === id);
-    return (property?.images ?? []).map((url, order) => ({
-      id: `${id}-${order}`,
-      property_image: url,
-      order,
-      roomType: 'Other',
-      caption: '',
-    }));
-  },
-
-  async uploadImage({ file }) {
-    await delay(400);
-    return {
-      id: createId('img'),
-      property_image: URL.createObjectURL(file),
-      roomType: 'Other',
-      caption: '',
-      order: 0,
-    };
-  },
-
-  async deleteImage() {
-    await delay(250);
-    return { success: true };
-  },
-
-  async videos(id) {
-    await delay(200);
-    const property = readProperties().find((entry) => entry.id === id);
-    return property?.videos ?? [];
-  },
-
-  async uploadVideo({ file }) {
-    await delay(500);
-    return {
-      id: createId('vid'),
-      property_video: URL.createObjectURL(file),
-      roomType: 'Walkthrough',
-      caption: '',
-      order: 0,
-      duration: null,
-    };
-  },
-
-  async deleteVideo() {
-    await delay(250);
-    return { success: true };
-  },
-
-  async availability(id) {
-    await delay(250);
-    const property = readProperties().find((entry) => entry.id === id);
-    const rows = jsonStorage.read(`alotel.admin.mock.availability.${id}`, null);
-    if (rows) return clone(rows);
-    const today = new Date().toISOString().slice(0, 10);
-    const oneYear = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
-    return [
-      {
-        id: null,
-        startDate: today,
-        endDate: oneYear,
-        basePrice: Number(property?.rate ?? property?.baseRate ?? 0),
-        isAvailable: true,
-        blockedDates: [],
-        corporateDiscounts: [],
-      },
-    ];
-  },
-
-  async createAvailability({ propertyId, ...payload }) {
-    await delay(350);
-    const key = `alotel.admin.mock.availability.${propertyId}`;
-    const rows = jsonStorage.read(key, []);
-    const row = { id: createId('avail'), blockedDates: [], corporateDiscounts: [], ...payload };
-    jsonStorage.write(key, [...rows.filter((entry) => entry.id), row]);
-    return row;
-  },
-
-  async updateAvailability({ propertyId, id, ...patch }) {
-    await delay(300);
-    const key = `alotel.admin.mock.availability.${propertyId}`;
-    const rows = jsonStorage.read(key, []);
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Availability row not found.', 404);
-    rows[index] = { ...rows[index], ...patch };
-    jsonStorage.write(key, rows);
-    return rows[index];
-  },
-
-  async deleteAvailability({ propertyId, id }) {
-    await delay(300);
-    const key = `alotel.admin.mock.availability.${propertyId}`;
-    const rows = jsonStorage.read(key, []);
-    jsonStorage.write(key, rows.filter((entry) => entry.id !== id));
-    return { success: true };
-  },
-
-  async setThumbnail({ propertyId }) {
-    await delay(250);
-    return mockProperties.detail(propertyId);
-  },
-
-  async setStatus(id, status) {
-    await delay(400);
-
-    const rows = readProperties();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Property not found.', 404);
-
-    const fixtureStatus = { published: 'Live', draft: 'Draft', archived: 'Paused' }[status] ?? status;
-    rows[index] = { ...rows[index], status: fixtureStatus };
-    jsonStorage.write(KEYS.properties, rows);
-    return toProperty(fixtureToWire(clone(rows[index])));
-  },
-
   /* ------------------------------------------------------------------- units */
   async listUnits(params) {
     await delay(280);
@@ -303,102 +77,6 @@ const mockProperties = {
     const enabled = readAmenities();
     const next = enabled.includes(name) ? enabled.filter((item) => item !== name) : [...enabled, name];
     jsonStorage.write(KEYS.amenities, next);
-    return clone(next);
-  },
-
-  /* ----------------------------------------------------------------- reviews */
-  async listPropertyReviews() {
-    await delay(280);
-    return readReviews().filter((entry) => !entry.isFlagged);
-  },
-
-  async respondToReview(id, body) {
-    await delay(350);
-    return { id: createId('resp'), review: id, body, respondedByEmail: 'admin@aotel.test' };
-  },
-
-  async flagReview(id, reason) {
-    await delay(350);
-    const rows = readReviews();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Review not found.', 404);
-    rows[index] = { ...rows[index], isFlagged: true, flagReason: reason };
-    jsonStorage.write(KEYS.reviews, rows);
-    return clone(rows[index]);
-  },
-
-  /* --------------------------------------------------------------- discounts */
-  async listDiscounts() {
-    await delay(220);
-    return clone(readDiscounts());
-  },
-
-  async createDiscount(payload) {
-    await delay(400);
-    const rule = { id: createId('disc'), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
-    jsonStorage.write(KEYS.discounts, [...readDiscounts(), rule]);
-    return clone(rule);
-  },
-
-  async updateDiscount(id, patch) {
-    await delay(350);
-    const rows = readDiscounts();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Discount not found.', 404);
-    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
-    jsonStorage.write(KEYS.discounts, rows);
-    return clone(rows[index]);
-  },
-
-  async deleteDiscount(id) {
-    await delay(300);
-    jsonStorage.write(KEYS.discounts, readDiscounts().filter((entry) => entry.id !== id));
-    return { success: true };
-  },
-
-  /* --------------------------------------------------------- pricing configs */
-  async listPricingConfigs() {
-    await delay(220);
-    return clone(readPricingConfigs());
-  },
-
-  async createPricingConfig(payload) {
-    await delay(400);
-    const config = { id: createId('pconf'), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), ...payload };
-    jsonStorage.write(KEYS.pricingConfigs, [...readPricingConfigs(), config]);
-    return clone(config);
-  },
-
-  async updatePricingConfig(id, patch) {
-    await delay(350);
-    const rows = readPricingConfigs();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Pricing configuration not found.', 404);
-    rows[index] = { ...rows[index], ...patch, updatedAt: new Date().toISOString() };
-    jsonStorage.write(KEYS.pricingConfigs, rows);
-    return clone(rows[index]);
-  },
-
-  async deletePricingConfig(id) {
-    await delay(300);
-    jsonStorage.write(KEYS.pricingConfigs, readPricingConfigs().filter((entry) => entry.id !== id));
-    return { success: true };
-  },
-
-  /* ----------------------------------------------------------- pricing rules */
-  async listPricingRules() {
-    await delay(220);
-    return clone(readPricingRules());
-  },
-
-  async upsertPricingRule(payload) {
-    await delay(400);
-    const rows = readPricingRules();
-    const index = rows.findIndex((entry) => entry.region === payload.region && entry.property_type === payload.property_type);
-    const next = { id: index >= 0 ? rows[index].id : createId('prule'), updated_at: new Date().toISOString(), ...payload };
-    if (index >= 0) rows[index] = next;
-    else rows.push(next);
-    jsonStorage.write(KEYS.pricingRules, rows);
     return clone(next);
   },
 };
@@ -605,10 +283,6 @@ const realProperties = {
     return toProperty(data);
   },
 
-  listUnits: async (params) => (await apiClient.get('/units', { params })).data,
-  setUnitStatus: async (id, status) => (await apiClient.patch(`/units/${id}`, { status })).data,
-  getAmenities: async () => (await apiClient.get('/amenities')).data,
-  toggleAmenity: async (name) => (await apiClient.post('/amenities/toggle', { name })).data,
   /** `GET /reviews/<listing_id>/` — public, per-property, already excludes flagged reviews. No cross-property admin list exists. */
   listPropertyReviews: async (propertyId) => {
     const { data } = await apiClient.get(`/reviews/${propertyId}/`);
@@ -688,41 +362,6 @@ const realGeocoding = {
   },
 };
 
-const mockGeocoding = {
-  async forwardGeocode({ address, city, state }) {
-    await delay(300);
-    return {
-      formattedAddress: [address, city, state].filter(Boolean).join(', '),
-      postalCode: '',
-      city: city ?? '',
-      state: state ?? '',
-      country: '',
-      coordinates: { lat: 0, lng: 0 },
-    };
-  },
-
-  async verifyPostalCode({ postalCode }) {
-    await delay(300);
-    return {
-      validFormat: true,
-      formatError: null,
-      verified: Boolean(postalCode),
-      matchedPostalCode: postalCode ?? '',
-      coordinates: null,
-      detail: 'Mock verification — not checked against a real address.',
-    };
-  },
-
-  async lookupPostcode({ postcode }) {
-    await delay(300);
-    return {
-      postcode,
-      manualOverrideRequired: true,
-      addresses: [],
-    };
-  },
-};
-
 /**
  * Country discounts, country fee configs, and global deposit/seasonal rules.
  * Public to read, `IsSuperAdmin`-only to write — see `property/views.py`.
@@ -773,89 +412,65 @@ const realPricing = {
   },
 };
 
-const mockPricing = {
-  listDiscounts: async () => (await mockProperties.listDiscounts()).map(toDiscountRule),
-  createDiscount: async (values) => toDiscountRule(await mockProperties.createDiscount(toDiscountPayload(values))),
-  updateDiscount: async (id, patch) => toDiscountRule(await mockProperties.updateDiscount(id, toDiscountPayload(patch))),
-  deleteDiscount: (id) => mockProperties.deleteDiscount(id),
-
-  listPricingConfigs: async () => (await mockProperties.listPricingConfigs()).map(toPricingConfig),
-  createPricingConfig: async (values) => toPricingConfig(await mockProperties.createPricingConfig(toPricingConfigPayload(values))),
-  updatePricingConfig: async (id, patch) => toPricingConfig(await mockProperties.updatePricingConfig(id, toPricingConfigPayload(patch))),
-  deletePricingConfig: (id) => mockProperties.deletePricingConfig(id),
-
-  listPricingRules: async () => (await mockProperties.listPricingRules()).map(toPricingRule),
-  upsertPricingRule: async (values) => toPricingRule(await mockProperties.upsertPricingRule(toPricingRulePayload(values))),
-};
-
-/**
- * Properties are wired to the real API; the remaining catalogue features
- * (units, amenities, reviews) still run on mocks, so each half picks its own
- * backend. Discounts, pricing configs and pricing rules have their own switch,
- * same reasoning as `useMockTaxes`.
- */
-const propertiesBackend = env.useMockProperties ? mockProperties : realProperties;
-const backend = env.useMock ? mockProperties : realProperties;
-const pricing = env.useMockPricing ? mockPricing : realPricing;
-const geocoding = env.useMockProperties ? mockGeocoding : realGeocoding;
-
 export const propertyService = {
-  getProperties: (params) => propertiesBackend.list(params),
-  getProperty: (id) => propertiesBackend.detail(id),
+  getProperties: (params) => realProperties.list(params),
+  getProperty: (id) => realProperties.detail(id),
 
   /**
    * The API always creates in `draft`; "Publish now" is the create followed by
    * the publish call, so the wizard can treat it as a single action.
    */
   async createProperty({ form, publish = false }) {
-    const property = await propertiesBackend.create(form);
+    const property = await realProperties.create(form);
     if (!publish) return property;
-    return propertiesBackend.setStatus(property.id, 'published');
+    return realProperties.setStatus(property.id, 'published');
   },
 
-  getPropertyImages: (id) => propertiesBackend.images(id),
-  uploadPropertyImage: (payload) => propertiesBackend.uploadImage(payload),
-  deletePropertyImage: (payload) => propertiesBackend.deleteImage(payload),
+  getPropertyImages: (id) => realProperties.images(id),
+  uploadPropertyImage: (payload) => realProperties.uploadImage(payload),
+  deletePropertyImage: (payload) => realProperties.deleteImage(payload),
 
-  getPropertyVideos: (id) => propertiesBackend.videos(id),
-  uploadPropertyVideo: (payload) => propertiesBackend.uploadVideo(payload),
-  deletePropertyVideo: (payload) => propertiesBackend.deleteVideo(payload),
+  getPropertyVideos: (id) => realProperties.videos(id),
+  uploadPropertyVideo: (payload) => realProperties.uploadVideo(payload),
+  deletePropertyVideo: (payload) => realProperties.deleteVideo(payload),
 
-  getPropertyAvailability: (id) => propertiesBackend.availability(id),
-  createPropertyAvailability: (payload) => propertiesBackend.createAvailability(payload),
-  updatePropertyAvailability: (payload) => propertiesBackend.updateAvailability(payload),
-  deletePropertyAvailability: (payload) => propertiesBackend.deleteAvailability(payload),
-  setPropertyThumbnail: (payload) => propertiesBackend.setThumbnail(payload),
-  updateProperty: (id, patch) => propertiesBackend.update(id, patch),
-  deleteProperty: (id) => propertiesBackend.remove(id),
-  setPropertyStatus: (id, status) => propertiesBackend.setStatus(id, status),
+  getPropertyAvailability: (id) => realProperties.availability(id),
+  createPropertyAvailability: (payload) => realProperties.createAvailability(payload),
+  updatePropertyAvailability: (payload) => realProperties.updateAvailability(payload),
+  deletePropertyAvailability: (payload) => realProperties.deleteAvailability(payload),
+  setPropertyThumbnail: (payload) => realProperties.setThumbnail(payload),
+  updateProperty: (id, patch) => realProperties.update(id, patch),
+  deleteProperty: (id) => realProperties.remove(id),
+  setPropertyStatus: (id, status) => realProperties.setStatus(id, status),
 
-  getUnits: (params) => backend.listUnits(params),
-  setUnitStatus: (id, status) => backend.setUnitStatus(id, status),
+  /** Units — no backend concept exists yet; stays on the localStorage fixture. */
+  getUnits: (params) => mockProperties.listUnits(params),
+  setUnitStatus: (id, status) => mockProperties.setUnitStatus(id, status),
 
-  getAmenities: () => backend.getAmenities(),
-  toggleAmenity: (name) => backend.toggleAmenity(name),
+  /** Amenities — no backend concept exists yet; stays on the localStorage fixture. */
+  getAmenities: () => mockProperties.getAmenities(),
+  toggleAmenity: (name) => mockProperties.toggleAmenity(name),
 
-  getPropertyReviews: (propertyId) => propertiesBackend.listPropertyReviews(propertyId),
-  respondToReview: (id, body) => propertiesBackend.respondToReview(id, body),
-  flagReview: (id, reason) => propertiesBackend.flagReview(id, reason),
+  getPropertyReviews: (propertyId) => realProperties.listPropertyReviews(propertyId),
+  respondToReview: (id, body) => realProperties.respondToReview(id, body),
+  flagReview: (id, reason) => realProperties.flagReview(id, reason),
 
-  getDiscounts: () => pricing.listDiscounts(),
-  createDiscount: (values) => pricing.createDiscount(values),
-  updateDiscount: (id, patch) => pricing.updateDiscount(id, patch),
-  deleteDiscount: (id) => pricing.deleteDiscount(id),
+  getDiscounts: () => realPricing.listDiscounts(),
+  createDiscount: (values) => realPricing.createDiscount(values),
+  updateDiscount: (id, patch) => realPricing.updateDiscount(id, patch),
+  deleteDiscount: (id) => realPricing.deleteDiscount(id),
 
-  getPricingConfigs: () => pricing.listPricingConfigs(),
-  createPricingConfig: (values) => pricing.createPricingConfig(values),
-  updatePricingConfig: (id, patch) => pricing.updatePricingConfig(id, patch),
-  deletePricingConfig: (id) => pricing.deletePricingConfig(id),
+  getPricingConfigs: () => realPricing.listPricingConfigs(),
+  createPricingConfig: (values) => realPricing.createPricingConfig(values),
+  updatePricingConfig: (id, patch) => realPricing.updatePricingConfig(id, patch),
+  deletePricingConfig: (id) => realPricing.deletePricingConfig(id),
 
-  getPricingRules: () => pricing.listPricingRules(),
-  upsertPricingRule: (values) => pricing.upsertPricingRule(values),
+  getPricingRules: () => realPricing.listPricingRules(),
+  upsertPricingRule: (values) => realPricing.upsertPricingRule(values),
 
-  forwardGeocode: (values) => geocoding.forwardGeocode(values),
-  verifyPostalCode: (values) => geocoding.verifyPostalCode(values),
-  lookupPostcode: (values) => geocoding.lookupPostcode(values),
+  forwardGeocode: (values) => realGeocoding.forwardGeocode(values),
+  verifyPostalCode: (values) => realGeocoding.verifyPostalCode(values),
+  lookupPostcode: (values) => realGeocoding.lookupPostcode(values),
 
   /** Exposed for the wizard's draft id generation. */
   createDraftId: () => createId('draft'),

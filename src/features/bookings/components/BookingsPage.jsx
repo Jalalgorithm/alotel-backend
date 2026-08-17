@@ -113,7 +113,7 @@ const PaymentOperations = ({ booking, currency }) => {
             ) : (
               <Button
                 size="sm"
-                disabled={isPending || deposit.status !== 'held'}
+                disabled={isPending || deposit.status !== 'held' || booking.status === 'completed'}
                 onClick={() => captureDeposit({ bookingId: booking.id, amount: amount || undefined })}
               >
                 {deposit.status === 'held' ? 'Capture deposit' : 'Deposit captured'}
@@ -193,14 +193,26 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
 
             {canCancel &&
               (isCancelling ? (
-                <Button
-                  size="sm"
-                  variant="danger"
-                  isLoading={actions.isPending}
-                  onClick={() => actions.cancel(row.id, reason)}
-                >
-                  Confirm cancellation
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setIsCancelling(false);
+                      setReason('');
+                    }}
+                  >
+                    Keep booking
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    isLoading={actions.isPending}
+                    disabled={!reason.trim()}
+                    onClick={() => actions.cancel(row.id, reason)}
+                  >
+                    Confirm cancellation
+                  </Button>
+                </>
               ) : (
                 <Button size="sm" variant="dangerSoft" onClick={() => setIsCancelling(true)}>
                   Cancel booking
@@ -339,13 +351,17 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
 
           {isCancelling && (
             <div className="border-t border-line pt-4">
-              <Textarea
-                label="Reason for cancellation"
-                rows={2}
-                placeholder="Recorded against the booking's history."
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-              />
+              <Alert variant="warn" title="Cancel this booking?">
+                <p>A reason is required and will be recorded against the booking&rsquo;s history.</p>
+                <Textarea
+                  label="Reason for cancellation"
+                  rows={2}
+                  placeholder="e.g. Guest requested refund due to travel change."
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  containerClassName="mt-3"
+                />
+              </Alert>
             </div>
           )}
         </div>
