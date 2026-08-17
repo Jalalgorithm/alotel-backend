@@ -66,6 +66,8 @@ const PaymentOperations = ({ booking, currency }) => {
   const { refund, holdDeposit, captureDeposit, releaseDeposit, isPending } = usePaymentActions();
 
   const [amount, setAmount] = useState('');
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
   const depositAmount = booking.pricing?.securityDeposit ?? 0;
   const isRefundable = ['confirmed', 'active', 'completed', 'cancelled'].includes(booking.status);
 
@@ -101,7 +103,7 @@ const PaymentOperations = ({ booking, currency }) => {
           size="sm"
           variant="dangerSoft"
           disabled={!isRefundable || isPending || !refundAmount}
-          onClick={() => refund({ bookingId: booking.id, amount: refundAmount, currency })}
+          onClick={() => setIsRefunding(true)}
         >
           Refund {formatCurrency(Number(refundAmount), currency)}
         </Button>
@@ -139,6 +141,46 @@ const PaymentOperations = ({ booking, currency }) => {
           )
         )}
       </div>
+
+      {isRefunding && (
+        <div className="mt-3">
+          <Alert variant="warn" title="Refund this booking?">
+            <p>A reason is required and will be recorded against the refund.</p>
+            <Textarea
+              label="Reason for refund"
+              rows={2}
+              placeholder="e.g. Guest cancelled due to a family emergency."
+              value={refundReason}
+              onChange={(event) => setRefundReason(event.target.value)}
+              containerClassName="mt-3"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setIsRefunding(false);
+                  setRefundReason('');
+                }}
+              >
+                Keep
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                isLoading={isPending}
+                disabled={!refundReason.trim()}
+                onClick={() => {
+                  refund({ bookingId: booking.id, amount: refundAmount, currency, reason: refundReason });
+                  setIsRefunding(false);
+                  setRefundReason('');
+                }}
+              >
+                Confirm refund
+              </Button>
+            </div>
+          </Alert>
+        </div>
+      )}
 
       <p className="mt-2 text-[11px] text-ink-muted">
         {deposit

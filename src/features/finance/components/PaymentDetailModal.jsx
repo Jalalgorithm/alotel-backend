@@ -35,7 +35,7 @@ export const PaymentDetailModal = ({ payment, onClose }) => {
 
   const submitRefund = () => {
     refund(
-      { bookingId: payment.bookingId, amount: payment.amount, currency: payment.currency, reason: reason.trim() || undefined },
+      { bookingId: payment.bookingId, amount: payment.amount, currency: payment.currency, reason: reason.trim() },
       { onSuccess: () => onClose() },
     );
   };
@@ -70,12 +70,12 @@ export const PaymentDetailModal = ({ payment, onClose }) => {
               <Alert variant="warn" icon={<ShieldAlert className="size-4" aria-hidden="true" />}>
                 This refunds the full amount back to the guest via {payment.provider}. This cannot be undone.
               </Alert>
-              <Textarea label="Reason (optional)" value={reason} onChange={(event) => setReason(event.target.value)} rows={2} />
+              <Textarea label="Reason for refund" value={reason} onChange={(event) => setReason(event.target.value)} rows={2} />
               <div className="flex gap-2">
                 <Button className="flex-1" onClick={() => setConfirming(false)} disabled={isPending}>
                   Cancel
                 </Button>
-                <Button variant="danger" className="flex-1" isLoading={isPending} onClick={submitRefund}>
+                <Button variant="danger" className="flex-1" isLoading={isPending} disabled={!reason.trim()} onClick={submitRefund}>
                   Confirm refund
                 </Button>
               </div>
