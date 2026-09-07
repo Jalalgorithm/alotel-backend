@@ -46,7 +46,7 @@ const DiscountsTab = () => {
                   country={country}
                   rule={ruleByCountry.get(country)}
                   isSelected={country === selectedCountry}
-                  isDeleting={pendingId === ruleByCountry.get(country)?.id}
+                  isDeleting={pendingId !== undefined && pendingId === ruleByCountry.get(country)?.id}
                   onSelect={setSelectedCountry}
                   onDelete={(id) => {
                     deleteRule(id);
@@ -65,7 +65,7 @@ const DiscountsTab = () => {
         onClose={() => setSelectedCountry(null)}
         createRule={(values) => createRule(values, { onSuccess: () => setSelectedCountry(null) })}
         updateRule={updateRule}
-        isSaving={isCreating || pendingId === activeRule?.id}
+        isSaving={isCreating || (pendingId !== undefined && pendingId === activeRule?.id)}
       />
     </div>
   );
@@ -93,7 +93,7 @@ const FeesTab = () => {
                   country={country}
                   config={configByCountry.get(country)}
                   isSelected={country === selectedCountry}
-                  isDeleting={pendingId === configByCountry.get(country)?.id}
+                  isDeleting={pendingId !== undefined && pendingId === configByCountry.get(country)?.id}
                   onSelect={setSelectedCountry}
                   onDelete={(id) => {
                     deleteConfig(id);
@@ -112,7 +112,7 @@ const FeesTab = () => {
         onClose={() => setSelectedCountry(null)}
         createConfig={(values) => createConfig(values, { onSuccess: () => setSelectedCountry(null) })}
         updateConfig={updateConfig}
-        isSaving={isCreating || pendingId === activeConfig?.id}
+        isSaving={isCreating || (pendingId !== undefined && pendingId === activeConfig?.id)}
       />
     </div>
   );

@@ -150,7 +150,7 @@ export const useTaxRuleMutations = () => {
     createRule: create.mutate,
     isCreating: create.isPending,
     /** Editing a live rule's fields. */
-    updateRule: (id, patch) => update.mutate({ id, patch }),
+    updateRule: (id, patch, options) => update.mutate({ id, patch }, options),
     isUpdating: update.isPending,
     deleteRule: remove.mutate,
     approveRule: approve.mutate,
@@ -201,10 +201,18 @@ export const useSuggestTaxRules = () => {
  */
 
 /** `GET /properties/taxes/coverage-alerts/` — Super Admin only, real-time (not cached long — alerts change as pricing calculations happen). */
+/**
+ * Coverage alerts are populated server-side whenever a pricing calculation
+ * runs with no matching active tax rule — there's no frontend event to
+ * invalidate this on the moment a new booking prices (bookings and finance
+ * are separate features with no cross-invalidation today), so a light poll
+ * keeps this panel from needing a manual page refresh to pick up new alerts.
+ */
 export const useCoverageAlerts = () =>
   useQuery({
     queryKey: queryKeys.finance.coverageAlerts(),
     queryFn: financeService.getCoverageAlerts,
+    refetchInterval: 60_000,
   });
 
 /**

@@ -1,14 +1,19 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { maintenanceService } from '../services/maintenanceService';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
 
+/**
+ * No `placeholderData: keepPreviousData` here — this hook is keyed per
+ * property (and other filters), so keeping the previous query's data as a
+ * placeholder would flash the last-viewed property's tickets on a freshly
+ * opened one before the real (possibly empty) result lands.
+ */
 export const useMaintenanceTickets = (params = {}) =>
   useQuery({
     queryKey: queryKeys.maintenanceOps.tickets(params),
     queryFn: () => maintenanceService.getTickets(params),
-    placeholderData: keepPreviousData,
   });
 
 export const useMaintenanceTicket = (id) =>

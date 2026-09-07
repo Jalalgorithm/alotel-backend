@@ -99,7 +99,7 @@ export const AvailabilityPanel = ({ propertyId, currency, canManage }) => {
                   size="xs"
                   variant="ghost"
                   aria-label="Delete date range"
-                  isLoading={pendingId === row.id}
+                  isLoading={pendingId !== undefined && pendingId === row.id}
                   onClick={(event) => {
                     event.stopPropagation();
                     deleteRange(row.id);
@@ -149,7 +149,7 @@ export const AvailabilityPanel = ({ propertyId, currency, canManage }) => {
             </Button>
             <Button
               variant="primary"
-              isLoading={isCreating || pendingId === editingRow?.id}
+              isLoading={isCreating || (pendingId !== undefined && pendingId === editingRow?.id)}
               disabled={!form.startDate || !form.endDate || !form.basePrice}
               onClick={submit}
             >

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ExternalLink } from 'lucide-react';
@@ -9,6 +9,8 @@ import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { taxRuleSchema } from '@/utils/validators';
 import { formatDate } from '@/utils/format';
+import { useCountries, useCountryStates } from '@/hooks/useCountries';
+import { citiesFor, LOCATION_BY_TAX_COUNTRY } from '@/lib/geoData';
 import {
   CONFIDENCE_BADGE_VARIANT,
   GUEST_SEGMENT_NOTE,
@@ -49,6 +51,8 @@ export const TaxRuleModal = ({ isOpen, onClose, rule, createRule, updateRule, is
     defaultValues: emptyValues(),
   });
 
+  const [manualCity, setManualCity] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
     reset(
@@ -68,11 +72,34 @@ export const TaxRuleModal = ({ isOpen, onClose, rule, createRule, updateRule, is
           }
         : emptyValues(),
     );
+    // A loaded rule's city might not be in the curated list (an uncommon
+    // town, or a country we haven't curated) — start in manual mode rather
+    // than silently discarding it.
+    const loadedCities = citiesFor(LOCATION_BY_TAX_COUNTRY[rule?.country]);
+    setManualCity(Boolean(rule?.city) && !loadedCities.includes(rule.city));
   }, [isOpen, rule, reset]);
 
   const guestSegment = watch('guestSegment') ?? [];
   const toggleSegment = (value) => {
     setValue('guestSegment', guestSegment.includes(value) ? guestSegment.filter((v) => v !== value) : [...guestSegment, value]);
+  };
+
+  // Country here is a `TAX_COUNTRIES` value ('USA', 'UAE', …) — bridge to the
+  // `LOCATIONS` value so the same live state list and curated city list
+  // Properties/Spaces already use can be reused here too.
+  const watchedCountry = watch('country');
+  const location = LOCATION_BY_TAX_COUNTRY[watchedCountry];
+  const { data: countries } = useCountries();
+  const countryCode = countries?.find((entry) => entry.location === location)?.code;
+  const { data: states } = useCountryStates(countryCode);
+  const cityOptions = citiesFor(location);
+
+  // A country switch makes the previous state/city meaningless — clear both
+  // and drop back to dropdown mode for the new country's list.
+  const changeCountry = () => {
+    setValue('state', '');
+    setValue('city', '');
+    setManualCity(false);
   };
 
   const submit = (values) => {
@@ -137,9 +164,36 @@ export const TaxRuleModal = ({ isOpen, onClose, rule, createRule, updateRule, is
         <Input label="Rule name" placeholder="e.g. NYC Hotel Occupancy Tax" error={errors.ruleName?.message} {...register('ruleName')} />
 
         <div className="grid grid-cols-3 gap-3">
-          <Select label="Country" placeholder="Select" options={TAX_COUNTRIES} error={errors.country?.message} {...register('country')} />
-          <Input label="State / province" placeholder="Optional" error={errors.state?.message} {...register('state')} />
-          <Input label="City" placeholder="Optional" error={errors.city?.message} {...register('city')} />
+          <Select
+            label="Country"
+            placeholder="Select"
+            options={TAX_COUNTRIES}
+            error={errors.country?.message}
+            {...register('country', { onChange: changeCountry })}
+          />
+
+          {states?.length ? (
+            <Select label="State / province" placeholder="Optional" options={states} error={errors.state?.message} {...register('state')} />
+          ) : (
+            <Input label="State / province" placeholder="Optional" error={errors.state?.message} {...register('state')} />
+          )}
+
+          <div>
+            {cityOptions.length && !manualCity ? (
+              <Select label="City" placeholder="Optional" options={cityOptions} error={errors.city?.message} {...register('city')} />
+            ) : (
+              <Input label="City" placeholder="Optional" error={errors.city?.message} {...register('city')} />
+            )}
+            {cityOptions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setManualCity((current) => !current)}
+                className="mt-1 text-[11px] font-semibold text-brand-700 hover:underline"
+              >
+                {manualCity ? 'Choose from the list instead' : "Can't find your city? Enter it manually"}
+              </button>
+            )}
+          </div>
         </div>
         <Input
           label="County"

@@ -36,7 +36,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { cn } from '@/utils/classNames';
 import { formatCurrency, formatDate } from '@/utils/format';
-import { getErrorMessage } from '@/utils/errors';
+import { getErrorMessage, getFieldErrors } from '@/utils/errors';
 import { toast } from '@/stores/uiStore';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
@@ -50,6 +50,7 @@ import {
   LOCATION_META,
   PETS_OPTIONS,
   PROPERTY_TYPES,
+  impliedBedroomCap,
 } from '@/lib/propertySchema';
 import {
   useDeleteProperty,
@@ -64,11 +65,27 @@ import {
   useUploadPropertyImages,
   useUploadPropertyVideos,
 } from '../hooks/useProperties';
+import { usePricingConfigs } from '../hooks/useCatalogue';
 import { PhotoUploadButton } from './PhotoPicker';
 import { VideoUploadButton } from './VideoPicker';
 import { AvailabilityPanel } from './AvailabilityPanel';
 import { AddressFields } from './AddressFields';
 import { PropertyMaintenanceTab } from '@/features/maintenance';
+import { useTaxRules } from '@/features/finance';
+import { TAX_COUNTRY_BY_LOCATION } from '@/lib/geoData';
+
+/** Active rules whose country/state/city scope covers this property (state/city left blank on a rule = applies to the whole country/state). */
+const matchTaxRules = (rules, property) => {
+  const taxCountry = TAX_COUNTRY_BY_LOCATION[property?.location];
+  if (!taxCountry) return [];
+  return rules.filter(
+    (rule) =>
+      rule.status === 'active' &&
+      rule.country === taxCountry &&
+      (!rule.state || rule.state === property.state) &&
+      (!rule.city || rule.city === property.city),
+  );
+};
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -422,9 +439,11 @@ const toEditable = (property) => ({
 
 const EditForm = ({ property, onCancel, onSaved }) => {
   const [form, setForm] = useState(() => toEditable(property));
+  const [serverErrors, setServerErrors] = useState({});
   const { updatePropertyAsync, isPending } = useUpdateProperty();
 
   const update = (patch) => setForm((previous) => ({ ...previous, ...patch }));
+  const errorFor = (field) => serverErrors[field];
 
   const toggleIn = (key, value) =>
     setForm((previous) => ({
@@ -438,8 +457,10 @@ const EditForm = ({ property, onCancel, onSaved }) => {
     try {
       await updatePropertyAsync({ id: property.id, patch: form });
       onSaved();
-    } catch {
-      /* the mutation's onError already raised a toast */
+    } catch (error) {
+      // The mutation's onError already raised a toast — this just surfaces
+      // field-level errors inline, same as the create wizard does.
+      setServerErrors(getFieldErrors(error));
     }
   };
 
@@ -463,7 +484,7 @@ const EditForm = ({ property, onCancel, onSaved }) => {
             options={CLASSIFICATIONS}
           />
 
-          <AddressFields form={form} update={update} />
+          <AddressFields form={form} update={update} errorFor={errorFor} />
         </div>
       </Card>
 
@@ -471,8 +492,24 @@ const EditForm = ({ property, onCancel, onSaved }) => {
         <h2 className="mb-4 font-display text-[14px] font-semibold text-ink">Space</h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Select label="Type" value={form.type} onChange={(e) => update({ type: e.target.value })} options={PROPERTY_TYPES} />
-          <Input label="Bedrooms" type="number" min="0" value={form.bedrooms} onChange={(e) => update({ bedrooms: e.target.value })} />
+          <Select
+            label="Type"
+            value={form.type}
+            onChange={(e) => {
+              const type = e.target.value;
+              const cap = impliedBedroomCap(type);
+              update({ type, bedrooms: cap ? cap : form.bedrooms });
+            }}
+            options={PROPERTY_TYPES}
+          />
+          <Input
+            label="Bedrooms"
+            type="number"
+            min="0"
+            max={impliedBedroomCap(form.type)}
+            value={form.bedrooms}
+            onChange={(e) => update({ bedrooms: e.target.value })}
+          />
           <Input label="Bathrooms" type="number" min="0" step="0.5" value={form.bathrooms} onChange={(e) => update({ bathrooms: e.target.value })} />
           <Input label="Max guests" type="number" min="1" value={form.maxGuests} onChange={(e) => update({ maxGuests: e.target.value })} />
           <Input label="Floor area (m²)" type="number" min="0" value={form.area} onChange={(e) => update({ area: e.target.value })} />
@@ -561,6 +598,16 @@ const EditForm = ({ property, onCancel, onSaved }) => {
         </div>
       </Card>
 
+      {Object.keys(serverErrors).length > 0 && (
+        <Alert variant="danger" title="Couldn't save these changes">
+          <ul className="list-disc space-y-0.5 pl-4">
+            {Object.entries(serverErrors).map(([field, message]) => (
+              <li key={field}>{message}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+
       <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-surface/95 py-3 backdrop-blur sm:flex-row sm:justify-end">
         <Button onClick={onCancel} leftIcon={<X className="size-3.5" aria-hidden="true" />}>
           Discard
@@ -587,6 +634,8 @@ export const PropertyDetailPage = () => {
 
   const { setStatus, isPending: isStatusPending } = usePropertyStatus();
   const { deleteProperty, isPending: isDeleting } = useDeleteProperty();
+  const { data: pricingConfigs = [] } = usePricingConfigs();
+  const { data: taxRules = [] } = useTaxRules({});
 
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.propertiesManage);
@@ -601,6 +650,15 @@ export const PropertyDetailPage = () => {
   }, [propertyId]);
 
   const currency = property?.currency ?? 'GBP';
+
+  // The country-level `PricingConfiguration` (set in Pricing & Availability) is what
+  // actually applies whenever the property itself doesn't override a fee — surface
+  // that real value instead of the inert "Market default" placeholder.
+  const marketConfig = useMemo(
+    () => pricingConfigs.find((config) => config.country === property?.location),
+    [pricingConfigs, property?.location],
+  );
+  const matchedTaxRules = useMemo(() => matchTaxRules(taxRules, property), [taxRules, property]);
 
   const statusActions = useMemo(() => {
     if (!property) return [];
@@ -840,14 +898,25 @@ export const PropertyDetailPage = () => {
                     {property.monthlyRate ? formatCurrency(property.monthlyRate, currency) : null}
                   </Field>
                   <Field label="Cleaning fee">
-                    {property.cleaningFee !== null ? formatCurrency(property.cleaningFee, currency) : 'Market default'}
+                    {property.cleaningFee !== null
+                      ? formatCurrency(property.cleaningFee, currency)
+                      : marketConfig
+                        ? `${formatCurrency(marketConfig.cleaningFee, marketConfig.currency)} (market default)`
+                        : 'No market default configured'}
                   </Field>
                   <Field label="Security deposit">
                     {property.securityDeposit !== null
                       ? formatCurrency(property.securityDeposit, currency)
-                      : 'Market default'}
+                      : marketConfig
+                        ? `${formatCurrency(marketConfig.securityDeposit, marketConfig.currency)} (market default)`
+                        : 'No market default configured'}
                   </Field>
                   <Field label="Instant book">{property.instantBook ? 'Enabled' : 'Disabled'}</Field>
+                  <Field label="Tax">
+                    {matchedTaxRules.length
+                      ? matchedTaxRules.map((rule) => rule.displayLabel || rule.ruleName || `${rule.country} tax`).join(', ')
+                      : 'No active tax rule matches this location'}
+                  </Field>
                 </div>
               </Card>
 

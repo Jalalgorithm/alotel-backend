@@ -43,6 +43,43 @@ const StatusPill = ({ status }) => (
 /* Detail drawer                                                              */
 /* -------------------------------------------------------------------------- */
 
+/** Reason is required before a cancellation can fire — recorded against the booking's history. Mirrors `CancellationsPage.jsx`'s `RefundReasonModal`. */
+const CancelBookingModal = ({ isOpen, row, isPending, onClose, onConfirm }) => {
+  const [reason, setReason] = useState('');
+
+  if (!isOpen) return null;
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      size="sm"
+      title="Cancel this booking?"
+      description={`${row.guestName || row.guestEmail} · ${formatDate(row.checkIn)} → ${formatDate(row.checkOut)}`}
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button size="sm" onClick={onClose} disabled={isPending}>
+            Keep booking
+          </Button>
+          <Button size="sm" variant="danger" isLoading={isPending} disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>
+            Confirm cancellation
+          </Button>
+        </div>
+      }
+    >
+      <p className="text-[12.5px] text-ink-muted">A reason is required and will be recorded against the booking&rsquo;s history.</p>
+      <Textarea
+        label="Reason for cancellation"
+        rows={3}
+        placeholder="e.g. Guest requested refund due to travel change."
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        containerClassName="mt-3"
+      />
+    </Modal>
+  );
+};
+
 const Field = ({ icon: Icon, label, children }) => (
   <div className="min-w-0">
     <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">
@@ -205,7 +242,6 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
   const { data: receipt } = useBookingReceipt(row.id);
 
   const [isCancelling, setIsCancelling] = useState(false);
-  const [reason, setReason] = useState('');
 
   const currency = booking?.currency ?? row.currency;
   const canAct = canManage && ACTIONABLE_STATUSES.includes(booking?.status ?? row.status);
@@ -213,7 +249,8 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
   const canCancel = canAct && booking?.status !== 'active';
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen
       onClose={onClose}
       size="lg"
@@ -233,33 +270,11 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
               </Button>
             )}
 
-            {canCancel &&
-              (isCancelling ? (
-                <>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setIsCancelling(false);
-                      setReason('');
-                    }}
-                  >
-                    Keep booking
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    isLoading={actions.isPending}
-                    disabled={!reason.trim()}
-                    onClick={() => actions.cancel(row.id, reason)}
-                  >
-                    Confirm cancellation
-                  </Button>
-                </>
-              ) : (
-                <Button size="sm" variant="dangerSoft" onClick={() => setIsCancelling(true)}>
-                  Cancel booking
-                </Button>
-              ))}
+            {canCancel && (
+              <Button size="sm" variant="dangerSoft" onClick={() => setIsCancelling(true)}>
+                Cancel booking
+              </Button>
+            )}
           </div>
         )
       }
@@ -390,25 +405,18 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
           )}
 
           {canManage && <PaymentOperations booking={booking} currency={currency} />}
-
-          {isCancelling && (
-            <div className="border-t border-line pt-4">
-              <Alert variant="warn" title="Cancel this booking?">
-                <p>A reason is required and will be recorded against the booking&rsquo;s history.</p>
-                <Textarea
-                  label="Reason for cancellation"
-                  rows={2}
-                  placeholder="e.g. Guest requested refund due to travel change."
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  containerClassName="mt-3"
-                />
-              </Alert>
-            </div>
-          )}
         </div>
       )}
     </Modal>
+
+    <CancelBookingModal
+      isOpen={isCancelling}
+      row={row}
+      isPending={actions.isPending}
+      onClose={() => setIsCancelling(false)}
+      onConfirm={(reason) => actions.cancel(row.id, reason, { onSettled: () => setIsCancelling(false) })}
+    />
+    </>
   );
 };
 

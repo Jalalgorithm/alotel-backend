@@ -54,6 +54,7 @@ export const TaxPage = () => {
             {!row.ruleName && <span className="ml-1.5 font-normal text-ink-muted">(unnamed)</span>}
           </p>
           <p className="truncate text-[10.5px] text-ink-muted">{scopeLabel(row) || row.country}</p>
+          {row.displayLabel && <p className="truncate text-[10.5px] text-ink-muted">Guest sees: {row.displayLabel}</p>}
         </div>
       ),
     },

@@ -6,6 +6,7 @@ export { UnitsPage } from './components/UnitsPage';
 export { AmenitiesPage } from './components/AmenitiesPage';
 export { PricingPage } from './components/PricingPage';
 export { PropertyReviewPage } from './components/PropertyReviewPage';
+export { AddressFields } from './components/AddressFields';
 
 export {
   useProperties,

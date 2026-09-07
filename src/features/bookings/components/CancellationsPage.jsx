@@ -109,7 +109,7 @@ export const CancellationsPage = () => {
       header: '',
       align: 'right',
       render: (row) =>
-        refundedIds.has(row.id) ? (
+        row.status === 'refunded' || refundedIds.has(row.id) ? (
           <StatusBadge status="Refunded" />
         ) : (
           <Button size="xs" variant="primary" onClick={() => setRefundTarget(row)}>

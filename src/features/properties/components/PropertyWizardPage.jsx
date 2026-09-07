@@ -25,6 +25,7 @@ import { cn } from '@/utils/classNames';
 import { formatCurrency } from '@/utils/format';
 import { getFieldErrors } from '@/utils/errors';
 import { useCreateProperty, usePropertyStatus, useUploadPropertyImages } from '../hooks/useProperties';
+import { usePricingConfigs } from '../hooks/useCatalogue';
 import { PhotoPicker } from './PhotoPicker';
 import { AddressFields } from './AddressFields';
 import {
@@ -36,6 +37,7 @@ import {
   PETS_OPTIONS,
   PROPERTY_TYPES,
   currencyFor,
+  impliedBedroomCap,
 } from '@/lib/propertySchema';
 import { paths } from '@/routes/paths';
 
@@ -183,11 +185,15 @@ const ChipToggle = ({ label, checked, onToggle }) => (
 );
 
 /** Live summary of what the listing will look like. */
-const PreviewPanel = ({ form, currency }) => (
+const PreviewPanel = ({ form, currency, coverImageUrl }) => (
   <Card className="overflow-hidden lg:sticky lg:top-5">
-    <div className="flex h-24 items-center justify-center bg-gradient-to-br from-brand-50 to-brand-100">
-      <Building2 className="size-6 text-brand-600/40" aria-hidden="true" />
-    </div>
+    {coverImageUrl ? (
+      <img src={coverImageUrl} alt="" className="h-24 w-full object-cover" />
+    ) : (
+      <div className="flex h-24 items-center justify-center bg-gradient-to-br from-brand-50 to-brand-100">
+        <Building2 className="size-6 text-brand-600/40" aria-hidden="true" />
+      </div>
+    )}
 
     <div className="p-4">
       <p className="text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Live preview</p>
@@ -260,6 +266,7 @@ export const PropertyWizardPage = () => {
   const { createPropertyAsync, isPending } = useCreateProperty();
   const { uploadImagesAsync, isPending: isUploading } = useUploadPropertyImages();
   const { setStatusAsync } = usePropertyStatus();
+  const { data: pricingConfigs = [] } = usePricingConfigs();
 
   /**
    * Photos live in component state rather than the sessionStorage draft: a
@@ -303,6 +310,11 @@ export const PropertyWizardPage = () => {
     }));
 
   const currency = useMemo(() => currencyFor(form), [form]);
+  // Surfaces the real country-level default in the review step instead of an inert "Market default" label.
+  const marketConfig = useMemo(
+    () => pricingConfigs.find((config) => config.country === form.location),
+    [pricingConfigs, form.location],
+  );
 
   /** Per-step validation. Returned map is empty when the step is complete. */
   const stepErrors = useMemo(() => {
@@ -427,7 +439,11 @@ export const PropertyWizardPage = () => {
         value={form.type}
         onChange={(event) => {
           const type = event.target.value;
-          update({ type, bedrooms: isStudio(type) ? 0 : Math.max(1, form.bedrooms) });
+          const cap = impliedBedroomCap(type);
+          update({
+            type,
+            bedrooms: isStudio(type) ? 0 : cap ? cap : Math.max(1, form.bedrooms),
+          });
         }}
         options={PROPERTY_TYPES}
         error={errorFor('type')}
@@ -435,7 +451,13 @@ export const PropertyWizardPage = () => {
 
       <div className="flex flex-wrap gap-6">
         {!isStudio(form.type) && (
-          <Counter label="Bedrooms" value={form.bedrooms} onChange={(v) => update({ bedrooms: v })} min={1} />
+          <Counter
+            label="Bedrooms"
+            value={form.bedrooms}
+            onChange={(v) => update({ bedrooms: v })}
+            min={1}
+            max={impliedBedroomCap(form.type) ?? 99}
+          />
         )}
         <Counter label="Bathrooms" value={form.bathrooms} onChange={(v) => update({ bathrooms: v })} min={1} />
         <Counter label="Max guests" value={form.maxGuests} onChange={(v) => update({ maxGuests: v })} min={1} />
@@ -650,8 +672,22 @@ export const PropertyWizardPage = () => {
           ['Accessibility', form.accessFeatures.length ? `${form.accessFeatures.length} selected` : 'None'],
           ['Photos', photos.length ? `${photos.length} to upload` : 'None yet'],
           ['Nightly rate', form.baseRate ? formatCurrency(Number(form.baseRate), currency) : '—'],
-          ['Cleaning fee', form.cleaningFee ? formatCurrency(Number(form.cleaningFee), currency) : 'Market default'],
-          ['Security deposit', form.securityDeposit ? formatCurrency(Number(form.securityDeposit), currency) : 'Market default'],
+          [
+            'Cleaning fee',
+            form.cleaningFee
+              ? formatCurrency(Number(form.cleaningFee), currency)
+              : marketConfig
+                ? `${formatCurrency(marketConfig.cleaningFee, marketConfig.currency)} (market default)`
+                : 'No market default configured',
+          ],
+          [
+            'Security deposit',
+            form.securityDeposit
+              ? formatCurrency(Number(form.securityDeposit), currency)
+              : marketConfig
+                ? `${formatCurrency(marketConfig.securityDeposit, marketConfig.currency)} (market default)`
+                : 'No market default configured',
+          ],
           ['Stay limits', `${form.minStay} night min${form.maxStay ? ` · ${form.maxStay} night max` : ''}`],
           ['Instant book', form.instantBook ? 'Enabled' : 'Admin approves'],
         ].map(([label, value]) => (
@@ -745,7 +781,7 @@ export const PropertyWizardPage = () => {
         </Card>
 
         <div className="lg:order-last">
-          <PreviewPanel form={form} currency={currency} />
+          <PreviewPanel form={form} currency={currency} coverImageUrl={photos[0]?.previewUrl} />
         </div>
       </div>
     </div>

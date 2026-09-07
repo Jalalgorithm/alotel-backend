@@ -4,16 +4,20 @@ import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { SLOT_UNITS, SPACE_TYPES } from '@/lib/spaceSchema';
+import { AddressFields } from '@/features/properties';
 import { useUpdateSpace } from '../../hooks/useSpaces';
 
 const toForm = (space) => ({
   title: space?.title ?? '',
   type: space?.type ?? SPACE_TYPES[0],
   description: space?.description ?? '',
+  location: space?.location ?? '',
   country: space?.country ?? '',
   state: space?.state ?? '',
   city: space?.city ?? '',
   address: space?.address ?? '',
+  postalCode: space?.postalCode ?? '',
+  coordinates: space?.coordinates ?? {},
   sizeSqm: space?.sizeSqm ?? '',
   baseRate: space?.baseRate ?? '',
   slotUnit: space?.slotUnit ?? 'hour',
@@ -57,12 +61,7 @@ export const EditSpaceModal = ({ isOpen, onClose, space }) => {
           <Input label="Size (sqm)" type="number" min="0" value={form.sizeSqm} onChange={(e) => update({ sizeSqm: e.target.value })} />
         </div>
         <Textarea label="Description" rows={3} value={form.description} onChange={(e) => update({ description: e.target.value })} />
-        <div className="grid grid-cols-3 gap-3">
-          <Input label="Country" value={form.country} onChange={(e) => update({ country: e.target.value })} />
-          <Input label="State / province" value={form.state} onChange={(e) => update({ state: e.target.value })} />
-          <Input label="City" value={form.city} onChange={(e) => update({ city: e.target.value })} />
-        </div>
-        <Input label="Address" value={form.address} onChange={(e) => update({ address: e.target.value })} />
+        <AddressFields form={form} update={update} />
         <Input label="Base rate" type="number" min="0" value={form.baseRate} onChange={(e) => update({ baseRate: e.target.value })} />
         <div className="grid grid-cols-3 gap-3">
           <Select label="Slot unit" options={SLOT_UNITS} value={form.slotUnit} onChange={(e) => update({ slotUnit: e.target.value })} />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -8,7 +8,53 @@ import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
 import { useCountries, useCountryStates } from '@/hooks/useCountries';
 import { currencyFor, LOCATIONS, LOCATION_META } from '@/lib/propertySchema';
+import { citiesFor } from '@/lib/geoData';
 import { propertyService } from '../services/propertyService';
+
+/**
+ * City dropdown (curated list) with a manual-entry escape hatch — mirrors
+ * the State field's dropdown-or-input pattern just above it. Falls back to
+ * free text whenever there's no curated list for the country, or the
+ * property/space's current city isn't in it (an existing record in a town
+ * we haven't curated should never be silently blanked).
+ */
+const CityField = ({ form, update, errorFor }) => {
+  const cityOptions = citiesFor(form.location);
+  const [manual, setManual] = useState(() => Boolean(form.city) && !cityOptions.includes(form.city));
+
+  // A country switch clears `city` (see `changeCountry`) — start back in
+  // dropdown mode for the new country's list rather than staying stuck in
+  // manual mode from the previous one. Deliberately keyed on `form.location`
+  // only — re-running this on every `form.city` keystroke would flip a
+  // manually-typed city back to dropdown mode mid-entry whenever it doesn't
+  // (yet) match a list option.
+  useEffect(() => {
+    setManual(Boolean(form.city) && !citiesFor(form.location).includes(form.city));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.location]);
+
+  if (!cityOptions.length || manual) {
+    return (
+      <div>
+        <Input label="City" placeholder={LOCATION_META[form.location]?.cityPlaceholder} value={form.city} onChange={(event) => update({ city: event.target.value })} error={errorFor('city')} />
+        {cityOptions.length > 0 && (
+          <button type="button" onClick={() => setManual(false)} className="mt-1 text-[11px] font-semibold text-brand-700 hover:underline">
+            Choose from the list instead
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <Select label="City" placeholder="Select" value={form.city} onChange={(event) => update({ city: event.target.value })} options={cityOptions} error={errorFor('city')} />
+      <button type="button" onClick={() => setManual(true)} className="mt-1 text-[11px] font-semibold text-brand-700 hover:underline">
+        Can&apos;t find your city? Enter it manually
+      </button>
+    </div>
+  );
+};
 
 /**
  * Country/state/city/address/postal/coordinates block — shared by
@@ -157,13 +203,7 @@ export const AddressFields = ({ form, update, errorFor = () => undefined }) => {
             error={errorFor('state')}
           />
         )}
-        <Input
-          label="City"
-          placeholder={meta?.cityPlaceholder}
-          value={form.city}
-          onChange={(event) => update({ city: event.target.value })}
-          error={errorFor('city')}
-        />
+        <CityField form={form} update={update} errorFor={errorFor} />
       </div>
 
       <Textarea

@@ -22,6 +22,15 @@ export const PROPERTY_TYPES = [
   'Other',
 ];
 
+/**
+ * "N-Bedroom Flat" types imply an exact bedroom count — the Bedrooms field
+ * shouldn't let an admin set a number past what the chosen type already
+ * states. Types without an implied number (House, Duplex, etc.) stay
+ * unrestricted.
+ */
+export const IMPLIED_BEDROOM_CAP = { '1-Bedroom Flat': 1, '2-Bedroom Flat': 2, '3-Bedroom Flat': 3 };
+export const impliedBedroomCap = (type) => IMPLIED_BEDROOM_CAP[type];
+
 export const FURNISHED_OPTIONS = ['Fully Furnished', 'Part Furnished', 'Unfurnished'];
 
 export const PETS_OPTIONS = ['No pets', 'Pets allowed', 'Small pets only', 'Service animals only'];

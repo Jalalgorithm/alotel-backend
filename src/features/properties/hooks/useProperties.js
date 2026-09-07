@@ -238,7 +238,8 @@ export const useAvailabilityMutations = (propertyId) => {
     isCreating: create.isPending,
     updateRange: (id, patch) => update.mutate({ id, patch }),
     deleteRange: remove.mutate,
-    pendingId: update.variables?.id ?? remove.variables,
+    // Only while a mutation is actually in flight — `.variables` survives past settling.
+    pendingId: update.isPending ? update.variables?.id : remove.isPending ? remove.variables : undefined,
   };
 };
 

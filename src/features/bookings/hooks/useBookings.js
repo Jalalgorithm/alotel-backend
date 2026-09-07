@@ -88,7 +88,7 @@ export const useBookingActions = () => {
 
   return {
     approve: approve.mutate,
-    cancel: (id, reason = '') => cancel.mutate({ id, reason }),
+    cancel: (id, reason = '', options) => cancel.mutate({ id, reason }, options),
     sendContract: (id) => nudge.mutate({ id, patch: { contract: 'Signed' }, message: 'Contract sent for signature' }),
     remindKyc: (id) => nudge.mutate({ id, patch: { kyc: 'Pending' }, message: 'KYC reminder sent' }),
     isPending: approve.isPending || cancel.isPending || nudge.isPending,

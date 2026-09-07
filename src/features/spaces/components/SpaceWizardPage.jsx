@@ -20,6 +20,7 @@ import {
   SPACE_TYPES,
   WEEKDAYS,
 } from '@/lib/spaceSchema';
+import { AddressFields } from '@/features/properties';
 import { paths } from '@/routes/paths';
 
 const DRAFT_KEY = 'alotel.admin.spaceDraft';
@@ -40,10 +41,13 @@ const EMPTY_FORM = {
   title: '',
   type: SPACE_TYPES[0],
   description: '',
+  location: '',
   country: '',
   state: '',
   city: '',
   address: '',
+  postalCode: '',
+  coordinates: {},
   sizeSqm: '',
   baseRate: '',
   slotUnit: 'hour',
@@ -161,7 +165,7 @@ export const SpaceWizardPage = () => {
 
     if (step === 0) {
       if (!form.title.trim()) errors.title = 'Give the space a name';
-      if (!form.country.trim()) errors.country = 'Country is required';
+      if (!form.location) errors.location = 'Country is required';
       if (!form.city.trim()) errors.city = 'City is required';
       if (!form.address.trim()) errors.address = 'Address is required';
       if (!form.baseRate || Number(form.baseRate) <= 0) errors.baseRate = 'A base rate is required';
@@ -238,12 +242,7 @@ export const SpaceWizardPage = () => {
         <Input label="Size (sqm)" type="number" min="0" value={form.sizeSqm} onChange={(e) => update({ sizeSqm: e.target.value })} />
       </div>
       <Textarea label="Description" rows={3} value={form.description} onChange={(e) => update({ description: e.target.value })} />
-      <div className="grid grid-cols-3 gap-3">
-        <Input label="Country" value={form.country} onChange={(e) => update({ country: e.target.value })} error={showErrors ? stepErrors.country : undefined} />
-        <Input label="State / province" value={form.state} onChange={(e) => update({ state: e.target.value })} />
-        <Input label="City" value={form.city} onChange={(e) => update({ city: e.target.value })} error={showErrors ? stepErrors.city : undefined} />
-      </div>
-      <Input label="Address" value={form.address} onChange={(e) => update({ address: e.target.value })} error={showErrors ? stepErrors.address : undefined} />
+      <AddressFields form={form} update={update} errorFor={(field) => (showErrors ? stepErrors[field] : undefined)} />
 
       <div className="border-t border-line pt-4">
         <Input label="Base rate" type="number" min="0" value={form.baseRate} onChange={(e) => update({ baseRate: e.target.value })} error={showErrors ? stepErrors.baseRate : undefined} hint="Currency is derived from the country/market — nothing to set here." />
