@@ -15,7 +15,20 @@
       "Bash(npm init *)",
       "Bash(npm install *)",
       "Bash(node \"C:/Users/dell/AppData/Local/Temp/claude/c--Users-dell-Desktop-works-Syntechtic-Alotel-New-folder-alotel/ef64c253-14cf-4391-9c1e-58cb3b5786b7/scratchpad/staff-e2e.mjs\")",
-      "Bash(\".venv/Scripts/python.exe\" disable_admin_2fa.py --email super@aotel.test)"
+      "Bash(\".venv/Scripts/python.exe\" disable_admin_2fa.py --email super@aotel.test)",
+      "Bash(curl -s http://localhost:8000/api/v1/properties/pricing-configs/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://localhost:8000/api/v1/properties/taxes/?page_size=3 -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/properties/pricing-configs/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"country\":\"Nigeria\",\"currency\":\"NGN\",\"cleaningFee\":\"15000.00\",\"securityDeposit\":\"50000.00\",\"isActive\":true}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/properties/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(tee /tmp/new_property.json)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X PATCH http://localhost:8000/api/v1/properties/pricing-configs/c77a5e74-1187-4af1-a6ac-5b27ac4c753d/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"cleaningFee\":\"99999.00\",\"securityDeposit\":\"88888.00\"}')",
+      "Bash(curl -s http://localhost:8000/api/v1/properties/40e65e66-e5b9-4d22-9e10-b68497a30971/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('cleaningFee:', d['cleaningFee']\\); print\\('securityDeposit:', d['securityDeposit']\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('id:', d.get\\('id'\\)\\); print\\('cleaningFee:', d.get\\('cleaningFee'\\)\\); print\\('securityDeposit:', d.get\\('securityDeposit'\\)\\); print\\(d.get\\('error'\\) if 'error' in d else ''\\)\")",
+      "Bash(curl -s http://localhost:8000/api/v1/operations/maintenance/tickets/?property=40e65e66-e5b9-4d22-9e10-b68497a30971 -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://localhost:8000/api/v1/bookings/admin/list/?page_size=5 -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(curl -s http://localhost:8000/api/v1/bookings/admin/b9907ebf-85a7-4e2e-87a3-d34dc042a41f/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')"
     ],
     "additionalDirectories": [
       "c:\\Users\\dell\\Desktop\\works\\Syntechtic\\Alotel\\New folder\\aotel-backend\\aotel"

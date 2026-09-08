@@ -170,10 +170,20 @@ export const usePricingConfigs = () =>
     queryFn: propertyService.getPricingConfigs,
   });
 
-/** Create / update / delete a country's cleaning fee & security deposit defaults. */
+/**
+ * Create / update / delete a country's cleaning fee & security deposit defaults.
+ *
+ * The API resolves every property's `cleaningFee`/`securityDeposit` live against
+ * whichever country config is currently active, so an already-cached property
+ * (detail or list) needs invalidating too — otherwise it keeps showing the
+ * numbers from before this save until something else happens to refetch it.
+ */
 export const usePricingConfigMutations = () => {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.properties.pricingConfigs() });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.properties.pricingConfigs() });
+    queryClient.invalidateQueries({ queryKey: queryKeys.properties.all });
+  };
 
   const create = useMutation({
     mutationFn: propertyService.createPricingConfig,

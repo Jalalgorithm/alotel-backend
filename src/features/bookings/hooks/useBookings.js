@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { bookingService } from '../services/bookingService';
+import { financeService } from '@/features/finance';
 import { queryKeys } from '@/lib/queryKeys';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
@@ -404,5 +405,26 @@ export const useCancellationReasons = (bookingIds = []) =>
       enabled: Boolean(bookingId),
       staleTime: 1000 * 60,
       select: (events) => events.find((event) => event.to === 'cancelled') ?? null,
+    })),
+  });
+
+/**
+ * Whether each booking already has a succeeded refund. `booking.status`
+ * can't answer this reliably — a booking that's already `cancelled` never
+ * flips to `refunded` (confirmed against the real refund endpoint: that
+ * transition is deliberately excluded for cancelled bookings), so this reads
+ * the real payment ledger instead. Same bounded-fan-out shape as
+ * `useCancellationReasons`; also usable for a single booking (Payment
+ * Operations) by passing a one-element array.
+ */
+export const useBookingRefundStatus = (bookingIds = []) =>
+  useQueries({
+    queries: bookingIds.map((bookingId) => ({
+      queryKey: queryKeys.finance.payments({ bookingId }),
+      queryFn: () => financeService.getPayments({ bookingId }),
+      enabled: Boolean(bookingId),
+      staleTime: 1000 * 30,
+      select: (result) =>
+        (result.items ?? []).some((payment) => payment.transactionType === 'refund' && payment.status === 'succeeded'),
     })),
   });

@@ -1,52 +1,16 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ListToolbar } from '@/components/shared/ListToolbar';
+import { ReasonModal } from '@/components/shared/ReasonModal';
 import { Card } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { AvatarCell } from '@/components/ui/Avatar';
-import { Modal } from '@/components/ui/Modal';
-import { Textarea } from '@/components/ui/Input';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { usePaymentActions } from '@/features/finance';
-import { useCancellationReasons, useCancellations } from '../hooks/useBookings';
+import { useBookingRefundStatus, useCancellationReasons, useCancellations } from '../hooks/useBookings';
 import { formatCurrency, formatRelative } from '@/utils/format';
-
-/** Reason is required before a refund can fire — recorded against the `Refund` row server-side. */
-const RefundReasonModal = ({ row, isPending, onClose, onConfirm }) => {
-  const [reason, setReason] = useState('');
-
-  if (!row) return null;
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      size="sm"
-      title="Refund this booking?"
-      description={`${row.guestName || row.guestEmail} · ${formatCurrency(row.total, row.currency)}`}
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button size="sm" onClick={onClose} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button size="sm" variant="danger" isLoading={isPending} disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>
-            Confirm refund
-          </Button>
-        </div>
-      }
-    >
-      <Textarea
-        label="Reason for refund"
-        rows={3}
-        placeholder="e.g. Guest cancelled due to a family emergency."
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-      />
-    </Modal>
-  );
-};
 
 /**
  * Cancelled bookings. There's no dedicated backend list for this — it's
@@ -67,6 +31,13 @@ export const CancellationsPage = () => {
   const rows = data?.items ?? [];
   const reasonQueries = useCancellationReasons(rows.map((row) => row.id));
   const reasonById = Object.fromEntries(rows.map((row, index) => [row.id, reasonQueries[index]?.data]));
+
+  // `row.status` can't tell us this — a cancelled booking never flips to
+  // `refunded` server-side — so this checks the real payment ledger per row.
+  const refundQueries = useBookingRefundStatus(rows.map((row) => row.id));
+  const isRefundedById = Object.fromEntries(
+    rows.map((row, index) => [row.id, refundedIds.has(row.id) || Boolean(refundQueries[index]?.data)]),
+  );
 
   const columns = [
     {
@@ -109,7 +80,7 @@ export const CancellationsPage = () => {
       header: '',
       align: 'right',
       render: (row) =>
-        row.status === 'refunded' || refundedIds.has(row.id) ? (
+        isRefundedById[row.id] ? (
           <StatusBadge status="Refunded" />
         ) : (
           <Button size="xs" variant="primary" onClick={() => setRefundTarget(row)}>
@@ -153,8 +124,13 @@ export const CancellationsPage = () => {
         </div>
       </Card>
 
-      <RefundReasonModal
-        row={refundTarget}
+      <ReasonModal
+        isOpen={Boolean(refundTarget)}
+        title="Refund this booking?"
+        description={refundTarget ? `${refundTarget.guestName || refundTarget.guestEmail} · ${formatCurrency(refundTarget.total, refundTarget.currency)}` : ''}
+        reasonLabel="Reason for refund"
+        reasonPlaceholder="e.g. Guest cancelled due to a family emergency."
+        confirmLabel="Confirm refund"
         isPending={isPending}
         onClose={() => setRefundTarget(null)}
         onConfirm={(reason) => {

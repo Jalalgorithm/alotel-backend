@@ -25,7 +25,6 @@ import { cn } from '@/utils/classNames';
 import { formatCurrency } from '@/utils/format';
 import { getFieldErrors } from '@/utils/errors';
 import { useCreateProperty, usePropertyStatus, useUploadPropertyImages } from '../hooks/useProperties';
-import { usePricingConfigs } from '../hooks/useCatalogue';
 import { PhotoPicker } from './PhotoPicker';
 import { AddressFields } from './AddressFields';
 import {
@@ -266,7 +265,6 @@ export const PropertyWizardPage = () => {
   const { createPropertyAsync, isPending } = useCreateProperty();
   const { uploadImagesAsync, isPending: isUploading } = useUploadPropertyImages();
   const { setStatusAsync } = usePropertyStatus();
-  const { data: pricingConfigs = [] } = usePricingConfigs();
 
   /**
    * Photos live in component state rather than the sessionStorage draft: a
@@ -310,11 +308,6 @@ export const PropertyWizardPage = () => {
     }));
 
   const currency = useMemo(() => currencyFor(form), [form]);
-  // Surfaces the real country-level default in the review step instead of an inert "Market default" label.
-  const marketConfig = useMemo(
-    () => pricingConfigs.find((config) => config.country === form.location),
-    [pricingConfigs, form.location],
-  );
 
   /** Per-step validation. Returned map is empty when the step is complete. */
   const stepErrors = useMemo(() => {
@@ -674,19 +667,11 @@ export const PropertyWizardPage = () => {
           ['Nightly rate', form.baseRate ? formatCurrency(Number(form.baseRate), currency) : '—'],
           [
             'Cleaning fee',
-            form.cleaningFee
-              ? formatCurrency(Number(form.cleaningFee), currency)
-              : marketConfig
-                ? `${formatCurrency(marketConfig.cleaningFee, marketConfig.currency)} (market default)`
-                : 'No market default configured',
+            form.cleaningFee ? formatCurrency(Number(form.cleaningFee), currency) : 'Not set — uses the market default',
           ],
           [
             'Security deposit',
-            form.securityDeposit
-              ? formatCurrency(Number(form.securityDeposit), currency)
-              : marketConfig
-                ? `${formatCurrency(marketConfig.securityDeposit, marketConfig.currency)} (market default)`
-                : 'No market default configured',
+            form.securityDeposit ? formatCurrency(Number(form.securityDeposit), currency) : 'Not set — uses the market default',
           ],
           ['Stay limits', `${form.minStay} night min${form.maxStay ? ` · ${form.maxStay} night max` : ''}`],
           ['Instant book', form.instantBook ? 'Enabled' : 'Admin approves'],

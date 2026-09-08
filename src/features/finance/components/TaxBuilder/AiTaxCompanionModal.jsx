@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { CONFIDENCE_BADGE_VARIANT, suggestionToRuleValues, TAX_COUNTRIES, TAX_COUNTRY_LABELS } from '@/lib/taxSchema';
+import { useCountries, useCountryStates } from '@/hooks/useCountries';
+import { citiesFor, LOCATION_BY_TAX_COUNTRY } from '@/lib/geoData';
 import { useSuggestTaxRules } from '../../hooks/useFinance';
 
 const COUNTRY_OPTIONS = TAX_COUNTRIES.map((value) => ({ value, label: TAX_COUNTRY_LABELS[value] ?? value }));
@@ -33,13 +35,28 @@ export const AiTaxCompanionModal = ({ isOpen, onClose, createRule, isCreating })
 
   const { suggest, suggestions, isPending: isSuggesting, reset: resetSuggestions } = useSuggestTaxRules();
 
+  const location = LOCATION_BY_TAX_COUNTRY[query.country];
+  const { data: countries } = useCountries();
+  const countryCode = countries?.find((entry) => entry.location === location)?.code;
+  const { data: states } = useCountryStates(countryCode);
+  const cityOptions = citiesFor(location);
+  const [manualCity, setManualCity] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
     setQuery(emptyQuery());
     setAddedIds(new Set());
     setAddingSuggestionId(null);
+    setManualCity(false);
     resetSuggestions();
   }, [isOpen, resetSuggestions]);
+
+  // A country switch makes the previous state/city meaningless — clear both
+  // and drop back to dropdown mode for the new country's list.
+  const changeCountry = (country) => {
+    setQuery({ country, state: '', city: '' });
+    setManualCity(false);
+  };
 
   const runSearch = () => {
     if (!query.country) return;
@@ -71,21 +88,53 @@ export const AiTaxCompanionModal = ({ isOpen, onClose, createRule, isCreating })
           placeholder="Select"
           options={COUNTRY_OPTIONS}
           value={query.country}
-          onChange={(event) => setQuery((current) => ({ ...current, country: event.target.value }))}
+          onChange={(event) => changeCountry(event.target.value)}
         />
         <div className="grid grid-cols-2 gap-2.5">
-          <Input
-            label="State"
-            placeholder="Optional"
-            value={query.state}
-            onChange={(event) => setQuery((current) => ({ ...current, state: event.target.value }))}
-          />
-          <Input
-            label="City"
-            placeholder="Optional"
-            value={query.city}
-            onChange={(event) => setQuery((current) => ({ ...current, city: event.target.value }))}
-          />
+          {states?.length ? (
+            <Select
+              label="State"
+              placeholder="Optional"
+              options={states}
+              value={query.state}
+              onChange={(event) => setQuery((current) => ({ ...current, state: event.target.value }))}
+            />
+          ) : (
+            <Input
+              label="State"
+              placeholder="Optional"
+              value={query.state}
+              onChange={(event) => setQuery((current) => ({ ...current, state: event.target.value }))}
+            />
+          )}
+
+          <div>
+            {cityOptions.length && !manualCity ? (
+              <Select
+                label="City"
+                placeholder="Optional"
+                options={cityOptions}
+                value={query.city}
+                onChange={(event) => setQuery((current) => ({ ...current, city: event.target.value }))}
+              />
+            ) : (
+              <Input
+                label="City"
+                placeholder="Optional"
+                value={query.city}
+                onChange={(event) => setQuery((current) => ({ ...current, city: event.target.value }))}
+              />
+            )}
+            {cityOptions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setManualCity((current) => !current)}
+                className="mt-1 text-[11px] font-semibold text-brand-700 hover:underline"
+              >
+                {manualCity ? 'Choose from the list instead' : "Can't find your city? Enter it manually"}
+              </button>
+            )}
+          </div>
         </div>
         <Button
           fullWidth

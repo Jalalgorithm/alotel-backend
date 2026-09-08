@@ -3,20 +3,22 @@ import { CalendarDays, Mail, MapPin, Receipt, Users } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ListToolbar } from '@/components/shared/ListToolbar';
 import { Pagination } from '@/components/shared/Pagination';
+import { ReasonModal } from '@/components/shared/ReasonModal';
 import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
-import { Badge } from '@/components/ui/Badge';
+import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Input, Textarea } from '@/components/ui/Input';
+import { Input } from '@/components/ui/Input';
 import { AvatarCell } from '@/components/ui/Avatar';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
   useBookingActions,
   useBookingReceipt,
+  useBookingRefundStatus,
   useBookingTimeline,
   useBooking,
   useBookings,
@@ -43,43 +45,6 @@ const StatusPill = ({ status }) => (
 /* Detail drawer                                                              */
 /* -------------------------------------------------------------------------- */
 
-/** Reason is required before a cancellation can fire — recorded against the booking's history. Mirrors `CancellationsPage.jsx`'s `RefundReasonModal`. */
-const CancelBookingModal = ({ isOpen, row, isPending, onClose, onConfirm }) => {
-  const [reason, setReason] = useState('');
-
-  if (!isOpen) return null;
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      size="sm"
-      title="Cancel this booking?"
-      description={`${row.guestName || row.guestEmail} · ${formatDate(row.checkIn)} → ${formatDate(row.checkOut)}`}
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button size="sm" onClick={onClose} disabled={isPending}>
-            Keep booking
-          </Button>
-          <Button size="sm" variant="danger" isLoading={isPending} disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>
-            Confirm cancellation
-          </Button>
-        </div>
-      }
-    >
-      <p className="text-[12.5px] text-ink-muted">A reason is required and will be recorded against the booking&rsquo;s history.</p>
-      <Textarea
-        label="Reason for cancellation"
-        rows={3}
-        placeholder="e.g. Guest requested refund due to travel change."
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        containerClassName="mt-3"
-      />
-    </Modal>
-  );
-};
-
 const Field = ({ icon: Icon, label, children }) => (
   <div className="min-w-0">
     <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">
@@ -101,10 +66,15 @@ const PaymentOperations = ({ booking, currency }) => {
   const { data: deposit } = useDeposit(booking.id);
   const { data: fx } = useFxRates(currency);
   const { refund, holdDeposit, captureDeposit, releaseDeposit, isPending } = usePaymentActions();
+  // `booking.status` can't tell us this reliably (a cancelled booking never
+  // flips to `refunded` server-side) — check the real payment ledger instead,
+  // same signal `CancellationsPage.jsx` uses.
+  const [refundQuery] = useBookingRefundStatus([booking.id]);
+  const [refundedThisSession, setRefundedThisSession] = useState(false);
+  const isRefunded = refundedThisSession || Boolean(refundQuery?.data);
 
   const [amount, setAmount] = useState('');
   const [isRefunding, setIsRefunding] = useState(false);
-  const [refundReason, setRefundReason] = useState('');
   const depositAmount = booking.pricing?.securityDeposit ?? 0;
   const isRefundable = ['confirmed', 'active', 'completed', 'cancelled'].includes(booking.status);
 
@@ -136,14 +106,18 @@ const PaymentOperations = ({ booking, currency }) => {
           aria-label={`Amount in ${currency}`}
         />
 
-        <Button
-          size="sm"
-          variant="dangerSoft"
-          disabled={!isRefundable || isPending || !refundAmount}
-          onClick={() => setIsRefunding(true)}
-        >
-          Refund {formatCurrency(Number(refundAmount), currency)}
-        </Button>
+        {isRefunded ? (
+          <StatusBadge status="Refunded" />
+        ) : (
+          <Button
+            size="sm"
+            variant="dangerSoft"
+            disabled={!isRefundable || isPending || !refundAmount}
+            onClick={() => setIsRefunding(true)}
+          >
+            Refund {formatCurrency(Number(refundAmount), currency)}
+          </Button>
+        )}
 
         {deposit ? (
           <>
@@ -179,45 +153,26 @@ const PaymentOperations = ({ booking, currency }) => {
         )}
       </div>
 
-      {isRefunding && (
-        <div className="mt-3">
-          <Alert variant="warn" title="Refund this booking?">
-            <p>A reason is required and will be recorded against the refund.</p>
-            <Textarea
-              label="Reason for refund"
-              rows={2}
-              placeholder="e.g. Guest cancelled due to a family emergency."
-              value={refundReason}
-              onChange={(event) => setRefundReason(event.target.value)}
-              containerClassName="mt-3"
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  setIsRefunding(false);
-                  setRefundReason('');
-                }}
-              >
-                Keep
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                isLoading={isPending}
-                disabled={!refundReason.trim()}
-                onClick={() => {
-                  refund({ bookingId: booking.id, amount: refundAmount, currency, reason: refundReason });
-                  setIsRefunding(false);
-                  setRefundReason('');
-                }}
-              >
-                Confirm refund
-              </Button>
-            </div>
-          </Alert>
-        </div>
-      )}
+      <ReasonModal
+        isOpen={isRefunding}
+        title="Refund this booking?"
+        description={`${formatCurrency(Number(refundAmount), currency)} · ${booking.id.slice(0, 8)}`}
+        reasonLabel="Reason for refund"
+        reasonPlaceholder="e.g. Guest cancelled due to a family emergency."
+        confirmLabel="Confirm refund"
+        cancelLabel="Keep"
+        isPending={isPending}
+        onClose={() => setIsRefunding(false)}
+        onConfirm={(reason) => {
+          refund(
+            { bookingId: booking.id, amount: refundAmount, currency, reason },
+            {
+              onSuccess: () => setRefundedThisSession(true),
+              onSettled: () => setIsRefunding(false),
+            },
+          );
+        }}
+      />
 
       <p className="mt-2 text-[11px] text-ink-muted">
         {deposit
@@ -409,9 +364,15 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
       )}
     </Modal>
 
-    <CancelBookingModal
+    <ReasonModal
       isOpen={isCancelling}
-      row={row}
+      title="Cancel this booking?"
+      description={`${row.guestName || row.guestEmail} · ${formatDate(row.checkIn)} → ${formatDate(row.checkOut)}`}
+      helperText="A reason is required and will be recorded against the booking's history."
+      reasonLabel="Reason for cancellation"
+      reasonPlaceholder="e.g. Guest requested refund due to travel change."
+      confirmLabel="Confirm cancellation"
+      cancelLabel="Keep booking"
       isPending={actions.isPending}
       onClose={() => setIsCancelling(false)}
       onConfirm={(reason) => actions.cancel(row.id, reason, { onSettled: () => setIsCancelling(false) })}

@@ -4,3 +4,4 @@ export { PageHeader } from './PageHeader';
 export { Toaster } from './Toaster';
 export { ListToolbar } from './ListToolbar';
 export { Pagination } from './Pagination';
+export { ReasonModal } from './ReasonModal';

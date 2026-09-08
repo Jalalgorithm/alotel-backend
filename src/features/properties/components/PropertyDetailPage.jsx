@@ -65,7 +65,6 @@ import {
   useUploadPropertyImages,
   useUploadPropertyVideos,
 } from '../hooks/useProperties';
-import { usePricingConfigs } from '../hooks/useCatalogue';
 import { PhotoUploadButton } from './PhotoPicker';
 import { VideoUploadButton } from './VideoPicker';
 import { AvailabilityPanel } from './AvailabilityPanel';
@@ -418,6 +417,8 @@ const toEditable = (property) => ({
   state: property.state ?? '',
   city: property.city ?? '',
   address: property.address ?? '',
+  postalCode: property.postalCode ?? '',
+  coordinates: property.coordinates ?? {},
   type: property.type ?? PROPERTY_TYPES[0],
   bedrooms: property.bedrooms ?? 0,
   bathrooms: property.bathrooms ?? 1,
@@ -634,7 +635,6 @@ export const PropertyDetailPage = () => {
 
   const { setStatus, isPending: isStatusPending } = usePropertyStatus();
   const { deleteProperty, isPending: isDeleting } = useDeleteProperty();
-  const { data: pricingConfigs = [] } = usePricingConfigs();
   const { data: taxRules = [] } = useTaxRules({});
 
   const { can } = useAuth();
@@ -651,13 +651,6 @@ export const PropertyDetailPage = () => {
 
   const currency = property?.currency ?? 'GBP';
 
-  // The country-level `PricingConfiguration` (set in Pricing & Availability) is what
-  // actually applies whenever the property itself doesn't override a fee — surface
-  // that real value instead of the inert "Market default" placeholder.
-  const marketConfig = useMemo(
-    () => pricingConfigs.find((config) => config.country === property?.location),
-    [pricingConfigs, property?.location],
-  );
   const matchedTaxRules = useMemo(() => matchTaxRules(taxRules, property), [taxRules, property]);
 
   const statusActions = useMemo(() => {
@@ -897,20 +890,8 @@ export const PropertyDetailPage = () => {
                   <Field label="Monthly rate">
                     {property.monthlyRate ? formatCurrency(property.monthlyRate, currency) : null}
                   </Field>
-                  <Field label="Cleaning fee">
-                    {property.cleaningFee !== null
-                      ? formatCurrency(property.cleaningFee, currency)
-                      : marketConfig
-                        ? `${formatCurrency(marketConfig.cleaningFee, marketConfig.currency)} (market default)`
-                        : 'No market default configured'}
-                  </Field>
-                  <Field label="Security deposit">
-                    {property.securityDeposit !== null
-                      ? formatCurrency(property.securityDeposit, currency)
-                      : marketConfig
-                        ? `${formatCurrency(marketConfig.securityDeposit, marketConfig.currency)} (market default)`
-                        : 'No market default configured'}
-                  </Field>
+                  <Field label="Cleaning fee">{formatCurrency(property.cleaningFee, currency)}</Field>
+                  <Field label="Security deposit">{formatCurrency(property.securityDeposit, currency)}</Field>
                   <Field label="Instant book">{property.instantBook ? 'Enabled' : 'Disabled'}</Field>
                   <Field label="Tax">
                     {matchedTaxRules.length
