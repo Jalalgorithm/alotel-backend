@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { ShieldAlert } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
-import { Textarea } from '@/components/ui/Input';
-import { Alert } from '@/components/ui/Alert';
+import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { ReasonModal } from '@/components/shared/ReasonModal';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { usePaymentActions } from '../hooks/useFinance';
+import { useBookingRefundStatus } from '@/features/bookings';
 
 const STATUS_BADGE_VARIANT = { initiated: 'neutral', pending: 'warn', succeeded: 'ok', failed: 'danger', cancelled: 'neutral' };
 
@@ -25,20 +24,18 @@ const Row = ({ label, children }) => (
  * actually surfaces the Refund action to an admin.
  */
 export const PaymentDetailModal = ({ payment, onClose }) => {
-  const [reason, setReason] = useState('');
   const [confirming, setConfirming] = useState(false);
   const { refund, isPending } = usePaymentActions();
+  // `payment.status` only reflects this one transaction — check whether the
+  // booking it belongs to already has a succeeded refund, same real signal
+  // used in Cancellations/Payment Operations, so this stays consistent with
+  // both instead of letting an already-refunded booking show an active button.
+  const [refundQuery] = useBookingRefundStatus(payment ? [payment.bookingId] : []);
+  const alreadyRefunded = Boolean(refundQuery?.data);
 
   if (!payment) return null;
 
-  const isRefundEligible = payment.status === 'succeeded' && payment.transactionType === 'payment';
-
-  const submitRefund = () => {
-    refund(
-      { bookingId: payment.bookingId, amount: payment.amount, currency: payment.currency, reason: reason.trim() },
-      { onSuccess: () => onClose() },
-    );
-  };
+  const isRefundEligible = payment.status === 'succeeded' && payment.transactionType === 'payment' && !alreadyRefunded;
 
   return (
     <Modal isOpen={Boolean(payment)} onClose={onClose} title="Payment details" description={payment.reference} size="sm">
@@ -59,36 +56,37 @@ export const PaymentDetailModal = ({ payment, onClose }) => {
         {payment.failureReason && <Row label="Failure reason">{payment.failureReason}</Row>}
       </div>
 
-      {isRefundEligible ? (
-        <div className="mt-4 space-y-3 border-t border-line pt-4">
-          {!confirming ? (
-            <Button variant="dangerSoft" fullWidth onClick={() => setConfirming(true)}>
-              Refund {formatCurrency(payment.amount, payment.currency)}
-            </Button>
-          ) : (
-            <>
-              <Alert variant="warn" icon={<ShieldAlert className="size-4" aria-hidden="true" />}>
-                This refunds the full amount back to the guest via {payment.provider}. This cannot be undone.
-              </Alert>
-              <Textarea label="Reason for refund" value={reason} onChange={(event) => setReason(event.target.value)} rows={2} />
-              <div className="flex gap-2">
-                <Button className="flex-1" onClick={() => setConfirming(false)} disabled={isPending}>
-                  Cancel
-                </Button>
-                <Button variant="danger" className="flex-1" isLoading={isPending} disabled={!reason.trim()} onClick={submitRefund}>
-                  Confirm refund
-                </Button>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        payment.transactionType === 'payment' && (
-          <p className="mt-4 border-t border-line pt-4 text-[11.5px] text-ink-muted">
-            Only a succeeded payment can be refunded — this transaction is {payment.status}.
-          </p>
-        )
-      )}
+      <div className="mt-4 border-t border-line pt-4">
+        {alreadyRefunded ? (
+          <StatusBadge status="Refunded" />
+        ) : isRefundEligible ? (
+          <Button variant="dangerSoft" fullWidth onClick={() => setConfirming(true)}>
+            Refund {formatCurrency(payment.amount, payment.currency)}
+          </Button>
+        ) : (
+          payment.transactionType === 'payment' && (
+            <p className="text-[11.5px] text-ink-muted">
+              Only a succeeded payment can be refunded — this transaction is {payment.status}.
+            </p>
+          )
+        )}
+      </div>
+
+      <ReasonModal
+        isOpen={confirming}
+        title="Refund this booking?"
+        description={`${formatCurrency(payment.amount, payment.currency)} via ${payment.provider} · this cannot be undone.`}
+        reasonLabel="Reason for refund"
+        confirmLabel="Confirm refund"
+        isPending={isPending}
+        onClose={() => setConfirming(false)}
+        onConfirm={(reason) => {
+          refund(
+            { bookingId: payment.bookingId, amount: payment.amount, currency: payment.currency, reason },
+            { onSuccess: () => onClose(), onSettled: () => setConfirming(false) },
+          );
+        }}
+      />
     </Modal>
   );
 };

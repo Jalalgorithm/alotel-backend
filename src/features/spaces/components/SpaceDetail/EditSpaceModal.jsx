@@ -11,7 +11,10 @@ const toForm = (space) => ({
   title: space?.title ?? '',
   type: space?.type ?? SPACE_TYPES[0],
   description: space?.description ?? '',
-  location: space?.location ?? '',
+  // `||`, not `??` — legacy spaces created before location tracking existed
+  // have this stored as `''`, not `null`/`undefined`, and an empty string
+  // means no country context for the State/City dropdowns to key off of.
+  location: space?.location || 'Nigeria',
   country: space?.country ?? '',
   state: space?.state ?? '',
   city: space?.city ?? '',
