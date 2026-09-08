@@ -7,6 +7,7 @@ import { Alert } from '@/components/ui/Alert';
 import { toast } from '@/stores/uiStore';
 import { getErrorMessage } from '@/utils/errors';
 import { useCountries, useCountryStates } from '@/hooks/useCountries';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { currencyFor, LOCATIONS, LOCATION_META } from '@/lib/propertySchema';
 import { citiesFor } from '@/lib/geoData';
 import { propertyService } from '../services/propertyService';
@@ -162,6 +163,17 @@ export const AddressFields = ({ form, update, errorFor = () => undefined }) => {
       setIsLookingUpPostcode(false);
     }
   };
+
+  // Auto-trigger the postcode lookup as the admin types, instead of requiring
+  // a manual "Find addresses" click — the backend endpoint already supports
+  // being called per-keystroke; this just debounces so it isn't literally
+  // every keystroke. The button stays as a fallback/re-trigger.
+  const debouncedPostalCode = useDebouncedValue(form.postalCode, 500);
+  useEffect(() => {
+    if (!meta?.postalSearchSupported || !debouncedPostalCode.trim()) return;
+    lookupAddresses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedPostalCode, meta?.postalSearchSupported]);
 
   const selectLookupAddress = (address) => {
     update({
