@@ -99,6 +99,7 @@ export const queryKeys = {
     tickets: (filters = {}) => ['maintenance-ops', 'tickets', filters],
     ticketDetail: (id) => ['maintenance-ops', 'tickets', 'detail', id],
     dashboard: (filters = {}) => ['maintenance-ops', 'dashboard', filters],
+    dashboardByProperty: () => ['maintenance-ops', 'dashboard', 'by-property'],
   },
   system: {
     settings: () => ['system', 'settings'],

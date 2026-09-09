@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Wrench } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -15,32 +15,54 @@ import { PRIORITY_BADGE_VARIANT, STATUS_BADGE_VARIANT, TICKET_PRIORITIES, TICKET
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { paths } from '@/routes/paths';
+import { useProperties } from '@/features/properties/hooks/useProperties';
 import { TicketFormModal } from './TicketFormModal';
 
-/** Global ticket table — filterable by property/status/priority, `GET /operations/maintenance/tickets/`. */
+/**
+ * Global ticket table — filterable by property/status/priority, `GET
+ * /operations/maintenance/tickets/`. The backend doesn't support a `search`
+ * query param and doesn't paginate this endpoint (it always returns the full
+ * filtered set), so search is applied client-side over whatever property/
+ * status/priority filters already narrowed the result to.
+ */
 export const TicketTablePage = () => {
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.maintenanceManage);
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
+  const [propertyId, setPropertyId] = useState('All');
   const [status, setStatus] = useState('All');
   const [priority, setPriority] = useState('All');
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const debouncedSearch = useDebouncedValue(search);
+  const { data: propertiesData } = useProperties({ pageSize: 100, status: 'published' });
   const { data, isFetching } = useMaintenanceTickets({
-    query: debouncedSearch,
+    propertyId: propertyId === 'All' ? undefined : propertyId,
     status: status === 'All' ? undefined : status,
     priority: priority === 'All' ? undefined : priority,
-    page,
   });
+
+  const rows = useMemo(() => {
+    const items = data?.items ?? [];
+    const term = debouncedSearch.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter(
+      (ticket) => ticket.category?.toLowerCase().includes(term) || ticket.description?.toLowerCase().includes(term),
+    );
+  }, [data?.items, debouncedSearch]);
 
   const withReset = (setter) => (value) => {
     setter(value);
     setPage(1);
   };
+
+  const propertyOptions = [
+    { value: 'All', label: 'All properties' },
+    ...(propertiesData?.items ?? []).map((property) => ({ value: property.id, label: property.name })),
+  ];
 
   const columns = [
     {
@@ -65,6 +87,12 @@ export const TicketTablePage = () => {
     { key: 'createdAt', header: 'Created', render: (row) => <span className="whitespace-nowrap text-[11px] text-ink-muted">{formatDate(row.createdAt)}</span> },
   ];
 
+  // The endpoint returns the full filtered set in one response (no server-side
+  // pagination) — page through the client-filtered `rows` instead.
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pagedRows = rows.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -79,9 +107,10 @@ export const TicketTablePage = () => {
             search={search}
             onSearchChange={withReset(setSearch)}
             searchPlaceholder="Search by category or description…"
-            total={data?.total}
+            total={rows.length}
             noun="ticket"
             filters={[
+              { id: 'property', value: propertyId, onChange: withReset(setPropertyId), label: 'Property', options: propertyOptions },
               { id: 'status', value: status, onChange: withReset(setStatus), label: 'Status', options: [{ value: 'All', label: 'All statuses' }, ...TICKET_STATUSES] },
               { id: 'priority', value: priority, onChange: withReset(setPriority), label: 'Priority', options: [{ value: 'All', label: 'All priorities' }, ...TICKET_PRIORITIES] },
             ]}
@@ -90,7 +119,7 @@ export const TicketTablePage = () => {
         <div className="border-t border-line">
           <DataTable
             columns={columns}
-            rows={data?.items ?? []}
+            rows={pagedRows}
             isLoading={isFetching && !data}
             onRowClick={(row) => navigate(paths.maintenanceTicketDetail(row.id))}
             emptyTitle="No tickets match these filters"
@@ -99,7 +128,7 @@ export const TicketTablePage = () => {
         </div>
       </Card>
 
-      <Pagination page={data?.page ?? 1} totalPages={data?.totalPages ?? 1} onChange={setPage} />
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
 
       <TicketFormModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
     </div>

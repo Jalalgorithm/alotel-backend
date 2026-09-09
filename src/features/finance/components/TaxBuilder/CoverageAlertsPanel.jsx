@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Search, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Search, ShieldCheck } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { useCountries, useCountryStates } from '@/hooks/useCountries';
+import { citiesFor, LOCATION_BY_TAX_COUNTRY } from '@/lib/geoData';
 import { TAX_COUNTRIES, TAX_COUNTRY_LABELS } from '@/lib/taxSchema';
 import { useCheckTaxCoverage, useConfirmNoTax, useCoverageAlerts } from '../../hooks/useFinance';
 
@@ -15,34 +17,65 @@ const COUNTRY_OPTIONS = TAX_COUNTRIES.map((value) => ({ value, label: TAX_COUNTR
 
 const emptyLookup = () => ({ country: '', state: '', city: '' });
 
-/** On-demand spot-check for one location — `GET /properties/taxes/coverage/`. */
+/**
+ * On-demand spot-check for one location — `GET /properties/taxes/coverage/`.
+ * State/city use the same live-dropdown-with-manual-fallback pattern as the
+ * Add/Edit tax rule form (`TaxRuleModal.jsx`), so a lookup here matches the
+ * exact spelling stored on tax rules instead of risking a typo'd false
+ * "no coverage" result.
+ */
 const CoverageLookup = () => {
   const [query, setQuery] = useState(emptyLookup());
+  const [manualCity, setManualCity] = useState(false);
   const { checkCoverage, result, isPending, reset } = useCheckTaxCoverage();
 
-  const run = () => {
-    if (!query.country) return;
-    checkCoverage({ country: query.country, state: query.state.trim() || undefined, city: query.city.trim() || undefined });
-  };
+  const location = LOCATION_BY_TAX_COUNTRY[query.country];
+  const { data: countries } = useCountries();
+  const countryCode = countries?.find((entry) => entry.location === location)?.code;
+  const { data: states } = useCountryStates(countryCode);
+  const cityOptions = citiesFor(location);
 
   const update = (patch) => {
     setQuery((current) => ({ ...current, ...patch }));
     if (result) reset();
   };
 
+  const changeCountry = (country) => {
+    update({ country, state: '', city: '' });
+    setManualCity(false);
+  };
+
+  const run = () => {
+    if (!query.country) return;
+    checkCoverage({ country: query.country, state: query.state.trim() || undefined, city: query.city.trim() || undefined });
+  };
+
   return (
-    <div className="space-y-2 border-b border-line pb-3">
+    <div className="space-y-2.5 rounded-lg border border-line bg-canvas p-3">
       <p className="text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">Check a location</p>
-      <Select
-        placeholder="Country"
-        options={COUNTRY_OPTIONS}
-        value={query.country}
-        onChange={(e) => update({ country: e.target.value })}
-      />
+      <Select placeholder="Country" options={COUNTRY_OPTIONS} value={query.country} onChange={(e) => changeCountry(e.target.value)} />
+
       <div className="grid grid-cols-2 gap-2">
-        <Input placeholder="State (optional)" value={query.state} onChange={(e) => update({ state: e.target.value })} />
-        <Input placeholder="City (optional)" value={query.city} onChange={(e) => update({ city: e.target.value })} />
+        {states?.length ? (
+          <Select placeholder="State (optional)" options={states} value={query.state} onChange={(e) => update({ state: e.target.value })} />
+        ) : (
+          <Input placeholder="State (optional)" value={query.state} onChange={(e) => update({ state: e.target.value })} />
+        )}
+
+        <div>
+          {cityOptions.length && !manualCity ? (
+            <Select placeholder="City (optional)" options={cityOptions} value={query.city} onChange={(e) => update({ city: e.target.value })} />
+          ) : (
+            <Input placeholder="City (optional)" value={query.city} onChange={(e) => update({ city: e.target.value })} />
+          )}
+          {cityOptions.length > 0 && (
+            <button type="button" onClick={() => setManualCity((current) => !current)} className="mt-1 text-[11px] font-semibold text-brand-700 hover:underline">
+              {manualCity ? 'Choose from the list' : "Can't find it? Enter manually"}
+            </button>
+          )}
+        </div>
       </div>
+
       <Button size="sm" fullWidth isLoading={isPending} disabled={!query.country} leftIcon={<Search className="size-3.5" aria-hidden="true" />} onClick={run}>
         Check coverage
       </Button>
@@ -84,14 +117,15 @@ const AlertRow = ({ alert }) => {
       </div>
 
       {isConfirming && (
-        <div className="mt-2.5 space-y-2">
+        <div className="mt-3 space-y-2 border-t border-line pt-2.5">
           <Input
-            placeholder="Why does this location have no tax? (required)"
+            label="Reason (required)"
+            placeholder="e.g. This state has no hotel occupancy tax"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
           <div className="flex justify-end gap-2">
-            <Button size="xs" onClick={() => setIsConfirming(false)}>Cancel</Button>
+            <Button size="xs" variant="ghost" onClick={() => setIsConfirming(false)}>Cancel</Button>
             <Button
               size="xs"
               variant="primary"
@@ -134,11 +168,12 @@ export const CoverageAlertsPanel = () => {
           </div>
         ) : (
           <div className="space-y-2.5">
-            <div className="flex items-center gap-1.5 text-[11px] text-warn">
-              <TriangleAlert className="size-3.5" aria-hidden="true" />
+            <Badge variant="warn" dot>
               {alerts.length} location{alerts.length === 1 ? '' : 's'} need review
+            </Badge>
+            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-0.5">
+              {alerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
             </div>
-            {alerts.map((alert) => <AlertRow key={alert.id} alert={alert} />)}
           </div>
         )}
       </div>

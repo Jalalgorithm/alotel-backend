@@ -62,7 +62,7 @@ const realMaintenance = {
   },
 
   async assignWorkerToProperty(workerId, propertyId) {
-    const { data } = await apiClient.post(`/operations/maintenance/workers/${workerId}/assignments/`, { property: propertyId });
+    const { data } = await apiClient.post(`/operations/maintenance/workers/${workerId}/assignments/`, { property_id: propertyId });
     return toAssignment(data);
   },
 
@@ -73,13 +73,12 @@ const realMaintenance = {
 
   async listTickets(params = {}) {
     const query = { page: params.page ?? 1 };
-    if (params.query) query.search = params.query;
     if (params.status) query.status = params.status;
     if (params.priority) query.priority = params.priority;
     if (params.category) query.category = params.category;
-    if (params.propertyId) query.property = params.propertyId;
+    if (params.propertyId) query.property_id = params.propertyId;
     if (params.spaceId) query.space_id = params.spaceId;
-    if (params.assignedWorkerId) query.assigned_worker = params.assignedWorkerId;
+    if (params.assignedWorkerId) query.assigned_worker_id = params.assignedWorkerId;
 
     const { data } = await apiClient.get('/operations/maintenance/tickets/', { params: query });
     return toListResult(data, params, toTicket);
@@ -129,13 +128,30 @@ const realMaintenance = {
 
   async getDashboard(params = {}) {
     const query = {};
-    if (params.propertyId) query.property = params.propertyId;
+    if (params.propertyId) query.property_id = params.propertyId;
     const { data } = await apiClient.get('/operations/maintenance/dashboard/', { params: query });
     return {
-      openCount: data?.open_count ?? 0,
+      openCount: data?.open_ticket_count ?? 0,
       avgResolutionHours: data?.avg_resolution_hours ?? null,
       totalSpend: Number(data?.total_spend ?? 0),
     };
+  },
+
+  /**
+   * Per-property breakdown for the portfolio dashboard — `GET
+   * /operations/maintenance/dashboard/by-property/`. Backend endpoint does
+   * not exist yet (suggested addition); this will 404 until it ships.
+   */
+  async getDashboardByProperty() {
+    const { data } = await apiClient.get('/operations/maintenance/dashboard/by-property/');
+    const rows = Array.isArray(data) ? data : (data?.results ?? []);
+    return rows.map((row) => ({
+      propertyId: row.property_id,
+      propertyName: row.property_name ?? '',
+      openCount: row.open_ticket_count ?? 0,
+      avgResolutionHours: row.avg_resolution_hours ?? null,
+      totalSpend: Number(row.total_spend ?? 0),
+    }));
   },
 };
 
