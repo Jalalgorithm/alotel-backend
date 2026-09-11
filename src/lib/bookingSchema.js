@@ -210,6 +210,70 @@ export const toReceipt = (raw) => {
 };
 
 /**
+ * `GET /bookings/{id}/invoice/` — the styled-invoice payload. Superset of
+ * `/receipt/`: adds `billed_to`/`residence` (denormalized guest + property,
+ * including the full address `/receipt/` never carried) and a
+ * settings-backed `footer`, so the invoice page needs this one call instead
+ * of combining booking + property + guest + receipt.
+ */
+export const toInvoice = (raw) => {
+  if (!raw) return null;
+
+  return {
+    bookingId: raw.booking_id,
+    status: raw.status,
+    statusLabel: BOOKING_STATUS_LABELS[raw.status] ?? raw.status,
+    currency: raw.currency,
+    issuedAt: raw.issued_at,
+
+    billedTo: {
+      name: raw.billed_to?.name ?? null,
+      email: raw.billed_to?.email ?? null,
+    },
+    residence: {
+      name: raw.residence?.name ?? null,
+      city: raw.residence?.city ?? null,
+      country: raw.residence?.country ?? null,
+      address: raw.residence?.address ?? null,
+    },
+
+    checkIn: raw.check_in_date,
+    checkOut: raw.check_out_date,
+    nights: raw.nights ?? 0,
+    adults: raw.adults ?? 1,
+    children: raw.children ?? 0,
+
+    pricing: toPricing(raw.totals, raw.currency),
+
+    // The backend's line-item dicts carry no `id` — fall back to position, the
+    // same pattern already used for payments below.
+    lineItems: (raw.line_items ?? []).map((item, index) => ({
+      id: item.id ?? `line-${index}`,
+      type: item.line_type,
+      label: item.label,
+      quantity: toNumber(item.quantity) ?? 1,
+      total: toNumber(item.total_amount) ?? 0,
+      currency: item.currency,
+    })),
+
+    payments: (raw.payments ?? []).map((payment, index) => ({
+      id: payment.id ?? `payment-${index}`,
+      provider: payment.provider,
+      status: payment.status,
+      amount: toNumber(payment.amount) ?? 0,
+      currency: payment.currency,
+      processedAt: payment.processed_at,
+    })),
+
+    footer: {
+      companyName: raw.footer?.company_name ?? null,
+      supportEmail: raw.footer?.support_email ?? null,
+      legalAddress: raw.footer?.legal_address ?? null,
+    },
+  };
+};
+
+/**
  * Translate the portal's filter state into the admin list's query parameters.
  *
  * Anything left at "All" is omitted — the endpoint treats an unrecognised

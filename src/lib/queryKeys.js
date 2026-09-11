@@ -41,6 +41,7 @@ export const queryKeys = {
     detail: (id) => ['bookings', 'detail', id],
     timeline: (id) => ['bookings', 'timeline', id],
     receipt: (id) => ['bookings', 'receipt', id],
+    invoice: (id) => ['bookings', 'invoice', id],
     guests: (filters = {}) => ['bookings', 'guests', filters],
     guestDetail: (id) => ['bookings', 'guests', 'detail', id],
     guestBookings: (id, filters = {}) => ['bookings', 'guests', 'bookings', id, filters],

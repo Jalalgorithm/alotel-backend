@@ -36,6 +36,14 @@ export const useBookingReceipt = (id) =>
     enabled: Boolean(id),
   });
 
+/** The full styled-invoice payload (billed-to, residence, line items, payments, footer) for `BookingInvoicePage`. */
+export const useBookingInvoice = (id) =>
+  useQuery({
+    queryKey: queryKeys.bookings.invoice(id),
+    queryFn: () => bookingService.getBookingInvoice(id),
+    enabled: Boolean(id),
+  });
+
 /**
  * Booking mutations.
  *

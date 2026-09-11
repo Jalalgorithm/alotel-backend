@@ -12,6 +12,7 @@ import {
   toGuestBooking,
   toGuestDetail,
   toGuestPage,
+  toInvoice,
   toReceipt,
 } from '@/lib/bookingSchema';
 import {
@@ -77,6 +78,11 @@ const realBookings = {
   async receipt(id) {
     const { data } = await apiClient.get(`/bookings/${id}/receipt/`);
     return toReceipt(data);
+  },
+
+  async invoice(id) {
+    const { data } = await apiClient.get(`/bookings/${id}/invoice/`);
+    return toInvoice(data);
   },
 
   /** Re-runs compliance checks on a booking that has already met every other requirement. */
@@ -502,6 +508,7 @@ export const bookingService = {
   getBooking: (id) => realBookings.detail(id),
   getBookingTimeline: (id) => realBookings.timeline(id),
   getBookingReceipt: (id) => realBookings.receipt(id),
+  getBookingInvoice: (id) => realBookings.invoice(id),
   confirmBooking: (id) => realBookings.confirm(id),
   approveBooking: (id) => realBookings.approve(id),
   cancelBooking: (id, reason) => realBookings.cancelBooking(id, reason),

@@ -13,6 +13,7 @@ export { CancellationsPage } from './components/CancellationsPage';
 export {
   useBookings,
   useBooking,
+  useBookingInvoice,
   useBookingActions,
   useGuests,
   useContracts,
