@@ -25,6 +25,7 @@ export const paths = {
 
   // Booking management
   bookings: '/bookings',
+  bookingInvoice: (id = ':bookingId') => `/bookings/${id}/invoice`,
   guests: '/guests',
   checkInOut: '/check-in-out',
   checkoutReports: '/checkout-reports',

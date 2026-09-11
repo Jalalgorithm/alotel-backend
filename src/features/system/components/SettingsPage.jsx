@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, CreditCard, FileSignature, Megaphone, Plug, ShieldCheck } from 'lucide-react';
+import { Bell, CreditCard, FileSignature, FileText, Megaphone, Plug, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -21,6 +21,7 @@ const SECTION_ICONS = {
   security: ShieldCheck,
   payments: CreditCard,
   contracts: FileSignature,
+  invoicing: FileText,
   integrations: Plug,
   announcements: Megaphone,
 };
@@ -68,6 +69,67 @@ const AnnouncementsSection = () => {
           <EmptyState title="No announcements yet" description="Post one above — it appears on every admin's dashboard." />
         )}
       </div>
+    </Section>
+  );
+};
+
+/**
+ * Company/billing details printed on every booking invoice
+ * (`BookingInvoicePage`). Backed by the same generic `/admin/system/config/`
+ * key-value store every other setting on this page already uses — text
+ * fields save on blur rather than per keystroke.
+ */
+const InvoicingSection = ({ settings, set }) => {
+  const [companyName, setCompanyName] = useState(settings.invoiceCompanyName ?? '');
+  const [supportEmail, setSupportEmail] = useState(settings.invoiceSupportEmail ?? '');
+  const [legalAddress, setLegalAddress] = useState(settings.invoiceLegalAddress ?? '');
+
+  const saveIfChanged = (key, value, original) => {
+    if (value !== original) set(key)(value);
+  };
+
+  return (
+    <Section id="invoicing" title="Invoicing" subtitle="Shown on every booking receipt.">
+      <ToggleRow
+        title="Company name"
+        description="Printed as the biller on every invoice"
+        control={
+          <Input
+            value={companyName}
+            onChange={(event) => setCompanyName(event.target.value)}
+            onBlur={() => saveIfChanged('invoiceCompanyName', companyName, settings.invoiceCompanyName ?? '')}
+            aria-label="Invoice company name"
+            containerClassName="w-56"
+          />
+        }
+      />
+      <ToggleRow
+        title="Support email"
+        description="Shown in the invoice footer for guest queries"
+        control={
+          <Input
+            type="email"
+            value={supportEmail}
+            onChange={(event) => setSupportEmail(event.target.value)}
+            onBlur={() => saveIfChanged('invoiceSupportEmail', supportEmail, settings.invoiceSupportEmail ?? '')}
+            aria-label="Invoice support email"
+            containerClassName="w-56"
+          />
+        }
+      />
+      <ToggleRow
+        title="Legal address"
+        description="Optional — an extra footer line for the registered business address"
+        control={
+          <Input
+            value={legalAddress}
+            onChange={(event) => setLegalAddress(event.target.value)}
+            onBlur={() => saveIfChanged('invoiceLegalAddress', legalAddress, settings.invoiceLegalAddress ?? '')}
+            aria-label="Invoice legal address"
+            containerClassName="w-64"
+          />
+        }
+      />
     </Section>
   );
 };
@@ -214,6 +276,8 @@ export const SettingsPage = () => {
           onChange={set('stripePreAuth')}
         />
       </Section>
+
+      <InvoicingSection settings={settings} set={set} />
 
       <Section id="contracts" title="Contract & KYC automation" subtitle="Chasing, without anyone having to chase.">
         <ToggleRow

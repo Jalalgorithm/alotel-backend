@@ -45,6 +45,7 @@ const SpaceApprovalQueuePage = load(() => import('@/features/spaces'), 'SpaceApp
 const SpaceDetailPage = load(() => import('@/features/spaces'), 'SpaceDetailPage');
 
 const BookingsPage = load(() => import('@/features/bookings'), 'BookingsPage');
+const BookingInvoicePage = load(() => import('@/features/bookings'), 'BookingInvoicePage');
 const GuestsPage = load(() => import('@/features/bookings'), 'GuestsPage');
 const CheckInOutPage = load(() => import('@/features/bookings'), 'CheckInOutPage');
 const CheckoutReportsPage = load(() => import('@/features/bookings'), 'CheckoutReportsPage');
@@ -95,6 +96,8 @@ const SCREENS = [
   { path: paths.spaceDetail(), element: <SpaceDetailPage />, capability: C.spacesView },
 
   { path: paths.bookings, element: <BookingsPage />, capability: C.bookingsView },
+  // Declared after the static `/bookings` path so the literal segment always wins.
+  { path: paths.bookingInvoice(), element: <BookingInvoicePage />, capability: C.bookingsView },
   { path: paths.guests, element: <GuestsPage />, capability: C.guestsView },
   { path: paths.checkInOut, element: <CheckInOutPage />, capability: C.checkinManage },
   { path: paths.checkoutReports, element: <CheckoutReportsPage />, capability: C.checkoutReview },

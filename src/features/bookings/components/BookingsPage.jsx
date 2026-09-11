@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CalendarDays, Mail, MapPin, Receipt, Users } from 'lucide-react';
+import { CalendarDays, FileText, Mail, MapPin, Receipt, Users } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ListToolbar } from '@/components/shared/ListToolbar';
 import { Pagination } from '@/components/shared/Pagination';
@@ -28,6 +28,7 @@ import { getErrorMessage } from '@/utils/errors';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { useDeposit, useFxRates, usePaymentActions } from '@/features/finance';
+import { paths } from '@/routes/paths';
 import {
   ACTIONABLE_STATUSES,
   BOOKING_STATUSES,
@@ -312,9 +313,21 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
           )}
 
           {/* Settled payments */}
-          {receipt?.payments?.length > 0 && (
-            <div className="border-t border-line pt-4">
-              <h3 className="mb-2 font-display text-[13px] font-semibold text-ink">Payments</h3>
+          <div className="border-t border-line pt-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="font-display text-[13px] font-semibold text-ink">Payments</h3>
+              <Button
+                size="xs"
+                variant="subtle"
+                to={paths.bookingInvoice(row.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                leftIcon={<FileText className="size-3.5" aria-hidden="true" />}
+              >
+                View invoice
+              </Button>
+            </div>
+            {receipt?.payments?.length > 0 && (
               <div className="space-y-1.5">
                 {receipt.payments.map((payment, index) => (
                   // The receipt does not guarantee an id on every payment row,
@@ -329,8 +342,8 @@ const BookingDetail = ({ row, onClose, actions, canManage }) => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Status history */}
           {(timeline?.length > 0 || booking.statusHistory.length > 0) && (

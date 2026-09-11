@@ -41,7 +41,7 @@ export const AdminLayout = () => {
   return (
     <div className="flex h-screen overflow-hidden bg-canvas">
       {/* Docked sidebar */}
-      <div className="hidden shrink-0 lg:block">
+      <div className="hidden shrink-0 lg:block print:hidden">
         <Sidebar badges={badges} />
       </div>
 
@@ -61,10 +61,12 @@ export const AdminLayout = () => {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar notifications={notifications} />
+        <div className="print:hidden">
+          <Topbar notifications={notifications} />
+        </div>
 
-        <main className="scrollbar-slim flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[100rem] p-4 sm:p-5 lg:p-6">
+        <main className="scrollbar-slim flex-1 overflow-y-auto print:overflow-visible">
+          <div className="mx-auto w-full max-w-[100rem] p-4 sm:p-5 lg:p-6 print:max-w-none print:p-0">
             {/* A crash in one screen keeps the shell intact and offers a retry */}
             <ErrorBoundary key={location.pathname}>
               <Outlet />

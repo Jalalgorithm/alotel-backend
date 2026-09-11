@@ -71,6 +71,9 @@ export const defaultSettings = {
   contractReminderHours: '48',
   kycReminderHours: '24',
   autoCancelOnKycFailure: false,
+  invoiceCompanyName: 'Alotel Spaces',
+  invoiceSupportEmail: 'support@alotelspaces.com',
+  invoiceLegalAddress: '',
 };
 
 export const integrations = [
@@ -92,6 +95,7 @@ export const helpArticles = [
   { id: 'help_04', category: 'Bookings', title: 'How contract type is chosen', body: 'Contract type is derived from stay length and jurisdiction — see the matrix on the Contracts screen. Under 4 weeks is always a short-stay licence; over 26 weeks moves to a tenancy or lease.' },
   { id: 'help_05', category: 'Finance', title: 'When deposits are released', body: 'If no damage is logged within 48 hours of check-out, the deposit is released automatically. Logging any damage pauses the automation until an admin decides.' },
   { id: 'help_06', category: 'Finance', title: 'Reading the payout schedule', body: 'Payouts run monthly in arrears. Gross is guest revenue, commission is the Alotel share, net is what reaches the owner account.' },
+  { id: 'help_09', category: 'Finance', title: 'Viewing and downloading a booking’s invoice', body: 'Open a booking from the Bookings table and click "View invoice" next to Payments. It opens a printable receipt with the guest, property, stay, line items and settled payments — use your browser’s Print dialog and choose "Save as PDF" to download it. The company name, support email and legal address shown on it come from Settings → Invoicing.' },
   { id: 'help_07', category: 'Access', title: 'What each staff level can see', body: 'Level 1 has unrestricted access. Level 2 runs operations but sees no financials, tax rules, staff administration or audit log. Level 3 sees room status only, with no guest personal data.' },
   { id: 'help_08', category: 'Access', title: 'Card numbers are never visible', body: 'No admin at any level can view full card numbers. This is enforced in the data layer, not by permissions — there is no screen that can display them.' },
 ];

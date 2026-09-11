@@ -35,6 +35,9 @@ const CONFIG_KEYS = {
   contractReminderHours: 'contract_reminder_hours',
   kycReminderHours: 'kyc_reminder_hours',
   autoCancelOnKycFailure: 'kyc_auto_cancel_on_failure',
+  invoiceCompanyName: 'invoice_company_name',
+  invoiceSupportEmail: 'invoice_support_email',
+  invoiceLegalAddress: 'invoice_legal_address',
 };
 
 /** UI toggle key → `NotificationPreference` field — these three are dictated by the real serializer. */

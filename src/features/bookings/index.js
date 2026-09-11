@@ -1,5 +1,6 @@
 /** Public API of the bookings feature. */
 export { BookingsPage } from './components/BookingsPage';
+export { BookingInvoicePage } from './components/BookingInvoicePage';
 export { GuestsPage } from './components/GuestsPage';
 export { CheckInOutPage } from './components/CheckInOutPage';
 export { CheckoutReportsPage } from './components/CheckoutReportsPage';
