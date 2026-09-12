@@ -139,8 +139,8 @@ const realMaintenance = {
 
   /**
    * Per-property breakdown for the portfolio dashboard — `GET
-   * /operations/maintenance/dashboard/by-property/`. Backend endpoint does
-   * not exist yet (suggested addition); this will 404 until it ships.
+   * /operations/maintenance/dashboard/by-property/`, one row per property in
+   * the caller's assigned portfolio.
    */
   async getDashboardByProperty() {
     const { data } = await apiClient.get('/operations/maintenance/dashboard/by-property/');
@@ -171,4 +171,5 @@ export const maintenanceService = {
   uploadTicketPhoto: (ticketId, payload) => realMaintenance.uploadTicketPhoto(ticketId, payload),
 
   getDashboard: (params) => realMaintenance.getDashboard(params),
+  getDashboardByProperty: () => realMaintenance.getDashboardByProperty(),
 };

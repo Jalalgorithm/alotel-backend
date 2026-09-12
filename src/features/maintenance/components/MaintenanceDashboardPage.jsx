@@ -63,10 +63,9 @@ export const MaintenanceDashboardPage = () => {
         <div className="border-t border-line">
           {isBreakdownError ? (
             <div className="p-4">
-              <Alert variant="info">
-                Per-property breakdown isn't available yet — it needs a backend endpoint
-                (<code>GET /operations/maintenance/dashboard/by-property/</code>) that hasn't been built. Each property's own
-                Maintenance tab already shows its correct, individually-scoped ticket list in the meantime.
+              <Alert variant="warn">
+                Couldn't load the per-property breakdown right now. Each property's own
+                Maintenance tab still shows its correct, individually-scoped ticket list in the meantime.
               </Alert>
             </div>
           ) : (
