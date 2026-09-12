@@ -1,9 +1,12 @@
 import {
   Banknote,
+  Bell,
   Brush,
   Building2,
   CalendarCheck,
+  CalendarClock,
   CalendarDays,
+  CalendarRange,
   CalendarX,
   CircleHelp,
   ClipboardCheck,
@@ -11,8 +14,11 @@ import {
   DoorOpen,
   FileSignature,
   FileText,
+  Gauge,
+  HardHat,
   Landmark,
   LayoutDashboard,
+  ListChecks,
   LogIn,
   ReceiptText,
   ScrollText,
@@ -24,6 +30,8 @@ import {
   TrendingUp,
   UserCog,
   Users,
+  Warehouse,
+  Wrench,
 } from 'lucide-react';
 
 /**
@@ -59,4 +67,12 @@ export const NAV_ICONS = {
   ScrollText,
   Settings,
   CircleHelp,
+  Gauge,
+  HardHat,
+  Wrench,
+  Warehouse,
+  CalendarClock,
+  CalendarRange,
+  ListChecks,
+  Bell,
 };

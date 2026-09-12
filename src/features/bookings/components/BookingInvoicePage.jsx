@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useParams } from 'react-router-dom';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -145,34 +146,35 @@ export const BookingInvoicePage = () => {
                 <Column label="Currency">{invoice.currency}</Column>
               </div>
 
-              {/* Line items */}
-              <div className="border-t border-line pt-5">
-                <div className="grid grid-cols-[1fr_auto_auto] gap-4 pb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">
-                  <span>Description</span>
-                  <span className="text-right">Qty</span>
-                  <span className="text-right">Amount</span>
-                </div>
-                <div className="space-y-1.5">
-                  {invoice.lineItems.map((item) => (
-                    <div key={item.id} className="grid grid-cols-[1fr_auto_auto] gap-4 text-[12.5px]">
-                      <span className="text-ink">{item.label}</span>
-                      <span className="text-right tabular-nums text-ink-muted">{item.quantity}</span>
-                      <span className="text-right tabular-nums text-ink">{formatCurrency(item.total, item.currency)}</span>
-                    </div>
-                  ))}
-                </div>
+              {/* Line items — one shared grid across the header, every item and the
+                  Total row, so the Qty/Amount columns line up regardless of how many
+                  digits any single amount has (a separate grid per row would let each
+                  row size its own columns independently, which is what caused amounts
+                  of different sizes to land at different horizontal positions). */}
+              <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1.5 border-t border-line pt-5">
+                <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">Description</span>
+                <span className="text-right text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">Qty</span>
+                <span className="text-right text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">Amount</span>
+
+                {invoice.lineItems.map((item) => (
+                  <Fragment key={item.id}>
+                    <span className="text-[12.5px] text-ink">{item.label}</span>
+                    <span className="text-right text-[12.5px] tabular-nums text-ink-muted">{item.quantity}</span>
+                    <span className="text-right text-[12.5px] tabular-nums text-ink">{formatCurrency(item.total, item.currency)}</span>
+                  </Fragment>
+                ))}
 
                 {invoice.pricing && (
-                  <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-[14px] font-semibold">
-                    <span className="text-ink">Total</span>
-                    <span className="tabular-nums text-brand-700">
+                  <>
+                    <span className="col-span-2 border-t border-line pt-3 text-[14px] font-semibold text-ink">Total</span>
+                    <span className="border-t border-line pt-3 text-right text-[14px] font-semibold tabular-nums text-brand-700">
                       {formatCurrency(invoice.pricing.totalDueNow, invoice.currency)}
                     </span>
-                  </div>
+                  </>
                 )}
 
                 {invoice.pricing?.securityDeposit > 0 && (
-                  <p className="mt-2 text-[11px] text-ink-muted">
+                  <p className="col-span-3 text-[11px] text-ink-muted">
                     Includes a refundable security deposit of{' '}
                     {formatCurrency(invoice.pricing.securityDeposit, invoice.currency)}, released after checkout.
                   </p>

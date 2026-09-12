@@ -2,12 +2,17 @@ import { paths } from './paths';
 import { CAPABILITIES as C, ROLES } from '@/lib/mock/people';
 
 /**
- * The sidebar spine, in the group order of the Figma admin design.
+ * The sidebar spine.
+ *
+ * Group order follows `paths.js`'s own documented grouping: core inventory,
+ * then core transactions, then money, then the secondary Spaces product line,
+ * then internal ops support, then admin/system last.
  *
  * Each item declares the capability it needs. The sidebar filters itself with
  * this list and `ProtectedRoute` enforces the same value, so navigation and
  * access can never drift apart. `badge` names a counter supplied by the layout
- * (see `useNavBadges`) rather than a hard-coded number.
+ * (see `useNavBadges`) rather than a hard-coded number — and is only declared
+ * on items backed by a real "needs attention" count, never a catalog total.
  */
 export const NAV_GROUPS = [
   {
@@ -22,30 +27,11 @@ export const NAV_GROUPS = [
     id: 'property',
     label: 'Property Management',
     items: [
-      { id: 'properties', label: 'Properties', to: paths.properties, icon: 'Building2', capability: C.propertiesView, badge: 'properties' },
+      { id: 'properties', label: 'Properties', to: paths.properties, icon: 'Building2', capability: C.propertiesView },
       { id: 'units', label: 'Units & Rooms', to: paths.units, icon: 'DoorOpen', capability: C.unitsView, badge: 'units' },
       { id: 'amenities', label: 'Amenities', to: paths.amenities, icon: 'Sparkles', capability: C.amenitiesManage },
       { id: 'pricing', label: 'Pricing & Availability', to: paths.pricing, icon: 'Tags', capability: C.pricingManage },
-      { id: 'property-review', label: 'Property Review', to: paths.propertyReview, icon: 'Star', capability: C.reviewsModerate, badge: 'reviews' },
-    ],
-  },
-  {
-    id: 'maintenance',
-    label: 'Maintenance',
-    items: [
-      { id: 'maintenance-dashboard', label: 'Dashboard', to: paths.maintenanceDashboard, icon: 'Gauge', capability: C.maintenanceView, end: true },
-      { id: 'maintenance-workers', label: 'Worker Directory', to: paths.maintenanceWorkers, icon: 'HardHat', capability: C.maintenanceView },
-      { id: 'maintenance-tickets', label: 'Tickets', to: paths.maintenanceTickets, icon: 'Wrench', capability: C.maintenanceView },
-    ],
-  },
-  {
-    id: 'spaces',
-    label: 'Spaces',
-    items: [
-      { id: 'spaces', label: 'Spaces', to: paths.spaces, icon: 'Warehouse', capability: C.spacesView, badge: 'spaces' },
-      { id: 'space-bookings', label: 'Space Bookings', to: paths.spaceBookings, icon: 'CalendarClock', capability: C.spacesBookingsView },
-      { id: 'space-calendar', label: 'Booking Calendar', to: paths.spaceCalendar, icon: 'CalendarRange', capability: C.spacesBookingsView },
-      { id: 'space-approvals', label: 'Booking Approvals', to: paths.spaceApprovals, icon: 'ListChecks', capability: C.spacesBookingsManage, badge: 'spaceApprovals' },
+      { id: 'property-review', label: 'Property Review', to: paths.propertyReview, icon: 'Star', capability: C.reviewsModerate },
     ],
   },
   {
@@ -67,10 +53,29 @@ export const NAV_GROUPS = [
     id: 'financials',
     label: 'Financials',
     items: [
-      { id: 'payments', label: 'Payments', to: paths.payments, icon: 'CreditCard', capability: C.financeView, badge: 'payments' },
-      { id: 'payouts', label: 'Payouts', to: paths.payouts, icon: 'Banknote', capability: C.financeView },
+      { id: 'payments', label: 'Payments', to: paths.payments, icon: 'CreditCard', capability: C.financeView },
+      { id: 'payouts', label: 'Payouts', to: paths.payouts, icon: 'Banknote', capability: C.financeView, badge: 'payments' },
       { id: 'revenue', label: 'Revenue & Invoice', to: paths.revenue, icon: 'ReceiptText', capability: C.financeView },
       { id: 'tax', label: 'Tax Builder', to: paths.tax, icon: 'Landmark', capability: C.taxManage },
+    ],
+  },
+  {
+    id: 'spaces',
+    label: 'Spaces',
+    items: [
+      { id: 'spaces', label: 'Spaces', to: paths.spaces, icon: 'Warehouse', capability: C.spacesView },
+      { id: 'space-bookings', label: 'Space Bookings', to: paths.spaceBookings, icon: 'CalendarClock', capability: C.spacesBookingsView },
+      { id: 'space-calendar', label: 'Booking Calendar', to: paths.spaceCalendar, icon: 'CalendarRange', capability: C.spacesBookingsView },
+      { id: 'space-approvals', label: 'Booking Approvals', to: paths.spaceApprovals, icon: 'ListChecks', capability: C.spacesBookingsManage, badge: 'spaceApprovals' },
+    ],
+  },
+  {
+    id: 'maintenance',
+    label: 'Maintenance',
+    items: [
+      { id: 'maintenance-dashboard', label: 'Dashboard', to: paths.maintenanceDashboard, icon: 'Gauge', capability: C.maintenanceView, end: true },
+      { id: 'maintenance-workers', label: 'Worker Directory', to: paths.maintenanceWorkers, icon: 'HardHat', capability: C.maintenanceView },
+      { id: 'maintenance-tickets', label: 'Tickets', to: paths.maintenanceTickets, icon: 'Wrench', capability: C.maintenanceView, badge: 'maintenanceTickets' },
     ],
   },
   {
@@ -86,7 +91,7 @@ export const NAV_GROUPS = [
     id: 'system',
     label: 'System',
     items: [
-      { id: 'notifications', label: 'Notifications', to: paths.notifications, icon: 'Bell', capability: C.notificationsView },
+      { id: 'notifications', label: 'Notifications', to: paths.notifications, icon: 'Bell', capability: C.notificationsView, badge: 'notifications' },
       { id: 'settings', label: 'Settings', to: paths.settings, icon: 'Settings', capability: C.settingsManage },
       { id: 'help', label: 'Help', to: paths.help, icon: 'CircleHelp', capability: C.helpView },
     ],

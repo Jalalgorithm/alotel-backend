@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Toggle } from '@/components/ui/Toggle';
-import { Alert } from '@/components/ui/Alert';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { formatCurrency, formatDate } from '@/utils/format';
@@ -193,30 +192,37 @@ const GenerateReportSection = ({ bookingId, damageItems }) => {
           <p className="text-[12px] text-ink-muted">No report generated yet for this booking.</p>
         )}
 
-        {isConfirming ? (
-          <Alert variant="warn" title={report ? 'Regenerate the report?' : 'Generate the report?'}>
-            <p>
-              This will deduct an estimated <strong>{formatCurrency(previewDeduction, damageItems[0]?.currency)}</strong> from the deposit (sum of
-              items marked "Deduct") and auto-release the remainder. The server computes the final number — this is a preview.
-            </p>
-            <div className="mt-3 flex justify-end gap-2">
-              <Button size="sm" onClick={() => setIsConfirming(false)}>Cancel</Button>
-              <Button
-                size="sm"
-                variant="primary"
-                isLoading={isPending}
-                onClick={() => generateReport(undefined, { onSuccess: () => setIsConfirming(false) })}
-              >
-                Confirm & generate
-              </Button>
-            </div>
-          </Alert>
-        ) : (
-          <Button variant="primary" onClick={() => setIsConfirming(true)}>
-            {report ? 'Regenerate report' : 'Generate report'}
-          </Button>
-        )}
+        <Button variant="primary" onClick={() => setIsConfirming(true)}>
+          {report ? 'Regenerate report' : 'Generate report'}
+        </Button>
       </div>
+
+      <Modal
+        isOpen={isConfirming}
+        onClose={() => setIsConfirming(false)}
+        size="sm"
+        title={report ? 'Regenerate the report?' : 'Generate the report?'}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={() => setIsConfirming(false)} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              isLoading={isPending}
+              onClick={() => generateReport(undefined, { onSuccess: () => setIsConfirming(false) })}
+            >
+              Confirm & generate
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-[12.5px] text-ink-soft">
+          This will deduct an estimated <strong>{formatCurrency(previewDeduction, damageItems[0]?.currency)}</strong> from the deposit (sum of
+          items marked "Deduct") and auto-release the remainder. The server computes the final number — this is a preview.
+        </p>
+      </Modal>
     </Card>
   );
 };

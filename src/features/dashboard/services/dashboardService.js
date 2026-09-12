@@ -42,12 +42,17 @@ export const dashboardService = {
    * no Units feature exists server-side, and `Sidebar.jsx` only renders a
    * badge when its count is `> 0`, so leaving it absent here is a no-op
    * there rather than needing an invented `0`.
+   *
+   * `properties` and `reviews` are also deliberately dropped even though the
+   * endpoint returns them: per the backend's own docstring they're catalog
+   * totals (`Property.objects.count()` / `Review.objects.count()`), not a
+   * "needs attention" queue — showing a raw total as a nav badge would be
+   * misleading, not useful, so `navigation.js` no longer wires a badge to
+   * either item and there's nothing for this service to return for them.
    */
   getBadges: async () => {
     const { data } = await apiClient.get('/admin/dashboard/badges/');
     return {
-      properties: data?.properties,
-      reviews: data?.reviews,
       bookings: data?.bookings,
       checkins: data?.checkins,
       checkoutReports: data?.checkout_reports,
