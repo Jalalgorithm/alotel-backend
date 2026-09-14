@@ -2,7 +2,7 @@ import { apiClient } from '@/lib/apiClient';
 import { ApiError } from '@/utils/errors';
 import { clone, createId, delay, paginate } from '@/lib/mock/utils';
 import { jsonStorage } from '@/lib/storage';
-import { toApiPayload, toPage, toProperty } from '@/lib/propertySchema';
+import { toApiPayload, toGuidebook, toGuidebookPayload, toPage, toProperty } from '@/lib/propertySchema';
 import {
   toDiscountRule,
   toDiscountPayload,
@@ -283,6 +283,33 @@ const realProperties = {
     return toProperty(data);
   },
 
+  /**
+   * `GET /stay/guidebook/<id>/` — no row exists until the first save, so a 404
+   * means "nothing written yet" rather than an error (same convention
+   * `bookingService.getCheckoutReport` uses for the same "absence is normal"
+   * shape).
+   */
+  async getGuidebook(id) {
+    try {
+      const { data } = await apiClient.get(`/stay/guidebook/${id}/`);
+      return toGuidebook(data);
+    } catch (error) {
+      if (error?.response?.status === 404) return null;
+      throw error;
+    }
+  },
+
+  /**
+   * `PUT /stay/guidebook/<id>/` — the backend implements this as an upsert
+   * (`get_or_create` + partial update), so this is the only write call this
+   * app ever needs to make; `POST` also exists server-side but 400s if a row
+   * already exists, so there's no reason to reach for it here.
+   */
+  async saveGuidebook({ propertyId, ...form }) {
+    const { data } = await apiClient.put(`/stay/guidebook/${propertyId}/`, toGuidebookPayload(form));
+    return toGuidebook(data);
+  },
+
   /** `GET /reviews/<listing_id>/` — public, per-property, already excludes flagged reviews. No cross-property admin list exists. */
   listPropertyReviews: async (propertyId) => {
     const { data } = await apiClient.get(`/reviews/${propertyId}/`);
@@ -433,6 +460,9 @@ export const propertyService = {
   getPropertyVideos: (id) => realProperties.videos(id),
   uploadPropertyVideo: (payload) => realProperties.uploadVideo(payload),
   deletePropertyVideo: (payload) => realProperties.deleteVideo(payload),
+
+  getGuidebook: (id) => realProperties.getGuidebook(id),
+  saveGuidebook: (payload) => realProperties.saveGuidebook(payload),
 
   getPropertyAvailability: (id) => realProperties.availability(id),
   createPropertyAvailability: (payload) => realProperties.createAvailability(payload),

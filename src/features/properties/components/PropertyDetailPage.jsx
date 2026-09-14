@@ -68,6 +68,7 @@ import {
 import { PhotoUploadButton } from './PhotoPicker';
 import { VideoUploadButton } from './VideoPicker';
 import { AvailabilityPanel } from './AvailabilityPanel';
+import { GuidebookTab } from './GuidebookTab';
 import { AddressFields } from './AddressFields';
 import { PropertyMaintenanceTab } from '@/features/maintenance';
 import { useTaxRules } from '@/features/finance';
@@ -91,6 +92,7 @@ const TABS = [
   { id: 'space', label: 'Space & features' },
   { id: 'pricing', label: 'Pricing & rules' },
   { id: 'availability', label: 'Availability' },
+  { id: 'guidebook', label: 'Guidebook' },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -914,6 +916,8 @@ export const PropertyDetailPage = () => {
           {tab === 'availability' && (
             <AvailabilityPanel propertyId={property.id} currency={currency} canManage={canManage} />
           )}
+
+          {tab === 'guidebook' && <GuidebookTab propertyId={property.id} canManage={canManage} />}
 
           {tab === 'maintenance' && canViewMaintenance && (
             <PropertyMaintenanceTab propertyId={property.id} propertyName={property.name} />

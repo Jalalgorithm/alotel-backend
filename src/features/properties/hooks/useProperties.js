@@ -193,6 +193,37 @@ export const useDeletePropertyVideo = () => {
   return { deleteVideo: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.videoId };
 };
 
+/* ----------------------------------------------------------------- guidebook */
+
+/** `null` (not an error) until a guidebook has been saved for this property — same "absence is normal" pattern `useCheckoutReport` already uses. */
+export const useGuidebook = (propertyId) =>
+  useQuery({
+    queryKey: queryKeys.properties.guidebook(propertyId),
+    queryFn: () => propertyService.getGuidebook(propertyId),
+    enabled: Boolean(propertyId),
+  });
+
+/**
+ * `propertyId` travels with each call (like `useUploadPropertyImages`) rather
+ * than being fixed at the hook level — the wizard only learns the property's
+ * id once it's been created, mid-submit, so it can't be known when the hook
+ * is first called.
+ */
+export const useSaveGuidebook = () => {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: ({ propertyId, ...form }) => propertyService.saveGuidebook({ propertyId, ...form }),
+    onSuccess: (_data, { propertyId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.properties.guidebook(propertyId) });
+      toast.success('Guidebook saved');
+    },
+    onError: (error) => toast.error('Could not save the guidebook', getErrorMessage(error)),
+  });
+
+  return { saveGuidebook: mutation.mutate, saveGuidebookAsync: mutation.mutateAsync, isSaving: mutation.isPending };
+};
+
 /* --------------------------------------------------------------- availability */
 
 export const usePropertyAvailability = (id) =>

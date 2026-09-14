@@ -324,3 +324,49 @@ export const toApiPayload = (form, { partial = false } = {}) => {
     Object.entries(payload).filter(([key]) => form[key] !== undefined),
   );
 };
+
+/**
+ * `GET /stay/guidebook/<property_id>/` — per-property guest info sheet.
+ * `emergencyContacts` is arbitrary JSON on the API side (no enforced shape);
+ * this app standardizes on a list of `{ name, phone }` objects and only ever
+ * reads/writes the first one, since the UI offers a single emergency contact.
+ */
+export const toGuidebook = (raw) => {
+  if (!raw) return null;
+
+  const firstContact = Array.isArray(raw.emergency_contacts) ? raw.emergency_contacts[0] : null;
+
+  return {
+    id: raw.id,
+    propertyId: raw.property,
+    wifiName: raw.wifi_name ?? '',
+    wifiPassword: raw.wifi_password ?? '',
+    smartLockCode: raw.smart_lock_code ?? '',
+    checkinInstructions: raw.checkin_instructions ?? '',
+    checkoutInstructions: raw.checkout_instructions ?? '',
+    houseRules: raw.house_rules ?? '',
+    localTips: raw.local_tips ?? '',
+    emergencyContactName: firstContact?.name ?? '',
+    emergencyContactPhone: firstContact?.phone ?? '',
+    updatedAt: raw.updated_at ?? null,
+  };
+};
+
+/** Builds the `PUT /stay/guidebook/<property_id>/` body from the guidebook form. */
+export const toGuidebookPayload = (form) => {
+  const emergencyContacts =
+    form.emergencyContactName?.trim() || form.emergencyContactPhone?.trim()
+      ? [{ name: form.emergencyContactName?.trim() ?? '', phone: form.emergencyContactPhone?.trim() ?? '' }]
+      : [];
+
+  return {
+    wifi_name: form.wifiName?.trim() ?? '',
+    wifi_password: form.wifiPassword?.trim() ?? '',
+    smart_lock_code: form.smartLockCode?.trim() ?? '',
+    checkin_instructions: form.checkinInstructions?.trim() ?? '',
+    checkout_instructions: form.checkoutInstructions?.trim() ?? '',
+    house_rules: form.houseRules?.trim() ?? '',
+    local_tips: form.localTips?.trim() ?? '',
+    emergency_contacts: emergencyContacts,
+  };
+};

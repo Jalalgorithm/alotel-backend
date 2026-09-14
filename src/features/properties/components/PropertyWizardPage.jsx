@@ -16,7 +16,7 @@ import {
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Toggle } from '@/components/ui/Toggle';
 import { Alert } from '@/components/ui/Alert';
@@ -24,7 +24,7 @@ import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/utils/classNames';
 import { formatCurrency } from '@/utils/format';
 import { getFieldErrors } from '@/utils/errors';
-import { useCreateProperty, usePropertyStatus, useUploadPropertyImages } from '../hooks/useProperties';
+import { useCreateProperty, usePropertyStatus, useSaveGuidebook, useUploadPropertyImages } from '../hooks/useProperties';
 import { PhotoPicker } from './PhotoPicker';
 import { AddressFields } from './AddressFields';
 import {
@@ -48,6 +48,7 @@ const STEPS = [
   { id: 'features', label: 'Features', hint: 'Amenities and accessibility' },
   { id: 'photos', label: 'Photos', hint: 'How the listing looks to guests' },
   { id: 'pricing', label: 'Pricing', hint: 'Rates, fees and stay rules' },
+  { id: 'guidebook', label: 'Guidebook', hint: 'WiFi, lock code and house rules' },
   { id: 'review', label: 'Review', hint: 'Check and publish' },
 ];
 
@@ -78,7 +79,23 @@ const EMPTY_FORM = {
   minStay: 1,
   maxStay: '',
   instantBook: false,
+  wifiName: '',
+  wifiPassword: '',
+  smartLockCode: '',
+  checkinInstructions: '',
+  checkoutInstructions: '',
+  houseRules: '',
+  localTips: '',
+  emergencyContactName: '',
+  emergencyContactPhone: '',
 };
+
+/** Guidebook fields, so `submit()` can tell whether the admin filled in anything worth saving. */
+const GUIDEBOOK_FIELDS = [
+  'wifiName', 'wifiPassword', 'smartLockCode', 'checkinInstructions',
+  'checkoutInstructions', 'houseRules', 'localTips', 'emergencyContactName', 'emergencyContactPhone',
+];
+const hasGuidebookContent = (form) => GUIDEBOOK_FIELDS.some((key) => form[key]?.trim());
 
 /** Studios and single rooms have no bedroom count to set. */
 const isStudio = (type) => ['Studio', 'Room'].includes(type);
@@ -265,6 +282,7 @@ export const PropertyWizardPage = () => {
   const { createPropertyAsync, isPending } = useCreateProperty();
   const { uploadImagesAsync, isPending: isUploading } = useUploadPropertyImages();
   const { setStatusAsync } = usePropertyStatus();
+  const { saveGuidebookAsync } = useSaveGuidebook();
 
   /**
    * Photos live in component state rather than the sessionStorage draft: a
@@ -364,6 +382,18 @@ export const PropertyWizardPage = () => {
 
       if (photos.length) {
         await uploadImagesAsync({ propertyId: property.id, photos, setThumbnail: true });
+      }
+
+      // Guest-service info, not core listing data — a failure here shouldn't
+      // undo an otherwise-successful property creation, just flag it. The
+      // mutation's own `onError` already toasts the failure; this catch only
+      // stops it from being mistaken for a property-creation field error below.
+      if (hasGuidebookContent(form)) {
+        try {
+          await saveGuidebookAsync({ propertyId: property.id, ...form });
+        } catch {
+          /* already surfaced by useSaveGuidebook's onError */
+        }
       }
 
       if (publish) {
@@ -632,7 +662,57 @@ export const PropertyWizardPage = () => {
       </div>
     </div>,
 
-    // 5 · Review
+    // 5 · Guidebook
+    <div key="guidebook" className="space-y-5">
+      <Alert variant="info">
+        Optional — the info a checked-in guest sees. Leave it blank now and fill it in later from
+        the property's own Guidebook tab.
+      </Alert>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Input label="WiFi network" value={form.wifiName} onChange={(event) => update({ wifiName: event.target.value })} />
+        <Input label="WiFi password" value={form.wifiPassword} onChange={(event) => update({ wifiPassword: event.target.value })} />
+        <Input label="Smart lock code" value={form.smartLockCode} onChange={(event) => update({ smartLockCode: event.target.value })} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Textarea
+          label="Check-in instructions"
+          rows={4}
+          value={form.checkinInstructions}
+          onChange={(event) => update({ checkinInstructions: event.target.value })}
+        />
+        <Textarea
+          label="Check-out instructions"
+          rows={4}
+          value={form.checkoutInstructions}
+          onChange={(event) => update({ checkoutInstructions: event.target.value })}
+        />
+      </div>
+
+      <Textarea label="House rules" rows={4} value={form.houseRules} onChange={(event) => update({ houseRules: event.target.value })} />
+      <Textarea
+        label="Local tips & recommendations"
+        rows={4}
+        value={form.localTips}
+        onChange={(event) => update({ localTips: event.target.value })}
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Input
+          label="Emergency contact name"
+          value={form.emergencyContactName}
+          onChange={(event) => update({ emergencyContactName: event.target.value })}
+        />
+        <Input
+          label="Emergency contact phone"
+          value={form.emergencyContactPhone}
+          onChange={(event) => update({ emergencyContactPhone: event.target.value })}
+        />
+      </div>
+    </div>,
+
+    // 6 · Review
     <div key="review" className="space-y-4">
       <Alert variant="info" title="Nothing goes live until you say so">
         Saving as a draft keeps the listing hidden from guests. Publishing makes it immediately bookable.
@@ -719,7 +799,7 @@ export const PropertyWizardPage = () => {
     <div className="space-y-5">
       <PageHeader
         title="Add Property"
-        subtitle="Five steps from address to live listing. Your progress is saved as you go."
+        subtitle="Seven steps from address to live listing. Your progress is saved as you go."
         actions={
           <>
             <Button onClick={resetDraft}>Clear draft</Button>
