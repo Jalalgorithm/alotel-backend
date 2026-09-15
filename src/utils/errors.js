@@ -83,6 +83,16 @@ export const getFieldErrors = (error) => {
 /** The API echoes a `request_id` on failures — worth showing when support is involved. */
 export const getRequestId = (error) => error?.response?.data?.request_id ?? null;
 
+/**
+ * Some endpoints (contracts/templates) add a machine-readable `code` alongside
+ * `error` for specific business-rule rejections — e.g. `{"error": "...", "code":
+ * "not_editable"}` — so the UI can show a precise, actionable message instead of
+ * the raw string. Not every error carries one (plain 404s and generic
+ * validation 400s don't) — callers must fall back to `getErrorMessage` when
+ * this returns `null`.
+ */
+export const getErrorCode = (error) => error?.response?.data?.code ?? null;
+
 /** Error subclass used by the mock backend so failures look like real 4xx responses. */
 export class ApiError extends Error {
   constructor(message, status = 400, data = {}) {

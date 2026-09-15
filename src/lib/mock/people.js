@@ -31,6 +31,8 @@ export const CAPABILITIES = {
   checkinManage: 'checkin.manage',
   checkoutReview: 'checkout.review',
   contractsManage: 'contracts.manage',
+  /** Author (create/edit/publish/retire/delete) contract templates — narrower than `contractsManage`, Super Admin only. Viewing templates and the full signing pipeline stay on `contractsManage`. */
+  contractTemplatesManage: 'contracts.templates.manage',
   housekeepingView: 'housekeeping.view',
   housekeepingManage: 'housekeeping.manage',
   calendarView: 'calendar.view',
@@ -159,6 +161,8 @@ export const PERMISSION_MATRIX = [
   { permission: 'Full system access', L1: true, L2: false, L3: false },
   { permission: 'Create / edit / delete listings', L1: true, L2: false, L3: false },
   { permission: 'Manage bookings', L1: true, L2: true, L3: false },
+  { permission: 'Send, remind, void & download contracts', L1: true, L2: true, L3: false },
+  { permission: 'Author (create/edit/publish/retire) contract templates', L1: true, L2: false, L3: false },
   { permission: 'View guest personal data', L1: true, L2: true, L3: false },
   { permission: 'Communicate with guests', L1: true, L2: true, L3: false },
   { permission: 'Access financial / revenue data', L1: true, L2: false, L3: false },

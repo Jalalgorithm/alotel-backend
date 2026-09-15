@@ -726,65 +726,64 @@ export const PropertyDetailPage = () => {
           </>
         }
         actions={
-          isEditing ? null : (
-            <>
-              <Button to={paths.properties} leftIcon={<ArrowLeft className="size-3.5" aria-hidden="true" />}>
-                Back
-              </Button>
+          <>
+            <Button to={paths.properties} leftIcon={<ArrowLeft className="size-3.5" aria-hidden="true" />}>
+              Back
+            </Button>
 
-              {canManage && (
-                <>
-                  <Button onClick={() => setIsEditing(true)} leftIcon={<Pencil className="size-3.5" aria-hidden="true" />}>
-                    Edit
-                  </Button>
+            {!isEditing && canManage && (
+              <>
+                <Button onClick={() => setIsEditing(true)} leftIcon={<Pencil className="size-3.5" aria-hidden="true" />}>
+                  Edit
+                </Button>
 
-                  {statusActions.map((action) => (
-                    <Button
-                      key={action.status}
-                      variant={action.variant}
-                      isLoading={isStatusPending}
-                      onClick={() => setStatus({ id: property.id, status: action.status })}
-                    >
-                      {action.label}
-                    </Button>
-                  ))}
-
+                {statusActions.map((action) => (
                   <Button
-                    onClick={() => setConfirmDelete(true)}
-                    leftIcon={<Trash2 className="size-3.5" aria-hidden="true" />}
-                    aria-label="Delete property"
-                  />
-                </>
-              )}
-            </>
-          )
+                    key={action.status}
+                    variant={action.variant}
+                    isLoading={isStatusPending}
+                    onClick={() => setStatus({ id: property.id, status: action.status })}
+                  >
+                    {action.label}
+                  </Button>
+                ))}
+
+                <Button
+                  onClick={() => setConfirmDelete(true)}
+                  leftIcon={<Trash2 className="size-3.5" aria-hidden="true" />}
+                  aria-label="Delete property"
+                />
+              </>
+            )}
+          </>
         }
       />
 
-      {isEditing ? (
-        <EditForm property={property} onCancel={() => setIsEditing(false)} onSaved={() => setIsEditing(false)} />
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <Spec icon={BedDouble} label="Bedrooms" value={property.bedrooms || 'Studio'} />
-            <Spec icon={Bath} label="Bathrooms" value={property.bathrooms} />
-            <Spec icon={Users} label="Sleeps" value={property.maxGuests} />
-            <Spec icon={Maximize2} label="Area" value={property.area ? `${property.area} m²` : '—'} />
-            <Spec icon={Sofa} label="Furnishing" value={property.furnished} />
-            <Spec icon={PawPrint} label="Pets" value={property.pets} />
-          </div>
+      <>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Spec icon={BedDouble} label="Bedrooms" value={property.bedrooms || 'Studio'} />
+          <Spec icon={Bath} label="Bathrooms" value={property.bathrooms} />
+          <Spec icon={Users} label="Sleeps" value={property.maxGuests} />
+          <Spec icon={Maximize2} label="Area" value={property.area ? `${property.area} m²` : '—'} />
+          <Spec icon={Sofa} label="Furnishing" value={property.furnished} />
+          <Spec icon={PawPrint} label="Pets" value={property.pets} />
+        </div>
 
-          <Gallery
-            propertyId={property.id}
-            fallback={property.thumbnail}
-            coverUrl={property.thumbnail}
-            canManage={canManage}
-          />
+        <Gallery
+          propertyId={property.id}
+          fallback={property.thumbnail}
+          coverUrl={property.thumbnail}
+          canManage={canManage}
+        />
 
-          <VideoGallery propertyId={property.id} canManage={canManage} />
+        <VideoGallery propertyId={property.id} canManage={canManage} />
 
           <Tabs tabs={tabs} value={tab} onChange={setTab} variant="underline" />
 
+          {isEditing && ['overview', 'space', 'pricing'].includes(tab) ? (
+            <EditForm property={property} onCancel={() => setIsEditing(false)} onSaved={() => setIsEditing(false)} />
+          ) : (
+          <>
           {tab === 'overview' && (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
               <Card className="p-5">
@@ -922,8 +921,9 @@ export const PropertyDetailPage = () => {
           {tab === 'maintenance' && canViewMaintenance && (
             <PropertyMaintenanceTab propertyId={property.id} propertyName={property.name} />
           )}
-        </>
-      )}
+          </>
+          )}
+      </>
 
       <Modal
         isOpen={confirmDelete}

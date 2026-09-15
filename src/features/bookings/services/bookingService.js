@@ -1,8 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
-import { toTemplate, toTemplatePayload } from '@/lib/contractSchema';
 import { env } from '@/lib/env';
-import { ApiError } from '@/utils/errors';
-import { resolveContractType } from '@/lib/mock/operations';
 import {
   toAdminListParams,
   toBookingDetail,
@@ -107,14 +104,6 @@ const realBookings = {
     return data;
   },
 
-  /**
-   * There is no general booking PATCH on the API — every state change goes
-   * through its own endpoint, which is what keeps the status history honest.
-   */
-  update: async () => {
-    throw new ApiError('Bookings are changed through confirm/cancel, not a direct update.', 405);
-  },
-
   /** `GET /auth/admin/guests/` — no `kyc`/`country` filters exist server-side; only `search`/`is_active`/pagination. */
   listGuests: async ({ query, isActive, page = 1, pageSize } = {}) => {
     const params = { page };
@@ -155,100 +144,6 @@ const realBookings = {
 
   listReports: async () => (await apiClient.get('/checkout-reports')).data,
   saveReport: async (id, patch) => (await apiClient.patch(`/checkout-reports/${id}`, patch)).data,
-  /**
-   * There is no "list contracts" endpoint — a contract is only reachable
-   * through the booking it belongs to. So the screen is built from the admin
-   * booking list, and each row's contract state is fetched on demand rather
-   * than firing one request per row on load.
-   */
-  listContracts: async (params) => {
-    const { data } = await apiClient.get('/bookings/admin/list/', { params });
-    const rows = data?.results ?? data ?? [];
-
-    return {
-      items: rows.map((row) => ({
-        id: row.id,
-        guest: row.guest_name || row.guest_email,
-        guestEmail: row.guest_email,
-        property: row.property_name,
-        country: row.country,
-        nights: row.nights,
-        checkIn: row.check_in_date,
-        checkOut: row.check_out_date,
-        status: row.status,
-
-        /**
-         * The list payload carries no contract fields, so the type is derived
-         * from the same nights + country matrix the API uses server-side, and
-         * the issuing state stays unknown until a row is opened — shown as
-         * "Not sent" rather than left blank.
-         */
-        contractType: resolveContractType(row.nights, row.country),
-        contract: 'Not sent',
-        sentAt: null,
-        signedAt: null,
-      })),
-      total: data?.count ?? rows.length,
-    };
-  },
-
-  /** The agreement text and its issuing state, for one booking. */
-  contractForBooking: async (bookingId) => {
-    try {
-      const { data } = await apiClient.get(`/contracts/booking/${bookingId}/text/`);
-      return {
-        contractId: data.contract_id,
-        status: data.status,
-        templateName: data.template_name,
-        templateVersion: data.template_version,
-        content: data.content ?? '',
-      };
-    } catch (error) {
-      // 404 simply means nothing has been issued for this booking yet.
-      if (error?.status === 404 || error?.response?.status === 404) return null;
-      throw error;
-    }
-  },
-
-  sendContract: async ({ bookingId, templateId }) => {
-    const { data } = await apiClient.post('/contracts/send/', {
-      booking_id: bookingId,
-      ...(templateId ? { template_id: templateId } : {}),
-    });
-    return data;
-  },
-
-  /** The signed-document link only lives on the status endpoint, not the text one. */
-  getContractStatus: async (contractId) => {
-    const { data } = await apiClient.get(`/contracts/${contractId}/status/`);
-    return {
-      contractId: data.contract_id,
-      status: data.status,
-      signedDocumentUrl: data.signed_document_url || '',
-      sentAt: data.sent_at,
-      signedAt: data.signed_at,
-    };
-  },
-
-  listContractTemplates: async () => {
-    const { data } = await apiClient.get('/contracts/templates/');
-    return (data?.results ?? data ?? []).map(toTemplate);
-  },
-
-  createContractTemplate: async (values) => {
-    const { data } = await apiClient.post('/contracts/templates/', toTemplatePayload(values));
-    return toTemplate(data);
-  },
-
-  updateContractTemplate: async (id, patch) => {
-    const { data } = await apiClient.patch(`/contracts/templates/${id}/`, toTemplatePayload(patch));
-    return toTemplate(data);
-  },
-
-  deleteContractTemplate: async (id) => {
-    await apiClient.delete(`/contracts/templates/${id}/`);
-    return { success: true };
-  },
 
   /** One photo per call — the API has no bulk-upload variant. */
   uploadInspectionPhoto: async ({ bookingId, stage, roomArea, file, caption }) => {
@@ -513,27 +408,10 @@ export const bookingService = {
   approveBooking: (id) => realBookings.approve(id),
   cancelBooking: (id, reason) => realBookings.cancelBooking(id, reason),
 
-  /**
-   * There is no general booking PATCH on the real API — every state change
-   * goes through its own endpoint. Nothing in the UI currently calls this
-   * (kept only because `useBookingActions`'s `sendContract`/`remindKyc`
-   * reference it); it correctly 405s if it ever is.
-   */
-  updateBooking: (id, patch) => realBookings.update(id, patch),
-
   getGuests: (params) => realBookings.listGuests(params),
   updateGuest: (id, patch) => realBookings.updateGuest(id, patch),
   getGuestDetail: (id) => realBookings.guestDetail(id),
   getGuestBookingHistory: (id, params) => realBookings.guestBookingHistory(id, params),
-
-  getContracts: (params) => realBookings.listContracts(params),
-  getContractForBooking: (bookingId) => realBookings.contractForBooking(bookingId),
-  getContractStatus: (contractId) => realBookings.getContractStatus(contractId),
-  sendContract: (payload) => realBookings.sendContract(payload),
-  getContractTemplates: () => realBookings.listContractTemplates(),
-  createContractTemplate: (values) => realBookings.createContractTemplate(values),
-  updateContractTemplate: (id, patch) => realBookings.updateContractTemplate(id, patch),
-  deleteContractTemplate: (id) => realBookings.deleteContractTemplate(id),
 
   uploadInspectionPhoto: (payload) => realBookings.uploadInspectionPhoto(payload),
   getInspectionState: (bookingId) => realBookings.getInspectionState(bookingId),

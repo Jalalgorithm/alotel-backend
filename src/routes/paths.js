@@ -31,6 +31,8 @@ export const paths = {
   checkoutReports: '/checkout-reports',
   contracts: '/contracts',
   contractTemplates: '/contracts/templates',
+  contractTemplateNew: '/contracts/templates/new',
+  contractTemplateEdit: (id = ':templateId') => `/contracts/templates/${id}/edit`,
   housekeeping: '/housekeeping',
   calendar: '/calendar',
   cancellations: '/cancellations',

@@ -78,32 +78,6 @@ export const announcements = [
 ];
 
 /* -------------------------------------------------------------------------- */
-/* Contracts                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Contract type is derived from stay length and jurisdiction — this is the
- * matrix the Contracts screen renders and the resolver below applies.
- */
-export const CONTRACT_MATRIX = [
-  { duration: '< 4 weeks', UK: 'Short-Stay T&C', Spain: 'Short-Stay T&C', USA: 'Short-Stay T&C', UAE: 'Short-Stay T&C', Nigeria: 'Short-Stay T&C' },
-  { duration: '4–26 weeks (Residential)', UK: 'Licence to Occupy', Spain: 'Seasonal Rental', USA: 'Short-Term Lease', UAE: 'Holiday Home', Nigeria: 'Short-Term Tenancy' },
-  { duration: '4–26 weeks (Commercial)', UK: 'Commercial Licence', Spain: 'Commercial Licence', USA: 'Commercial Licence', UAE: 'Commercial Licence', Nigeria: 'Commercial Licence' },
-  { duration: '> 26 weeks (Residential)', UK: 'AST / Licence', Spain: 'Long-Term Lease', USA: 'State Residential', UAE: 'Ejari Contract', Nigeria: 'Residential Tenancy' },
-  { duration: '> 26 weeks (Commercial)', UK: 'Commercial Lease', Spain: 'Commercial Lease', USA: 'Commercial Lease', UAE: 'Ejari Commercial', Nigeria: 'Commercial Lease' },
-];
-
-/**
- * @param {number} nights
- * @param {string} country
- * @returns {string} the contract template that applies
- */
-export const resolveContractType = (nights, country) => {
-  const row = nights < 28 ? CONTRACT_MATRIX[0] : nights < 183 ? CONTRACT_MATRIX[1] : CONTRACT_MATRIX[3];
-  return row[country] ?? row.UK;
-};
-
-/* -------------------------------------------------------------------------- */
 /* Check-out reports                                                           */
 /* -------------------------------------------------------------------------- */
 

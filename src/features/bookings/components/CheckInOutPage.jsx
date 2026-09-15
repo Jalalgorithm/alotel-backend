@@ -17,10 +17,10 @@ import {
   useBookings,
   useCompleteCheckIn,
   useCompleteCheckOut,
-  useContractForBooking,
   useInspectionState,
   useUploadInspectionPhoto,
 } from '../hooks/useBookings';
+import { useContractForBooking } from '../hooks/useContracts';
 import { CONTRACT_REQUIRED_MIN_NIGHTS, CONTRACT_STATUS_LABEL } from '@/lib/contractSchema';
 import { ROOM_AREAS } from '@/lib/checkoutSchema';
 import { formatRelative } from '@/utils/format';

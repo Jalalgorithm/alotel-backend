@@ -1,95 +1,383 @@
-import { useMemo, useState } from 'react';
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Plus, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Input, Textarea } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
-import { Toggle } from '@/components/ui/Toggle';
 import { Modal } from '@/components/ui/Modal';
 import { Alert } from '@/components/ui/Alert';
 import { DataTable } from '@/components/ui/DataTable';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/utils/classNames';
 import { formatDate } from '@/utils/format';
-import { getFieldErrors } from '@/utils/errors';
+import { getErrorCode, getErrorMessage } from '@/utils/errors';
+import { useAuth } from '@/features/auth';
+import { CAPABILITIES } from '@/lib/mock/people';
+import { paths } from '@/routes/paths';
+import { cellState } from '@/lib/contractSchema';
 import {
-  AUTO_RESOLVED_STAY_TYPES,
-  TEMPLATE_REGIONS,
-  TEMPLATE_STAY_TYPES,
-  coverageGaps,
-} from '@/lib/contractSchema';
-import { useContractTemplateMutations, useContractTemplates } from '../hooks/useBookings';
+  useContractCoverage,
+  useDeleteTemplate,
+  useDuplicateTemplate,
+  usePublishTemplate,
+  useRetireTemplate,
+  useTemplates,
+  useTemplatesForCell,
+} from '../hooks/useContracts';
 
-const EMPTY = {
-  name: '',
-  region: 'UK',
-  stayType: 'long_residential',
-  version: '1.0',
-  content: '',
-  isActive: true,
+const CELL_STYLES = {
+  published: 'bg-ok-soft text-ok',
+  'published-short': 'bg-warn-soft text-warn',
+  'draft-only': 'bg-warn-soft text-warn',
+  empty: 'bg-danger-soft text-danger',
 };
 
-/**
- * Contract templates — the documents Dropbox Sign issues.
- *
- * The API resolves which template applies from the property's region and the
- * stay length, so what matters operationally is *coverage*: a jurisdiction with
- * no active template for a long stay simply cannot have a contract issued. The
- * matrix at the top makes that visible, rather than leaving it to be discovered
- * when a send fails.
- */
-export const ContractTemplatesPage = () => {
-  const { data: templates = [], isLoading } = useContractTemplates();
-  const { createTemplate, isCreating, updateTemplate, updateTemplateAsync, isUpdating, deleteTemplate, pendingId } =
-    useContractTemplateMutations();
+/** One cell of the 25-cell grid — mode (row) × region (column). */
+const CoverageCell = ({ cell, onOpen }) => {
+  const state = cellState(cell);
 
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY);
-  const [errors, setErrors] = useState({});
-  const [preview, setPreview] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(cell)}
+      className={cn(
+        'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left transition-opacity hover:opacity-80',
+        CELL_STYLES[state],
+      )}
+    >
+      {state === 'empty' && <span className="text-[11.5px] font-semibold">No template</span>}
+      {state === 'draft-only' && (
+        <>
+          <span className="text-[11.5px] font-semibold">Draft · not live</span>
+          <span className="text-[10px] opacity-80">{cell.draftCount} draft{cell.draftCount === 1 ? '' : 's'}</span>
+        </>
+      )}
+      {(state === 'published' || state === 'published-short') && (
+        <>
+          <span className="text-[11.5px] font-semibold">
+            {cell.published.name} · v{cell.published.version}
+          </span>
+          <span className="text-[10px] opacity-80">
+            {state === 'published-short' ? 'Looks like a placeholder' : formatDate(cell.published.publishedAt)}
+          </span>
+        </>
+      )}
+    </button>
+  );
+};
 
-  const gaps = useMemo(() => coverageGaps(templates), [templates]);
+/** The cell-detail popup — every version (draft/published/retired) for one region+stay_type. */
+const CellDetailModal = ({ cell, onClose, canAuthor }) => {
+  const isOpen = Boolean(cell);
+  const { data: templates = [], isLoading } = useTemplatesForCell(cell?.region, cell?.stayType);
+  const { publish, isPublishing } = usePublishTemplate();
+  const { retireAsync, isRetiring } = useRetireTemplate();
+  const { duplicate, isDuplicating } = useDuplicateTemplate();
+  const { deleteTemplateAsync, isDeleting } = useDeleteTemplate();
 
-  const open = (template) => {
-    setErrors({});
-    setIsFormOpen(true);
-    setEditing(template ?? null);
-    setForm(
-      template
-        ? {
-            name: template.name,
-            region: template.region,
-            stayType: template.stayType,
-            version: template.version,
-            content: template.content,
-            isActive: template.isActive,
-          }
-        : EMPTY,
+  const [publishTarget, setPublishTarget] = useState(null);
+  const [publishError, setPublishError] = useState(null);
+  const [retireTarget, setRetireTarget] = useState(null);
+  const [retireAffected, setRetireAffected] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+
+  const published = templates.find((t) => t.status === 'published') ?? null;
+  const drafts = templates.filter((t) => t.status === 'draft');
+  const retired = templates.filter((t) => t.status === 'retired');
+
+  const startRetire = async (template) => {
+    setRetireTarget(template);
+    try {
+      await retireAsync({ id: template.id, confirm: false });
+    } catch (error) {
+      setRetireAffected(error?.response?.data?.affected?.upcoming_bookings ?? 0);
+    }
+  };
+
+  const confirmRetire = () => retireAsync({ id: retireTarget.id, confirm: true }).then(() => setRetireTarget(null));
+
+  const confirmPublish = () => {
+    setPublishError(null);
+    publish(
+      { id: publishTarget.id },
+      { onSuccess: () => setPublishTarget(null), onError: (error) => setPublishError(error) },
     );
   };
 
-  const close = () => {
-    setIsFormOpen(false);
-    setEditing(null);
-    setForm(EMPTY);
-    setErrors({});
-  };
-
-  const submit = async () => {
-    setErrors({});
+  const confirmDelete = async () => {
+    setDeleteError(null);
     try {
-      if (editing) await updateTemplateAsync({ id: editing.id, patch: form });
-      else await createTemplate(form);
-      close();
+      await deleteTemplateAsync({ id: deleteTarget.id, region: cell.region, stayType: cell.stayType });
+      setDeleteTarget(null);
     } catch (error) {
-      // `unique_together (region, stay_type, version)` surfaces here when a
-      // duplicate is attempted — show it on the field rather than as a toast.
-      setErrors(getFieldErrors(error));
+      setDeleteError(error);
     }
   };
+
+  const Row = ({ template, actions }) => (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-white px-3.5 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-[12.5px] font-semibold text-ink">
+          {template.name} · v{template.version}
+        </p>
+        <p className="text-[10.5px] text-ink-muted">
+          {template.contentLength.toLocaleString()} characters
+          {template.contractsIssued > 0 ? ` · used on ${template.contractsIssued} contract${template.contractsIssued === 1 ? '' : 's'}` : ''}
+          {template.publishedAt ? ` · published ${formatDate(template.publishedAt)}` : ''}
+        </p>
+      </div>
+      <div className="flex shrink-0 gap-1.5">{actions}</div>
+    </div>
+  );
+
+  return (
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        size="lg"
+        title={cell ? `${cell.regionLabel} · ${cell.stayTypeLabel}` : ''}
+        description={cell ? `${cell.mode === 'signature' ? 'Signature' : 'Tick-box'} agreement` : ''}
+      >
+        {isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Published</p>
+              {published ? (
+                <Row
+                  template={published}
+                  actions={
+                    canAuthor && (
+                      <>
+                        <Button size="xs" isLoading={isDuplicating} onClick={() => duplicate({ id: published.id })}>
+                          New draft from this
+                        </Button>
+                        <Button size="xs" variant="dangerSoft" isLoading={isRetiring} onClick={() => startRetire(published)}>
+                          Retire
+                        </Button>
+                      </>
+                    )
+                  }
+                />
+              ) : (
+                <p className="text-[12px] text-ink-muted">Nothing published for this cell yet.</p>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">
+                Drafts {drafts.length > 0 && `(${drafts.length})`}
+              </p>
+              {drafts.length > 0 ? (
+                <div className="space-y-2">
+                  {drafts.map((draft) => (
+                    <Row
+                      key={draft.id}
+                      template={draft}
+                      actions={
+                        canAuthor ? (
+                          <>
+                            <Button size="xs" to={paths.contractTemplateEdit(draft.id) + `?region=${cell.region}&stayType=${cell.stayType}`}>
+                              Edit
+                            </Button>
+                            <Button size="xs" variant="primary" isLoading={isPublishing} onClick={() => setPublishTarget(draft)}>
+                              Publish
+                            </Button>
+                            <Button size="xs" variant="ghost" aria-label={`Delete ${draft.name}`} onClick={() => setDeleteTarget(draft)}>
+                              <Trash2 className="size-3.5 text-danger" aria-hidden="true" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size="xs" to={paths.contractTemplateEdit(draft.id) + `?region=${cell.region}&stayType=${cell.stayType}`}>
+                            View
+                          </Button>
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[12px] text-ink-muted">No drafts.</p>
+              )}
+            </div>
+
+            {retired.length > 0 && (
+              <div>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Retired</p>
+                <div className="space-y-2">
+                  {retired.map((template) => (
+                    <Row
+                      key={template.id}
+                      template={template}
+                      actions={
+                        canAuthor && (
+                          <Button size="xs" isLoading={isDuplicating} onClick={() => duplicate({ id: template.id })}>
+                            Restore as new draft
+                          </Button>
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {canAuthor && (
+              <Button
+                variant="primary"
+                fullWidth
+                leftIcon={<Plus className="size-3.5" aria-hidden="true" />}
+                to={paths.contractTemplateNew + `?region=${cell?.region}&stayType=${cell?.stayType}`}
+              >
+                New draft for this cell
+              </Button>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Publish confirmation */}
+      <Modal
+        isOpen={Boolean(publishTarget)}
+        onClose={() => { setPublishTarget(null); setPublishError(null); }}
+        size="sm"
+        title={publishTarget ? `Publish ${cell?.regionLabel} · ${cell?.stayTypeLabel} v${publishTarget.version}?` : ''}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={() => { setPublishTarget(null); setPublishError(null); }}>Cancel</Button>
+            <Button size="sm" variant="primary" isLoading={isPublishing} onClick={confirmPublish}>Publish</Button>
+          </div>
+        }
+      >
+        <p className="text-[12.5px] text-ink-soft">
+          {published
+            ? `This replaces v${published.version} for new bookings. Guests who already accepted v${published.version} keep that version on their booking.`
+            : 'This is the first published template for this cell.'}
+        </p>
+        {publishError && (
+          <Alert variant="error" className="mt-3">
+            {(() => {
+              const code = getErrorCode(publishError);
+              const data = publishError?.response?.data;
+              if (code === 'unknown_fields') {
+                return (
+                  <>
+                    Fix these fields before publishing:
+                    <ul className="mt-1 list-inside list-disc">{(data.unknown_fields ?? []).map((f) => <li key={f}>{`{{ ${f} }}`}</li>)}</ul>
+                  </>
+                );
+              }
+              if (code === 'missing_signature_field') return 'Signature templates need a {{ signature }} field.';
+              if (code === 'missing_values') {
+                return (
+                  <>
+                    Template is missing required values:
+                    <ul className="mt-1 list-inside list-disc">{(data.missing_values ?? []).map((v) => <li key={v.field}>{v.field}</li>)}</ul>
+                  </>
+                );
+              }
+              return getErrorMessage(publishError);
+            })()}
+          </Alert>
+        )}
+      </Modal>
+
+      {/* Retire confirmation */}
+      <Modal
+        isOpen={Boolean(retireTarget) && retireAffected !== null}
+        onClose={() => { setRetireTarget(null); setRetireAffected(null); }}
+        size="sm"
+        title="Retire this template?"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={() => { setRetireTarget(null); setRetireAffected(null); }}>Cancel</Button>
+            <Button size="sm" variant="danger" isLoading={isRetiring} onClick={confirmRetire}>Retire</Button>
+          </div>
+        }
+      >
+        <p className="text-[12.5px] text-ink-soft">
+          Retiring leaves {cell?.regionLabel} · {cell?.stayTypeLabel} with no template.{' '}
+          {retireAffected > 0
+            ? `${retireAffected} upcoming booking${retireAffected === 1 ? '' : 's'} would get fallback terms.`
+            : 'No upcoming bookings are affected.'}
+        </p>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => { setDeleteTarget(null); setDeleteError(null); }}
+        size="sm"
+        title="Delete this draft?"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={() => { setDeleteTarget(null); setDeleteError(null); }}>Cancel</Button>
+            <Button size="sm" variant="danger" isLoading={isDeleting} onClick={confirmDelete}>Delete</Button>
+          </div>
+        }
+      >
+        {deleteError ? (
+          <Alert variant="error">
+            {getErrorCode(deleteError) === 'not_deletable'
+              ? "This template has been used, so it can't be deleted. Retire it instead."
+              : getErrorMessage(deleteError)}
+          </Alert>
+        ) : (
+          <p className="text-[12.5px] text-ink-soft">This can't be undone.</p>
+        )}
+      </Modal>
+    </>
+  );
+};
+
+/** Contract templates — the documents Dropbox Sign (or the booking-agreement checkbox) issues. */
+export const ContractTemplatesPage = () => {
+  const { can } = useAuth();
+  const canAuthor = can(CAPABILITIES.contractTemplatesManage);
+
+  const { data: coverage, isLoading: isCoverageLoading } = useContractCoverage();
+  const { data: allTemplates = [], isLoading: isAllLoading } = useTemplates();
+  const [activeCell, setActiveCell] = useState(null);
+
+  // Deep-link support — the Contracts board's "No published template" flag
+  // links here with `?region=&stayType=` so the right cell opens immediately.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (!coverage) return;
+    const region = searchParams.get('region');
+    const stayType = searchParams.get('stayType');
+    if (!region || !stayType) return;
+    const cell = coverage.cells.find((c) => c.region === region && c.stayType === stayType);
+    const band = coverage.bands.find((b) => b.stayType === stayType);
+    if (cell) setActiveCell({ ...cell, mode: band?.mode });
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only meant to run once coverage first loads
+  }, [coverage]);
+
+  const grid = useMemo(() => {
+    if (!coverage) return null;
+    const byKey = new Map(coverage.cells.map((cell) => [`${cell.region}:${cell.stayType}`, cell]));
+    return coverage.bands.map((band) => ({
+      band,
+      cells: coverage.regions.map((region) => ({ ...byKey.get(`${region}:${band.stayType}`), mode: band.mode })),
+    }));
+  }, [coverage]);
+
+  const summary = useMemo(() => {
+    if (!coverage) return null;
+    let live = 0, drafts = 0, empty = 0;
+    coverage.cells.forEach((cell) => {
+      const state = cellState(cell);
+      if (state === 'published' || state === 'published-short') live += 1;
+      else if (state === 'draft-only') drafts += 1;
+      else empty += 1;
+    });
+    return { live, drafts, empty, total: coverage.cells.length };
+  }, [coverage]);
 
   const columns = [
     {
@@ -103,287 +391,101 @@ export const ContractTemplatesPage = () => {
       ),
     },
     { key: 'regionLabel', header: 'Region', render: (row) => <Badge variant="brand">{row.regionLabel}</Badge> },
+    { key: 'stayTypeLabel', header: 'Applies to', render: (row) => <span className="text-[12.5px] text-ink">{row.stayTypeLabel}</span> },
     {
-      key: 'stayTypeLabel',
-      header: 'Applies to',
+      key: 'status',
+      header: 'Status',
       render: (row) => (
-        <div className="min-w-0">
-          <p className="text-[12.5px] text-ink">{row.stayTypeLabel}</p>
-          {!row.isAutoResolved && (
-            <p className="text-[10.5px] text-ink-muted">Only by explicit selection</p>
-          )}
-        </div>
+        <Badge variant={row.status === 'published' ? 'ok' : row.status === 'draft' ? 'warn' : 'neutral'}>{row.statusLabel}</Badge>
       ),
     },
-    {
-      key: 'content',
-      header: 'Body',
-      render: (row) => (
-        <button
-          type="button"
-          onClick={() => setPreview(row)}
-          className="text-[12px] text-brand-700 underline-offset-2 hover:underline"
-        >
-          {row.content ? `${row.content.length.toLocaleString()} characters` : 'Empty'}
-        </button>
-      ),
-    },
-    {
-      key: 'isActive',
-      header: 'Active',
-      render: (row) => (
-        <Toggle
-          checked={row.isActive}
-          disabled={isUpdating && pendingId === row.id}
-          onChange={(value) => updateTemplate({ id: row.id, patch: { isActive: value } })}
-          label={`${row.name} active`}
-        />
-      ),
-    },
-    {
-      key: 'updatedAt',
-      header: 'Updated',
-      render: (row) => <span className="whitespace-nowrap text-ink-muted">{formatDate(row.updatedAt)}</span>,
-    },
-    {
-      key: 'actions',
-      header: '',
-      render: (row) => (
-        <div className="flex justify-end gap-1">
-          <Button size="xs" onClick={() => open(row)}>
-            Edit
-          </Button>
-          <Button size="xs" variant="ghost" aria-label={`Delete ${row.name}`} onClick={() => setConfirmDelete(row)}>
-            <Trash2 className="size-3 text-danger" />
-          </Button>
-        </div>
-      ),
-    },
+    { key: 'contentLength', header: 'Body', render: (row) => `${row.contentLength.toLocaleString()} characters` },
+    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="whitespace-nowrap text-ink-muted">{formatDate(row.updatedAt)}</span> },
   ];
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Contract Templates"
-        subtitle="The documents Dropbox Sign issues. The API picks one from the property's region and the stay length."
+        subtitle="The documents Dropbox Sign issues, or the booking-agreement checkbox for shorter stays."
         actions={
-          <Button variant="primary" leftIcon={<Plus className="size-3.5" aria-hidden="true" />} onClick={() => open(null)}>
-            New template
-          </Button>
+          !canAuthor && (
+            <Badge variant="neutral">Only Super Admin can edit contract templates</Badge>
+          )
         }
       />
 
-      {/* Coverage — the thing that actually determines whether sending works. */}
       <Card>
         <CardHeader
-          title="Coverage for long stays"
-          subtitle="Only stays of ~6 months or more get a contract; every region needs a residential and a commercial template."
+          title="Coverage"
+          subtitle={
+            summary
+              ? `${summary.live} of ${summary.total} live · ${summary.drafts} draft${summary.drafts === 1 ? '' : 's'} only · ${summary.empty} empty`
+              : undefined
+          }
         />
-
         <div className="border-t border-line p-4">
-          {gaps.length === 0 ? (
-            <Alert variant="success" title="Every region is covered">
-              A contract can be issued for a long stay in any jurisdiction.
-            </Alert>
+          {isCoverageLoading ? (
+            <Skeleton className="h-64 w-full" />
           ) : (
-            <Alert variant="warn" title={`${gaps.length} combination${gaps.length === 1 ? '' : 's'} not covered`}>
-              A booking matching any of these cannot have a contract issued at all:
-              <ul className="mt-1.5 flex flex-wrap gap-1.5">
-                {gaps.map((gap) => (
-                  <li
-                    key={`${gap.region}-${gap.stayType}`}
-                    className="rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-medium text-warn"
-                  >
-                    {gap.regionLabel} · {gap.stayTypeLabel.replace(/ \(.*\)/, '')}
-                  </li>
-                ))}
-              </ul>
-            </Alert>
-          )}
-
-          {/* The full grid, so partial coverage reads at a glance. */}
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse text-[12px]">
-              <thead>
-                <tr>
-                  <th className="pb-2 text-left text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">
-                    Region
-                  </th>
-                  {AUTO_RESOLVED_STAY_TYPES.map((type) => (
-                    <th
-                      key={type}
-                      className="pb-2 text-left text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted"
-                    >
-                      {type === 'long_residential' ? 'Residential' : 'Commercial'}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {TEMPLATE_REGIONS.map((region) => (
-                  <tr key={region.value} className="border-t border-line">
-                    <td className="py-2 font-medium text-ink">{region.label}</td>
-                    {AUTO_RESOLVED_STAY_TYPES.map((type) => {
-                      const match = templates.find(
-                        (t) => t.region === region.value && t.stayType === type && t.isActive,
-                      );
-                      return (
-                        <td key={type} className="py-2">
-                          <span
-                            className={cn(
-                              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium',
-                              match ? 'bg-ok-soft text-ok' : 'bg-black/5 text-ink-muted',
-                            )}
-                          >
-                            {match ? `v${match.version}` : 'Missing'}
-                          </span>
-                        </td>
-                      );
-                    })}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-[12px]">
+                <thead>
+                  <tr>
+                    <th className="pb-2 text-left text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">Stay type</th>
+                    {coverage.regions.map((region) => (
+                      <th key={region} className="pb-2 pl-2 text-left text-[10px] font-bold uppercase tracking-[0.06em] text-ink-muted">
+                        {coverage.cells.find((c) => c.region === region)?.regionLabel ?? region}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {grid.map(({ band, cells }) => (
+                    <tr key={band.stayType} className="border-t border-line">
+                      <td className="py-2 pr-3 font-medium text-ink">
+                        {band.stayTypeLabel}
+                        <span className="ml-1.5 text-[10px] font-normal text-ink-muted">
+                          {band.mode === 'signature' ? 'Signature' : 'Tick-box'}
+                        </span>
+                      </td>
+                      {cells.map((cell) => (
+                        <td key={cell.region} className="py-1.5 pl-2">
+                          <CoverageCell cell={cell} onOpen={setActiveCell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </Card>
 
       <Card>
-        <CardHeader title="All templates" subtitle={`${templates.length} stored`} />
+        <CardHeader title="All templates" subtitle={`${allTemplates.length} stored`} />
         <div className="table-scroll border-t border-line">
           <DataTable
             columns={columns}
-            rows={templates}
-            isLoading={isLoading}
+            rows={allTemplates}
+            isLoading={isAllLoading}
             emptyTitle="No templates yet"
             emptyDescription="Contracts cannot be issued until at least one template exists."
+            onRowClick={(row) =>
+              setActiveCell({
+                region: row.region,
+                regionLabel: row.regionLabel,
+                stayType: row.stayType,
+                stayTypeLabel: row.stayTypeLabel,
+                mode: coverage?.bands.find((band) => band.stayType === row.stayType)?.mode,
+              })
+            }
           />
         </div>
       </Card>
 
-      {/* Create / edit */}
-      <Modal
-        isOpen={isFormOpen}
-        onClose={close}
-        size="xl"
-        title={editing ? `Edit ${editing.name}` : 'New contract template'}
-        description="Region, stay type and version together must be unique."
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={close}>Cancel</Button>
-            <Button variant="primary" isLoading={isCreating || isUpdating} onClick={submit}>
-              {editing ? 'Save changes' : 'Create template'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Input
-            containerClassName="sm:col-span-2"
-            label="Template name"
-            placeholder="e.g. UK Assured Shorthold Tenancy"
-            value={form.name}
-            onChange={(event) => setForm({ ...form, name: event.target.value })}
-            error={errors.name}
-          />
-
-          <Select
-            label="Region"
-            value={form.region}
-            onChange={(event) => setForm({ ...form, region: event.target.value })}
-            options={TEMPLATE_REGIONS}
-            hint="Matched against the property's country"
-            error={errors.region}
-          />
-
-          <Select
-            label="Applies to"
-            value={form.stayType}
-            onChange={(event) => setForm({ ...form, stayType: event.target.value })}
-            options={TEMPLATE_STAY_TYPES}
-            error={errors.stay_type}
-            hint={
-              AUTO_RESOLVED_STAY_TYPES.includes(form.stayType)
-                ? 'Selected automatically when a contract is sent'
-                : 'Only used when chosen explicitly'
-            }
-          />
-
-          <Input
-            label="Version"
-            value={form.version}
-            onChange={(event) => setForm({ ...form, version: event.target.value })}
-            error={errors.version}
-            hint="Bump this to supersede an existing template"
-          />
-
-          <div className="flex items-end pb-1">
-            <div className="flex w-full items-center justify-between gap-3 rounded-lg border border-line bg-line-soft px-3 py-2">
-              <span className="text-[12.5px] font-medium text-ink">Active</span>
-              <Toggle
-                checked={form.isActive}
-                onChange={(value) => setForm({ ...form, isActive: value })}
-                label="Template active"
-              />
-            </div>
-          </div>
-
-          <Textarea
-            containerClassName="sm:col-span-2"
-            label="Body"
-            rows={14}
-            className="font-mono text-[11.5px]"
-            placeholder="The full agreement text sent to Dropbox Sign…"
-            value={form.content}
-            onChange={(event) => setForm({ ...form, content: event.target.value })}
-            error={errors.content}
-            hint="Sent verbatim — placeholders are not substituted by the API"
-          />
-        </div>
-      </Modal>
-
-      {/* Read-only body preview */}
-      <Modal
-        isOpen={Boolean(preview)}
-        onClose={() => setPreview(null)}
-        size="xl"
-        title={preview?.name}
-        description={preview ? `${preview.regionLabel} · ${preview.stayTypeLabel} · v${preview.version}` : ''}
-      >
-        <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-lg bg-line-soft p-4 text-[11.5px] leading-6 text-ink-soft">
-          {preview?.content || 'This template has no body yet.'}
-        </pre>
-      </Modal>
-
-      <Modal
-        isOpen={Boolean(confirmDelete)}
-        onClose={() => setConfirmDelete(null)}
-        size="sm"
-        title="Delete this template?"
-        description="Contracts already issued from it are unaffected."
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setConfirmDelete(null)}>Cancel</Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                deleteTemplate(confirmDelete.id);
-                setConfirmDelete(null);
-              }}
-            >
-              Delete
-            </Button>
-          </div>
-        }
-      >
-        <Alert variant="warn" title="Deactivating is usually enough">
-          Switching a template off stops it being selected while keeping it on record. Deleting removes it entirely.
-        </Alert>
-        <p className="mt-3 inline-flex items-center gap-2 text-[13px] text-ink">
-          <FileText className="size-4 text-ink-muted" aria-hidden="true" />
-          {confirmDelete?.name} · {confirmDelete?.regionLabel}
-        </p>
-      </Modal>
+      <CellDetailModal cell={activeCell} onClose={() => setActiveCell(null)} canAuthor={canAuthor} />
     </div>
   );
 };

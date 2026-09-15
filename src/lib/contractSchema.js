@@ -24,16 +24,6 @@ export const TEMPLATE_STAY_TYPES = [
   { value: 'long_commercial', label: 'Long commercial (26+ weeks)' },
 ];
 
-/**
- * Only these two are reachable when the API resolves a template automatically:
- * `ContractSendView` rejects any booking under the ~6-month threshold before it
- * ever looks one up, so `_stay_type_for_nights` can only return a long band.
- * The others are still worth storing — they can be sent by explicit id — but
- * the screen flags the difference so nobody wonders why a short-stay template
- * never fires.
- */
-export const AUTO_RESOLVED_STAY_TYPES = ['long_residential', 'long_commercial'];
-
 export const regionLabel = (value) =>
   TEMPLATE_REGIONS.find((region) => region.value === value)?.label ?? value;
 
@@ -43,10 +33,9 @@ export const stayTypeLabel = (value) =>
 /**
  * A booking only gets a signed contract via Dropbox Sign once it's at or
  * beyond this length — shorter stays use the `agreement_accepted` checkbox
- * flow instead (`POST /bookings/<id>/accept-agreement/`), and `ContractSendView`
- * rejects anything shorter with a 400. Mirrors the backend's default
- * `BOOKING_CONTRACT_REQUIRED_MIN_NIGHTS` (~6 months); the admin bookings list
- * doesn't return `contract_required` directly, so this is re-derived from nights.
+ * flow instead. This is a fallback default only: the real value now comes
+ * back as `contract_required_min_nights` on `GET /contracts/templates/coverage/`
+ * — prefer that wherever the coverage response is already in hand.
  */
 export const CONTRACT_REQUIRED_MIN_NIGHTS = 183;
 
@@ -57,9 +46,24 @@ export const CONTRACT_STATUS_LABEL = {
   signed: 'Signed',
   declined: 'Declined',
   expired: 'Expired',
+  cancelled: 'Cancelled',
 };
 
-/** Normalise one template from the API. */
+/** `ContractTemplate.status` → the table/badge label. */
+export const TEMPLATE_STATUS_LABEL = {
+  draft: 'Draft',
+  published: 'Published',
+  retired: 'Retired',
+};
+
+/**
+ * A published template under this many characters is almost certainly a
+ * placeholder rather than real legal text — flagged as a warning on the
+ * coverage grid, not blocked. One constant, easy to retune later.
+ */
+export const SHORT_TEMPLATE_THRESHOLD = 1500;
+
+/** Normalise one template from the API (list/detail rows — draft, published or retired). */
 export const toTemplate = (raw) => ({
   id: raw.id,
   name: raw.name,
@@ -68,51 +72,206 @@ export const toTemplate = (raw) => ({
   stayType: raw.stay_type,
   stayTypeLabel: stayTypeLabel(raw.stay_type),
   content: raw.content ?? '',
+  contentLength: raw.content_length ?? (raw.content ?? '').length,
   version: raw.version ?? '1.0',
-  isActive: raw.is_active !== false,
-  isAutoResolved: AUTO_RESOLVED_STAY_TYPES.includes(raw.stay_type),
+  status: raw.status ?? 'draft',
+  statusLabel: TEMPLATE_STATUS_LABEL[raw.status] ?? raw.status,
+  publishedAt: raw.published_at ?? null,
+  publishedBy: raw.published_by ?? null,
+  retiredAt: raw.retired_at ?? null,
+  acceptedBookings: raw.accepted_bookings ?? 0,
+  contractsIssued: raw.contracts ?? raw.issued_contracts ?? 0,
   createdAt: raw.created_at,
   updatedAt: raw.updated_at,
 });
 
-/**
- * Build the create/update payload.
- *
- * `unique_together` is `(region, stay_type, version)`, so a duplicate comes
- * back as a 400 rather than silently overwriting — the form surfaces that.
- */
-export const toTemplatePayload = ({ name, region, stayType, content, version, isActive }) => {
+/** `POST /contracts/templates/` — creates a draft. Version and status are server-assigned, never sent. */
+export const toTemplateCreatePayload = ({ name, region, stayType, content }) => ({
+  name: name?.trim(),
+  region,
+  stay_type: stayType,
+  content: content ?? '',
+});
+
+/** `PATCH /contracts/templates/<id>/` — draft-only, and only `name`/`content` are actually editable server-side. */
+export const toTemplateEditPayload = ({ name, content }) => {
   const payload = {};
-
   if (name !== undefined) payload.name = name?.trim();
-  if (region !== undefined) payload.region = region;
-  if (stayType !== undefined) payload.stay_type = stayType;
   if (content !== undefined) payload.content = content;
-  if (version !== undefined) payload.version = String(version || '1.0').trim();
-  if (isActive !== undefined) payload.is_active = Boolean(isActive);
-
   return payload;
 };
 
-/**
- * Which (region, stay type) pairs have no active template.
- *
- * Only the auto-resolved bands are counted: a gap there means a real booking in
- * that jurisdiction cannot have a contract issued at all.
- */
-export const coverageGaps = (templates = []) => {
-  const covered = new Set(
-    templates.filter((t) => t.isActive).map((t) => `${t.region}:${t.stayType}`),
-  );
+/** `GET /contracts/templates/coverage/` — the 25-cell grid. */
+export const toCoverage = (raw) => ({
+  contractRequiredMinNights: raw.contract_required_min_nights ?? CONTRACT_REQUIRED_MIN_NIGHTS,
+  regions: raw.regions ?? TEMPLATE_REGIONS.map((r) => r.value),
+  bands: (raw.bands ?? []).map((band) => ({
+    stayType: band.stay_type,
+    stayTypeLabel: stayTypeLabel(band.stay_type),
+    mode: band.mode, // 'click_accept' | 'signature'
+  })),
+  cells: (raw.cells ?? []).map((cell) => ({
+    region: cell.region,
+    regionLabel: regionLabel(cell.region),
+    stayType: cell.stay_type,
+    stayTypeLabel: stayTypeLabel(cell.stay_type),
+    published: cell.published
+      ? {
+          id: cell.published.id,
+          name: cell.published.name,
+          version: cell.published.version,
+          publishedAt: cell.published.published_at,
+          contentLength: cell.published.content_length ?? 0,
+        }
+      : null,
+    draftCount: cell.draft_count ?? 0,
+  })),
+});
 
-  const gaps = [];
-  TEMPLATE_REGIONS.forEach((region) => {
-    AUTO_RESOLVED_STAY_TYPES.forEach((stayType) => {
-      if (!covered.has(`${region.value}:${stayType}`)) {
-        gaps.push({ region: region.value, regionLabel: region.label, stayType, stayTypeLabel: stayTypeLabel(stayType) });
-      }
-    });
+/** One of the 25 cells' overall state, for the grid's colour/label — matches the doc's four states. */
+export const cellState = (cell) => {
+  if (cell.published) {
+    return cell.published.contentLength < SHORT_TEMPLATE_THRESHOLD ? 'published-short' : 'published';
+  }
+  if (cell.draftCount > 0) return 'draft-only';
+  return 'empty';
+};
+
+/** Merge-field palette — `GET /contracts/merge-fields/`. Flat on the wire; grouped here for the palette UI. */
+export const toMergeField = (raw) => ({
+  key: raw.key,
+  label: raw.label,
+  example: raw.example ?? '',
+  required: Boolean(raw.required),
+  modes: raw.modes ?? [],
+});
+
+/**
+ * The backend sends a flat list with no category — group it client-side.
+ * Signing fields (scoped to `modes: ['signature']`) are unambiguous; everything
+ * else is grouped by a small key-prefix heuristic, with an "Other" bucket so an
+ * unrecognised field never silently disappears from the palette.
+ */
+const GROUP_BY_KEY_PREFIX = [
+  { group: 'Guest', prefixes: ['guest_'] },
+  { group: 'Stay', prefixes: ['booking_', 'property_', 'checkin', 'checkout', 'nights', 'stay_'] },
+  { group: 'Money', prefixes: ['amount_', 'price_', 'deposit_', 'currency', 'rent_', 'total_'] },
+  { group: 'Company', prefixes: ['company_', 'alotel_'] },
+];
+
+export const groupMergeFields = (fields = []) => {
+  const groups = { Guest: [], Stay: [], Money: [], Company: [], Signing: [], Other: [] };
+
+  fields.forEach((field) => {
+    if (field.modes.includes('signature')) {
+      groups.Signing.push(field);
+      return;
+    }
+    const match = GROUP_BY_KEY_PREFIX.find(({ prefixes }) => prefixes.some((prefix) => field.key.startsWith(prefix)));
+    groups[match?.group ?? 'Other'].push(field);
   });
 
-  return gaps;
+  return Object.entries(groups)
+    .filter(([, items]) => items.length > 0)
+    .map(([group, items]) => ({ group, fields: items }));
 };
+
+/** `POST /contracts/templates/preview/` response. */
+export const toTemplatePreview = (raw) => ({
+  rendered: raw.rendered ?? '',
+  unknownFields: raw.unknown_fields ?? [],
+  missingValues: (raw.missing_values ?? []).map((entry) => ({
+    field: entry.field,
+    required: Boolean(entry.required),
+  })),
+  stayTypeMismatch: Boolean(raw.stay_type_mismatch),
+  booking: raw.booking ?? null,
+});
+
+/** One row of `GET /contracts/?status=`. */
+export const toContractRow = (raw) => ({
+  contractId: raw.contract_id,
+  bookingId: raw.booking_id,
+  guest: raw.guest ?? null,
+  property: raw.property ?? null,
+  region: raw.region,
+  regionLabel: regionLabel(raw.region),
+  stayType: raw.stay_type,
+  stayTypeLabel: stayTypeLabel(raw.stay_type),
+  nights: raw.nights,
+  checkIn: raw.check_in,
+  checkOut: raw.check_out,
+  template: raw.template ?? null,
+  status: raw.status,
+  statusLabel: CONTRACT_STATUS_LABEL[raw.status] ?? raw.status,
+  isEmbedded: Boolean(raw.is_embedded),
+  testMode: Boolean(raw.test_mode),
+  sentAt: raw.sent_at,
+  viewedAt: raw.viewed_at,
+  signedAt: raw.signed_at,
+  expiresAt: raw.expires_at,
+  daysWaiting: raw.days_waiting ?? null,
+  emailCount: raw.email_count ?? 0,
+  lastEmailedAt: raw.last_emailed_at ?? null,
+  lastEvent: raw.last_event ? { type: raw.last_event.type, at: raw.last_event.at } : null,
+});
+
+/** One row of `GET /contracts/unsent/`. */
+export const toUnsentRow = (raw) => ({
+  bookingId: raw.booking_id,
+  guest: raw.guest ?? null,
+  property: raw.property ?? null,
+  bookingStatus: raw.booking_status,
+  region: raw.region,
+  regionLabel: regionLabel(raw.region),
+  stayType: raw.stay_type,
+  stayTypeLabel: stayTypeLabel(raw.stay_type),
+  nights: raw.nights,
+  checkIn: raw.check_in,
+  daysUntilCheckIn: raw.days_until_check_in ?? null,
+  resolvedTemplate: raw.resolved_template ?? null,
+  lastContract: raw.last_contract ?? null,
+});
+
+/** `GET /contracts/summary/` — column header counts. */
+export const toContractSummary = (raw) => ({
+  unsent: raw.unsent ?? 0,
+  sent: raw.sent ?? 0,
+  declined: raw.declined ?? 0,
+  expired: raw.expired ?? 0,
+  signed: raw.signed ?? 0,
+  cancelled: raw.cancelled ?? 0,
+  expiringWithin3Days: raw.expiring_within_3_days ?? 0,
+  unsentCheckingInWithin14Days: raw.unsent_checking_in_within_14_days ?? 0,
+});
+
+/** `GET /contracts/<id>/` — the drawer's full detail, list row plus resolution/copy. */
+export const toContractDetail = (raw) => ({
+  ...toContractRow(raw),
+  renderedContent: raw.rendered_content ?? '',
+  declineReason: raw.decline_reason ?? '',
+  sentBy: raw.sent_by ?? null,
+  resolution: raw.resolution
+    ? {
+        nights: raw.resolution.nights,
+        isCommercial: Boolean(raw.resolution.is_commercial),
+        region: raw.resolution.region,
+        stayType: raw.resolution.stay_type,
+        resolvedTemplate: raw.resolution.resolved_template ?? null,
+        usedTemplate: raw.resolution.used_template ?? null,
+        override: raw.resolution.override
+          ? { reason: raw.resolution.override.reason, by: raw.resolution.override.by, at: raw.resolution.override.at }
+          : null,
+      }
+    : null,
+});
+
+/** One row of `GET /contracts/<id>/events/`. */
+export const toContractEvent = (raw) => ({
+  id: raw.id,
+  source: raw.source, // 'alotel' | 'dropbox_sign'
+  type: raw.type,
+  at: raw.at,
+  actor: raw.actor ?? null,
+  note: raw.note ?? '',
+});

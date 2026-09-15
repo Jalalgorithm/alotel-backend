@@ -82,26 +82,11 @@ export const useBookingActions = () => {
     onError: (error) => toast.error('Could not cancel booking', getErrorMessage(error)),
   });
 
-  /**
-   * Contract and KYC nudges are still mock-backed: the API handles both
-   * through the compliance endpoints, which this pass does not cover.
-   */
-  const nudge = useMutation({
-    mutationFn: ({ id, patch }) => bookingService.updateBooking(id, patch),
-    onSuccess: (_booking, { id, message }) => {
-      refresh(id);
-      toast.success(message ?? 'Booking updated');
-    },
-    onError: (error) => toast.error('Could not update booking', getErrorMessage(error)),
-  });
-
   return {
     approve: approve.mutate,
     cancel: (id, reason = '', options) => cancel.mutate({ id, reason }, options),
-    sendContract: (id) => nudge.mutate({ id, patch: { contract: 'Signed' }, message: 'Contract sent for signature' }),
-    remindKyc: (id) => nudge.mutate({ id, patch: { kyc: 'Pending' }, message: 'KYC reminder sent' }),
-    isPending: approve.isPending || cancel.isPending || nudge.isPending,
-    pendingId: approve.isPending ? approve.variables : cancel.isPending ? cancel.variables?.id : nudge.isPending ? nudge.variables?.id : undefined,
+    isPending: approve.isPending || cancel.isPending,
+    pendingId: approve.isPending ? approve.variables : cancel.isPending ? cancel.variables?.id : undefined,
   };
 };
 
@@ -143,98 +128,6 @@ export const useUpdateGuest = () => {
   });
 
   return { updateGuest: (id, patch) => mutation.mutate({ id, patch }), isPending: mutation.isPending, pendingId: mutation.variables?.id };
-};
-
-export const useContracts = (params = {}) =>
-  useQuery({
-    queryKey: queryKeys.bookings.contracts(params),
-    queryFn: () => bookingService.getContracts(params),
-    placeholderData: keepPreviousData,
-  });
-
-/** Contract state for one booking, fetched only when a row is opened. */
-export const useContractForBooking = (bookingId) =>
-  useQuery({
-    queryKey: queryKeys.bookings.contractDetail(bookingId),
-    queryFn: () => bookingService.getContractForBooking(bookingId),
-    enabled: Boolean(bookingId),
-  });
-
-/** The signed-document link, fetched only once a contract has actually been signed. */
-export const useContractStatus = (contractId, { enabled = true } = {}) =>
-  useQuery({
-    queryKey: queryKeys.bookings.contractStatus(contractId),
-    queryFn: () => bookingService.getContractStatus(contractId),
-    enabled: Boolean(contractId) && enabled,
-  });
-
-export const useContractTemplates = () =>
-  useQuery({
-    queryKey: queryKeys.bookings.contractTemplates(),
-    queryFn: bookingService.getContractTemplates,
-    staleTime: 1000 * 60 * 10,
-  });
-
-/** Create, edit, activate or remove a contract template. */
-export const useContractTemplateMutations = () => {
-  const queryClient = useQueryClient();
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.bookings.contractTemplates() });
-
-  const create = useMutation({
-    mutationFn: bookingService.createContractTemplate,
-    onSuccess: (template) => {
-      invalidate();
-      toast.success('Template created', `${template.name} is ready to be issued.`);
-    },
-    onError: (error) => toast.error('Could not create the template', getErrorMessage(error)),
-  });
-
-  const update = useMutation({
-    mutationFn: ({ id, patch }) => bookingService.updateContractTemplate(id, patch),
-    onSuccess: () => {
-      invalidate();
-      toast.success('Template updated');
-    },
-    onError: (error) => toast.error('Could not update the template', getErrorMessage(error)),
-  });
-
-  const remove = useMutation({
-    mutationFn: bookingService.deleteContractTemplate,
-    onSuccess: () => {
-      invalidate();
-      toast.success('Template deleted');
-    },
-    onError: (error) => toast.error('Could not delete the template', getErrorMessage(error)),
-  });
-
-  return {
-    createTemplate: create.mutateAsync,
-    isCreating: create.isPending,
-    updateTemplate: update.mutate,
-    updateTemplateAsync: update.mutateAsync,
-    isUpdating: update.isPending,
-    deleteTemplate: remove.mutate,
-    isDeleting: remove.isPending,
-    pendingId: update.variables?.id ?? remove.variables,
-  };
-};
-
-/** Issue a contract for a booking through Dropbox Sign. */
-export const useSendContract = () => {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: bookingService.sendContract,
-    onSuccess: (_data, { bookingId }) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.contractDetail(bookingId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.bookings.all });
-      toast.success('Contract sent', 'The guest has been emailed a signing link.');
-    },
-    onError: (error) => toast.error('Could not send the contract', getErrorMessage(error)),
-  });
-
-  return { sendContract: mutation.mutate, isPending: mutation.isPending, pendingId: mutation.variables?.bookingId };
 };
 
 /* ------------------------------------------------------------- inspections */
