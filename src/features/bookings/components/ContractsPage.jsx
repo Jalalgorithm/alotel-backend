@@ -17,8 +17,8 @@ import { getErrorMessage } from '@/utils/errors';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { paths } from '@/routes/paths';
-import { TEMPLATE_REGIONS, TEMPLATE_STAY_TYPES } from '@/lib/contractSchema';
 import {
+  useContractCoverage,
   useContractList,
   useContractSummary,
   useSendContract,
@@ -121,6 +121,17 @@ export const ContractsPage = () => {
   const [selected, setSelected] = useState(new Set());
   const [bulkProgress, setBulkProgress] = useState(null);
 
+  const { data: coverage } = useContractCoverage();
+  const regionOptions = useMemo(() => {
+    if (!coverage) return [];
+    const labelByRegion = new Map(coverage.cells.map((cell) => [cell.region, cell.regionLabel]));
+    return coverage.regions.map((code) => ({ value: code, label: labelByRegion.get(code) ?? code }));
+  }, [coverage]);
+  const stayTypeOptions = useMemo(
+    () => (coverage ? coverage.bands.map((band) => ({ value: band.stayType, label: band.stayTypeLabel })) : []),
+    [coverage],
+  );
+
   const { data: summary } = useContractSummary();
   const { data: unsent = [], isLoading: isUnsentLoading } = useUnsentContracts(filters);
   const { data: sent, isLoading: isSentLoading } = useContractList({ ...filters, status: 'sent' });
@@ -190,8 +201,8 @@ export const ContractsPage = () => {
 
       <div className="flex flex-wrap gap-2.5">
         <Input placeholder="Search guest, email, property, booking…" value={search} onChange={(e) => setSearch(e.target.value)} containerClassName="w-64" />
-        <Select value={region} onChange={(e) => setRegion(e.target.value)} options={TEMPLATE_REGIONS} placeholder="All regions" containerClassName="w-40" />
-        <Select value={stayType} onChange={(e) => setStayType(e.target.value)} options={TEMPLATE_STAY_TYPES} placeholder="All stay types" containerClassName="w-52" />
+        <Select value={region} onChange={(e) => setRegion(e.target.value)} options={regionOptions} placeholder="All regions" containerClassName="w-40" />
+        <Select value={stayType} onChange={(e) => setStayType(e.target.value)} options={stayTypeOptions} placeholder="All stay types" containerClassName="w-52" />
       </div>
 
       {view === 'table' ? (
