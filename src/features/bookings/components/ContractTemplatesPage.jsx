@@ -339,8 +339,8 @@ export const ContractTemplatesPage = () => {
   const { can } = useAuth();
   const canAuthor = can(CAPABILITIES.contractTemplatesManage);
 
-  const { data: coverage, isLoading: isCoverageLoading } = useContractCoverage();
-  const { data: allTemplates = [], isLoading: isAllLoading } = useTemplates();
+  const { data: coverage, isLoading: isCoverageLoading, isError: isCoverageError, error: coverageError, refetch: refetchCoverage } = useContractCoverage();
+  const { data: allTemplates = [], isLoading: isAllLoading, isError: isAllError, error: allError, refetch: refetchAll } = useTemplates();
   const [activeCell, setActiveCell] = useState(null);
 
   // Deep-link support — the Contracts board's "No published template" flag
@@ -427,6 +427,11 @@ export const ContractTemplatesPage = () => {
         <div className="border-t border-line p-4">
           {isCoverageLoading ? (
             <Skeleton className="h-64 w-full" />
+          ) : isCoverageError || !coverage ? (
+            <Alert variant="error" title="Couldn't load the coverage grid">
+              <p>{getErrorMessage(coverageError)}</p>
+              <Button size="xs" className="mt-2" onClick={() => refetchCoverage()}>Retry</Button>
+            </Alert>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-[12px]">
@@ -464,24 +469,33 @@ export const ContractTemplatesPage = () => {
       </Card>
 
       <Card>
-        <CardHeader title="All templates" subtitle={`${allTemplates.length} stored`} />
+        <CardHeader title="All templates" subtitle={isAllError ? undefined : `${allTemplates.length} stored`} />
         <div className="table-scroll border-t border-line">
-          <DataTable
-            columns={columns}
-            rows={allTemplates}
-            isLoading={isAllLoading}
-            emptyTitle="No templates yet"
-            emptyDescription="Contracts cannot be issued until at least one template exists."
-            onRowClick={(row) =>
-              setActiveCell({
-                region: row.region,
-                regionLabel: row.regionLabel,
-                stayType: row.stayType,
-                stayTypeLabel: row.stayTypeLabel,
-                mode: coverage?.bands.find((band) => band.stayType === row.stayType)?.mode,
-              })
-            }
-          />
+          {isAllError ? (
+            <div className="p-4">
+              <Alert variant="error" title="Couldn't load templates">
+                <p>{getErrorMessage(allError)}</p>
+                <Button size="xs" className="mt-2" onClick={() => refetchAll()}>Retry</Button>
+              </Alert>
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              rows={allTemplates}
+              isLoading={isAllLoading}
+              emptyTitle="No templates yet"
+              emptyDescription="Contracts cannot be issued until at least one template exists."
+              onRowClick={(row) =>
+                setActiveCell({
+                  region: row.region,
+                  regionLabel: row.regionLabel,
+                  stayType: row.stayType,
+                  stayTypeLabel: row.stayTypeLabel,
+                  mode: coverage?.bands.find((band) => band.stayType === row.stayType)?.mode,
+                })
+              }
+            />
+          )}
         </div>
       </Card>
 
