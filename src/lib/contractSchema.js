@@ -104,7 +104,10 @@ export const toTemplateEditPayload = ({ name, content }) => {
 /** `GET /contracts/templates/coverage/` — the 25-cell grid. */
 export const toCoverage = (raw) => ({
   contractRequiredMinNights: raw.contract_required_min_nights ?? CONTRACT_REQUIRED_MIN_NIGHTS,
-  regions: raw.regions ?? TEMPLATE_REGIONS.map((r) => r.value),
+  // The API's `regions` entries are `{code, label}` descriptors; every consumer
+  // (grid lookups, the Contracts board's region filter) keys off the plain
+  // code string, same as `cells[].region` below — normalize to that shape.
+  regions: (raw.regions ?? TEMPLATE_REGIONS.map((r) => r.value)).map((r) => r?.code ?? r),
   bands: (raw.bands ?? []).map((band) => ({
     stayType: band.stay_type,
     stayTypeLabel: stayTypeLabel(band.stay_type),
