@@ -9,8 +9,10 @@ import { authStorage } from './storage';
  *  - attach the bearer token to every outgoing request;
  *  - send cookies (`withCredentials`) so a cookie-based backend works unchanged;
  *  - transparently refresh an expired access token on the first 401 and replay
- *    the original request, queueing any siblings that 401 while the refresh
- *    is in flight so only one refresh call ever leaves the browser.
+ *    the original request; any sibling requests that 401 while a refresh is
+ *    already in flight await that same refresh instead of starting their own,
+ *    so only one refresh call ever leaves the browser no matter how many
+ *    requests a page fires at once.
  */
 export const apiClient = axios.create({
   baseURL: env.apiUrl,
@@ -29,19 +31,48 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-let isRefreshing = false;
-/** @type {Array<{ resolve: (token: string) => void, reject: (error: unknown) => void }>} */
-let pendingQueue = [];
-
-const flushQueue = (error, token = null) => {
-  pendingQueue.forEach(({ resolve, reject }) => (error ? reject(error) : resolve(token)));
-  pendingQueue = [];
-};
-
 /** Broadcast a forced logout; `AuthProvider` listens and clears app state. */
 const emitSessionExpired = () => {
   authStorage.clear();
   window.dispatchEvent(new CustomEvent('alotel:session-expired'));
+};
+
+// Every 401'd request awaits this *same* promise rather than each deciding
+// independently whether a refresh is already underway. A page that fires many
+// requests at once (e.g. the Contracts board) can have several of them 401
+// around the same moment; sharing one promise — instead of a boolean flag plus
+// a manually-managed queue — means there is no window where a slightly late
+// 401 fails to see "a refresh is in flight" and kicks off a second, redundant
+// /auth/refresh/ call. A second call racing the first against the backend's
+// one-time-use refresh token was spuriously logging out sessions that were
+// actually still valid.
+let refreshPromise = null;
+
+const refreshAccessToken = () => {
+  const refreshToken = authStorage.getRefreshToken();
+  if (!refreshToken) {
+    emitSessionExpired();
+    return Promise.reject(new Error('No refresh token available'));
+  }
+
+  refreshPromise = axios
+    .post(`${env.apiUrl}/auth/refresh/`, { refresh: refreshToken }, { withCredentials: true })
+    .then(({ data }) => {
+      // The API rotates refresh tokens and blacklists the old one immediately,
+      // so the new refresh MUST be persisted or the next refresh will 401.
+      const token = data.access;
+      authStorage.setSession({ token, refreshToken: data.refresh ?? refreshToken });
+      return token;
+    })
+    .catch((refreshError) => {
+      emitSessionExpired();
+      throw refreshError;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
 };
 
 apiClient.interceptors.response.use(
@@ -63,49 +94,17 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const refreshToken = authStorage.getRefreshToken();
-    if (!refreshToken) {
-      emitSessionExpired();
-      return Promise.reject(error);
-    }
-
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        pendingQueue.push({
-          resolve: (token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            resolve(apiClient(originalRequest));
-          },
-          reject,
-        });
-      });
-    }
-
+    // Marked unconditionally, before awaiting the (possibly shared) refresh —
+    // this is what stops a queued sibling from mistaking its own retry for a
+    // fresh, first-time 401 and triggering another refresh call.
     originalRequest._retry = true;
-    isRefreshing = true;
 
     try {
-      // A bare axios call: the instance's interceptor would re-attach the dead token.
-      const { data } = await axios.post(
-        `${env.apiUrl}/auth/refresh/`,
-        { refresh: refreshToken },
-        { withCredentials: true },
-      );
-
-      // The API rotates refresh tokens and blacklists the old one immediately,
-      // so the new refresh MUST be persisted or the next refresh will 401.
-      const token = data.access;
-      authStorage.setSession({ token, refreshToken: data.refresh ?? refreshToken });
-      flushQueue(null, token);
-
+      const token = await (refreshPromise ?? refreshAccessToken());
       originalRequest.headers.Authorization = `Bearer ${token}`;
       return await apiClient(originalRequest);
     } catch (refreshError) {
-      flushQueue(refreshError);
-      emitSessionExpired();
       return Promise.reject(refreshError);
-    } finally {
-      isRefreshing = false;
     }
   },
 );
