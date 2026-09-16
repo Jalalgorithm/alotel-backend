@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { DataTable } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
+import { Alert } from '@/components/ui/Alert';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -132,13 +133,21 @@ export const ContractsPage = () => {
     [coverage],
   );
 
-  const { data: summary } = useContractSummary();
-  const { data: unsent = [], isLoading: isUnsentLoading } = useUnsentContracts(filters);
-  const { data: sent, isLoading: isSentLoading } = useContractList({ ...filters, status: 'sent' });
-  const { data: declined, isLoading: isDeclinedLoading } = useContractList({ ...filters, status: 'declined' });
-  const { data: expired, isLoading: isExpiredLoading } = useContractList({ ...filters, status: 'expired' });
-  const { data: signed, isLoading: isSignedLoading } = useContractList({ ...filters, status: 'signed', ordering: '-signed_at' });
-  const { data: all, isLoading: isAllLoading } = useContractList(filters);
+  const { data: summary, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useContractSummary();
+  const { data: unsent = [], isLoading: isUnsentLoading, isError: isUnsentError, error: unsentError, refetch: refetchUnsent } = useUnsentContracts(filters);
+  const { data: sent, isLoading: isSentLoading, isError: isSentError, error: sentError, refetch: refetchSent } = useContractList({ ...filters, status: 'sent' });
+  const { data: declined, isLoading: isDeclinedLoading, isError: isDeclinedError, error: declinedError, refetch: refetchDeclined } = useContractList({ ...filters, status: 'declined' });
+  const { data: expired, isLoading: isExpiredLoading, isError: isExpiredError, error: expiredError, refetch: refetchExpired } = useContractList({ ...filters, status: 'expired' });
+  const { data: signed, isLoading: isSignedLoading, isError: isSignedError, error: signedError, refetch: refetchSigned } = useContractList({ ...filters, status: 'signed', ordering: '-signed_at' });
+  const { data: all, isLoading: isAllLoading, isError: isAllError, error: allError, refetch: refetchAll } = useContractList(filters);
+
+  const COLUMN_STATE = {
+    unsent: { isError: isUnsentError, error: unsentError, refetch: refetchUnsent },
+    sent: { isError: isSentError, error: sentError, refetch: refetchSent },
+    declined: { isError: isDeclinedError, error: declinedError, refetch: refetchDeclined },
+    expired: { isError: isExpiredError, error: expiredError, refetch: refetchExpired },
+    signed: { isError: isSignedError, error: signedError, refetch: refetchSigned },
+  };
 
   const { sendContractAsync } = useSendContract();
 
@@ -205,18 +214,34 @@ export const ContractsPage = () => {
         <Select value={stayType} onChange={(e) => setStayType(e.target.value)} options={stayTypeOptions} placeholder="All stay types" containerClassName="w-52" />
       </div>
 
+      {isSummaryError && (
+        <Alert variant="error" title="Couldn't load the column counts">
+          <p>{getErrorMessage(summaryError)}</p>
+          <Button size="xs" className="mt-2" onClick={() => refetchSummary()}>Retry</Button>
+        </Alert>
+      )}
+
       {view === 'table' ? (
         <Card>
           <CardHeader title="All contracts" subtitle={summary && `${summary.unsent + summary.sent + summary.declined + summary.expired + summary.signed + summary.cancelled} total`} />
           <div className="table-scroll border-t border-line">
-            <DataTable
-              columns={tableColumns}
-              rows={all?.items ?? []}
-              getRowId={(row) => row.contractId}
-              isLoading={isAllLoading}
-              onRowClick={(row) => setTarget({ type: 'contract', contractId: row.contractId })}
-              emptyTitle="No contracts yet"
-            />
+            {isAllError ? (
+              <div className="p-4">
+                <Alert variant="error" title="Couldn't load contracts">
+                  <p>{getErrorMessage(allError)}</p>
+                  <Button size="xs" className="mt-2" onClick={() => refetchAll()}>Retry</Button>
+                </Alert>
+              </div>
+            ) : (
+              <DataTable
+                columns={tableColumns}
+                rows={all?.items ?? []}
+                getRowId={(row) => row.contractId}
+                isLoading={isAllLoading}
+                onRowClick={(row) => setTarget({ type: 'contract', contractId: row.contractId })}
+                emptyTitle="No contracts yet"
+              />
+            )}
           </div>
         </Card>
       ) : (
@@ -227,6 +252,9 @@ export const ContractsPage = () => {
             const isLoading = isUnsentColumn
               ? isUnsentLoading
               : { sent: isSentLoading, declined: isDeclinedLoading, expired: isExpiredLoading, signed: isSignedLoading }[column.id];
+            const columnState = isUnsentColumn
+              ? { isError: isUnsentError, error: unsentError, refetch: refetchUnsent }
+              : COLUMN_STATE[column.id];
             const count = summary?.[column.id];
 
             return (
@@ -244,6 +272,11 @@ export const ContractsPage = () => {
                 <div className="max-h-[65vh] space-y-2 overflow-y-auto border-t border-line p-3">
                   {isLoading ? (
                     <Skeleton className="h-16 w-full" />
+                  ) : columnState.isError ? (
+                    <Alert variant="error" title="Couldn't load">
+                      <p>{getErrorMessage(columnState.error)}</p>
+                      <Button size="xs" className="mt-2" onClick={() => columnState.refetch()}>Retry</Button>
+                    </Alert>
                   ) : rows.length === 0 ? (
                     <EmptyState title="Nothing here" />
                   ) : isUnsentColumn ? (

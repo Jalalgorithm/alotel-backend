@@ -83,8 +83,8 @@ export const ContractDrawer = ({ target, onClose }) => {
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.contractsManage);
 
-  const { data: contract, isLoading } = useContractDetail(contractId);
-  const { data: events = [] } = useContractEvents(contractId);
+  const { data: contract, isLoading, isError: isDetailError, error: detailError, refetch: refetchDetail } = useContractDetail(contractId);
+  const { data: events = [], isError: isEventsError, error: eventsError, refetch: refetchEvents } = useContractEvents(contractId);
   const { remind, isReminding } = useRemindContract();
   const { voidContractAsync, isVoiding } = useVoidContract();
   const { fetchDocument, isFetching: isFetchingDocument } = useContractDocument();
@@ -160,6 +160,11 @@ export const ContractDrawer = ({ target, onClose }) => {
           </div>
         ) : isLoading ? (
           <Skeleton className="h-64 w-full" />
+        ) : isDetailError ? (
+          <Alert variant="error" title="Couldn't load this contract">
+            <p>{getErrorMessage(detailError)}</p>
+            <Button size="xs" className="mt-2" onClick={() => refetchDetail()}>Retry</Button>
+          </Alert>
         ) : contract ? (
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -176,7 +181,7 @@ export const ContractDrawer = ({ target, onClose }) => {
                 {contract.resolution.usedTemplate ? ` v${contract.resolution.usedTemplate.version}` : ''}
                 {contract.resolution.override && (
                   <p className="mt-1.5 text-[11px] text-warn">
-                    Overridden by {contract.resolution.override.by ?? 'an admin'}: {contract.resolution.override.reason}
+                    Overridden by {contract.resolution.override.by?.name ?? 'an admin'}: {contract.resolution.override.reason}
                   </p>
                 )}
               </div>
@@ -191,6 +196,12 @@ export const ContractDrawer = ({ target, onClose }) => {
 
             <div>
               <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Timeline</p>
+              {isEventsError ? (
+                <Alert variant="error" title="Couldn't load the timeline">
+                  <p>{getErrorMessage(eventsError)}</p>
+                  <Button size="xs" className="mt-2" onClick={() => refetchEvents()}>Retry</Button>
+                </Alert>
+              ) : (
               <ol className="space-y-2">
                 {events.map((event) => (
                   <li key={event.id} className="flex items-start gap-2.5 text-[12px]">
@@ -200,12 +211,13 @@ export const ContractDrawer = ({ target, onClose }) => {
                         {event.type} <span className="text-ink-muted">· {EVENT_SOURCE_LABEL[event.source] ?? event.source}</span>
                       </p>
                       <p className="text-[10.5px] text-ink-muted">
-                        {formatDate(event.at, 'd MMM yyyy, HH:mm')}{event.actor ? ` · ${event.actor}` : ''}
+                        {formatDate(event.at, 'd MMM yyyy, HH:mm')}{event.actor?.name ? ` · ${event.actor.name}` : ''}
                       </p>
                     </div>
                   </li>
                 ))}
               </ol>
+              )}
             </div>
 
             {canManage && (
