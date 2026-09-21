@@ -20,7 +20,7 @@ import {
   useInspectionState,
   useUploadInspectionPhoto,
 } from '../hooks/useBookings';
-import { useContractForBooking } from '../hooks/useContracts';
+import { useContractCoverage, useContractForBooking } from '../hooks/useContracts';
 import { CONTRACT_REQUIRED_MIN_NIGHTS, CONTRACT_STATUS_LABEL } from '@/lib/contractSchema';
 import { ROOM_AREAS } from '@/lib/checkoutSchema';
 import { formatRelative } from '@/utils/format';
@@ -209,7 +209,11 @@ export const CheckInOutPage = () => {
 
   /** Only relevant for check-in — checkout has no contract gate. */
   const nights = selected?.nights ?? 0;
-  const contractRequired = stage === 'checkin' && nights >= CONTRACT_REQUIRED_MIN_NIGHTS;
+  // The server owns this threshold; the constant is only a fallback for before
+  // coverage loads, so the gate can't drift from the backend's own rule.
+  const { data: coverage } = useContractCoverage();
+  const contractMinNights = coverage?.contractRequiredMinNights ?? CONTRACT_REQUIRED_MIN_NIGHTS;
+  const contractRequired = stage === 'checkin' && nights >= contractMinNights;
   const { data: contract } = useContractForBooking(contractRequired ? selected?.id : undefined);
   const isSigned = contract?.status === 'signed';
 
@@ -429,7 +433,7 @@ export const CheckInOutPage = () => {
                             <>The guest has signed their tenancy contract. Check-in can proceed.</>
                           ) : (
                             <>
-                              This stay is {nights} nights (≥ {CONTRACT_REQUIRED_MIN_NIGHTS}) and requires a signed
+                              This stay is {nights} nights (≥ {contractMinNights}) and requires a signed
                               contract before check-in. Send or check its status from the Contracts screen, then
                               come back here.
                             </>

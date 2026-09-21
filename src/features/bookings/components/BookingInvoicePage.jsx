@@ -1,6 +1,6 @@
-import { Fragment } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -11,6 +11,7 @@ import { Logo, LogoMark } from '@/components/shared/Logo';
 import { useBookingInvoice } from '../hooks/useBookings';
 import { formatCurrency, formatDate } from '@/utils/format';
 import { getErrorMessage } from '@/utils/errors';
+import { toast } from '@/stores/uiStore';
 import { paths } from '@/routes/paths';
 
 /** Payment-state pill shown in the header (distinct from the booking status row below it). */
@@ -43,6 +44,53 @@ export const BookingInvoicePage = () => {
   const { bookingId } = useParams();
   const { data: invoice, isLoading, isError, error } = useBookingInvoice(bookingId);
 
+  const receiptRef = useRef(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  /**
+   * Snapshots the rendered receipt into a single A4 page. Capturing the live
+   * node (rather than re-describing the layout in a PDF library) keeps the file
+   * identical to what's on screen; the libraries load on demand so they stay
+   * out of the page's bundle. `html2canvas-pro` is required over the original:
+   * Tailwind v4 compiles opacity modifiers to `color-mix()`, which the
+   * unmaintained original cannot parse.
+   */
+  const downloadPdf = async () => {
+    if (!receiptRef.current) return;
+    setIsDownloading(true);
+
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas-pro'),
+        import('jspdf'),
+      ]);
+
+      const canvas = await html2canvas(receiptRef.current, { scale: 2, backgroundColor: '#ffffff' });
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      const margin = 10;
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+
+      let width = pageWidth - margin * 2;
+      let height = (canvas.height / canvas.width) * width;
+      // An unusually long receipt is scaled to fit rather than spilling onto a
+      // second page — the receipt is a one-page document by design.
+      if (height > pageHeight - margin * 2) {
+        height = pageHeight - margin * 2;
+        width = (canvas.width / canvas.height) * height;
+      }
+
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', (pageWidth - width) / 2, margin, width, height);
+      pdf.save(`alotel-receipt-${bookingId.slice(0, 8)}.pdf`);
+      toast.success('Receipt downloaded');
+    } catch (downloadError) {
+      toast.error('Could not download the receipt', getErrorMessage(downloadError));
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 print:max-w-none print:space-y-0">
       <div className="print:hidden">
@@ -55,12 +103,20 @@ export const BookingInvoicePage = () => {
                 Back to bookings
               </Button>
               <Button
-                variant="primary"
                 disabled={!invoice}
                 leftIcon={<Printer className="size-3.5" aria-hidden="true" />}
                 onClick={() => window.print()}
               >
-                Print / Save as PDF
+                Print
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!invoice}
+                isLoading={isDownloading}
+                leftIcon={<Download className="size-3.5" aria-hidden="true" />}
+                onClick={downloadPdf}
+              >
+                Download PDF
               </Button>
             </>
           }
@@ -80,7 +136,7 @@ export const BookingInvoicePage = () => {
       )}
 
       {invoice && (
-        <Card className="overflow-hidden print:border-0 print:shadow-none">
+        <Card ref={receiptRef} className="overflow-hidden print:border-0 print:shadow-none">
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-4 bg-brand-700 px-6 py-6 text-white print:bg-brand-700 print:text-white">
             <Logo tone="light" />

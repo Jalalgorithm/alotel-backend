@@ -39,7 +39,7 @@ export const AdminLayout = () => {
   }, [isDrawerOpen]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-canvas">
+    <div className="flex h-screen overflow-hidden bg-canvas print:block print:h-auto print:overflow-visible">
       {/* Docked sidebar */}
       <div className="hidden shrink-0 lg:block print:hidden">
         <Sidebar badges={badges} />

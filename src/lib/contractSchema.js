@@ -31,6 +31,22 @@ export const stayTypeLabel = (value) =>
   TEMPLATE_STAY_TYPES.find((type) => type.value === value)?.label ?? value;
 
 /**
+ * The stay types signed via Dropbox Sign rather than the acceptance checkbox.
+ * Publishing one of these is rejected server-side unless its body carries a
+ * `{{ signature }}` block. Fallback only — prefer the `mode` on the coverage
+ * response's bands when it's already in hand.
+ */
+export const SIGNATURE_STAY_TYPES = ['long_residential', 'long_commercial'];
+
+/**
+ * Mirrors the server's publish check so the editor can flag a missing
+ * signature block while it's being written instead of at publish time — the
+ * preview endpoint deliberately doesn't run this check. Kept deliberately in
+ * step with the backend's placeholder regex, which tolerates inner spacing.
+ */
+export const hasSignatureField = (content = '') => /\{\{\s*signature\s*\}\}/.test(content);
+
+/**
  * A booking only gets a signed contract via Dropbox Sign once it's at or
  * beyond this length — shorter stays use the `agreement_accepted` checkbox
  * flow instead. This is a fallback default only: the real value now comes
@@ -151,10 +167,14 @@ export const toMergeField = (raw) => ({
 
 /**
  * The backend sends a flat list with no category — group it client-side.
- * Signing fields (scoped to `modes: ['signature']`) are unambiguous; everything
- * else is grouped by a small key-prefix heuristic, with an "Other" bucket so an
+ * "Signing" means a field only usable in signature mode (`signature`,
+ * `signature_date`, `initials`); every ordinary field lists BOTH modes, so it
+ * has to be an exclusivity test rather than `modes.includes('signature')` —
+ * that matched nearly every field and emptied the other groups. Everything else
+ * is grouped by a small key-prefix heuristic, with an "Other" bucket so an
  * unrecognised field never silently disappears from the palette.
  */
+const isSigningOnlyField = (field) => field.modes.length === 1 && field.modes[0] === 'signature';
 const GROUP_BY_KEY_PREFIX = [
   { group: 'Guest', prefixes: ['guest_'] },
   { group: 'Stay', prefixes: ['booking_', 'property_', 'checkin', 'checkout', 'nights', 'stay_'] },
@@ -166,7 +186,7 @@ export const groupMergeFields = (fields = []) => {
   const groups = { Guest: [], Stay: [], Money: [], Company: [], Signing: [], Other: [] };
 
   fields.forEach((field) => {
-    if (field.modes.includes('signature')) {
+    if (isSigningOnlyField(field)) {
       groups.Signing.push(field);
       return;
     }

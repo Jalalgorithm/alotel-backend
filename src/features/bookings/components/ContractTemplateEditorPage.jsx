@@ -14,8 +14,15 @@ import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { paths } from '@/routes/paths';
 import { getErrorCode, getErrorMessage } from '@/utils/errors';
-import { regionLabel, stayTypeLabel, groupMergeFields } from '@/lib/contractSchema';
 import {
+  regionLabel,
+  stayTypeLabel,
+  groupMergeFields,
+  hasSignatureField,
+  SIGNATURE_STAY_TYPES,
+} from '@/lib/contractSchema';
+import {
+  useContractCoverage,
   useCreateTemplateDraft,
   useDuplicateTemplate,
   useMergeFields,
@@ -127,6 +134,13 @@ export const ContractTemplateEditorPage = () => {
   const { data: cellTemplates = [], isLoading: isCellLoading } = useTemplatesForCell(region, stayType);
   const existing = useMemo(() => cellTemplates.find((t) => t.id === templateId) ?? null, [cellTemplates, templateId]);
 
+  // Whether this cell is signed for real (Dropbox Sign) or just tick-box accepted.
+  // The coverage response is authoritative; the stay-type list is the fallback
+  // for the moment before it lands.
+  const { data: coverage } = useContractCoverage();
+  const bandMode = coverage?.bands?.find((band) => band.stayType === stayType)?.mode;
+  const requiresSignature = bandMode ? bandMode === 'signature' : SIGNATURE_STAY_TYPES.includes(stayType);
+
   const { data: mergeFields = [] } = useMergeFields();
   const groupedFields = useMemo(() => groupMergeFields(mergeFields), [mergeFields]);
 
@@ -192,6 +206,8 @@ export const ContractTemplateEditorPage = () => {
     );
   }
 
+  /** Resolves to whether the draft actually reached the server — publishing a
+   *  template whose save was rejected would publish the server's stale copy. */
   const save = async () => {
     setSaveError(null);
     setNotEditableError(false);
@@ -202,14 +218,16 @@ export const ContractTemplateEditorPage = () => {
       } else {
         await updateDraftAsync({ id: templateId, patch: { name, content } });
       }
+      return true;
     } catch (error) {
       if (getErrorCode(error) === 'not_editable') setNotEditableError(true);
       else setSaveError(error);
+      return false;
     }
   };
 
   const openPublish = async () => {
-    if (isDirty) await save();
+    if (isDirty && !(await save())) return;
     setPublishError(null);
     setIsPublishOpen(true);
   };
@@ -220,6 +238,9 @@ export const ContractTemplateEditorPage = () => {
 
   const readOnly = !canAuthor;
   const isBusy = isCreating || isSaving;
+  // The server rejects publish without this block, and the preview endpoint
+  // doesn't check — so surface it while the template is still being written.
+  const signatureMissing = requiresSignature && !hasSignatureField(content);
 
   return (
     <div className="space-y-5">
@@ -237,7 +258,13 @@ export const ContractTemplateEditorPage = () => {
                   {isNew ? 'Create draft' : 'Save changes'}
                 </Button>
                 {!isNew && existing?.status === 'draft' && (
-                  <Button variant="dangerSoft" isLoading={isPublishing} onClick={openPublish}>
+                  <Button
+                    variant="dangerSoft"
+                    isLoading={isPublishing}
+                    disabled={signatureMissing}
+                    title={signatureMissing ? 'Add a {{ signature }} block before publishing' : undefined}
+                    onClick={openPublish}
+                  >
                     Publish
                   </Button>
                 )}
@@ -283,6 +310,17 @@ export const ContractTemplateEditorPage = () => {
                 onChange={(e) => setContent(e.target.value)}
                 disabled={readOnly}
               />
+
+              {signatureMissing && (
+                <Alert variant="warn" title="Signature block required">
+                  {stayTypeLabel(stayType)} contracts are signed through Dropbox Sign, so this template must contain a{' '}
+                  <code className="font-mono">{'{{ signature }}'}</code> block — insert it from the{' '}
+                  <strong>Signing</strong> group below. Note that{' '}
+                  <code className="font-mono">{'{{ signature_date }}'}</code> and{' '}
+                  <code className="font-mono">{'{{ initials }}'}</code> don&apos;t count on their own. It can&apos;t be
+                  published until this is added.
+                </Alert>
+              )}
 
               {previewResult?.unknownFields?.length > 0 && (
                 <Alert variant="warn" title="Unknown fields">

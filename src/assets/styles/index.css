@@ -215,6 +215,37 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Print
+
+   Printed documents (the booking receipt above all) are the one place brand
+   colour carries meaning: without `print-color-adjust`, browsers drop the
+   receipt's green header fill while keeping its white text, printing an
+   invisible header.
+--------------------------------------------------------------------------- */
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  *,
+  *::before,
+  *::after {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  html,
+  body {
+    background: #fff;
+    /* The app shell is a fixed-height scroll container; left alone it clips
+       printed output to a single viewport. */
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
+
 @utility animate-fade-up {
   animation: fade-up 0.3s ease-out both;
 }
