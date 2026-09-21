@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Select } from '@/components/ui/Select';
 import { Input, Textarea } from '@/components/ui/Input';
 import { FileDropzone } from '@/components/ui/FileDropzone';
+import { Alert } from '@/components/ui/Alert';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { cn } from '@/utils/classNames';
@@ -20,25 +21,27 @@ import { PRIORITY_BADGE_VARIANT, STATUS_BADGE_VARIANT, TICKET_COST_TYPES, TICKET
 import { useLogTicketCost, useMaintenanceTicket, useUpdateTicket, useUploadTicketPhoto } from '../hooks/useMaintenanceTickets';
 import { useMaintenanceWorkers } from '../hooks/useMaintenanceWorkers';
 
-const StatusStepper = ({ status, onSelect, canManage }) => {
+const StatusStepper = ({ status, onSelect, canManage, blockedSteps = [] }) => {
   const currentIndex = TICKET_STATUS_FLOW.indexOf(status);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {TICKET_STATUS_FLOW.map((step, index) => {
         const isDone = index < currentIndex;
         const isCurrent = index === currentIndex;
+        const isBlocked = blockedSteps.includes(step);
         return (
           <button
             key={step}
             type="button"
-            disabled={!canManage}
+            disabled={!canManage || isBlocked}
+            title={isBlocked ? 'Add a fix photo before resolving or closing this ticket' : undefined}
             onClick={() => onSelect(step)}
             className={cn(
               'flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition-colors',
               isCurrent && 'border-brand-700 bg-brand-700 text-white',
               isDone && 'border-brand-200 bg-brand-50 text-brand-700',
               !isCurrent && !isDone && 'border-line bg-white text-ink-muted hover:border-brand-300',
-              !canManage && 'cursor-default',
+              (!canManage || isBlocked) && 'cursor-default opacity-60',
             )}
           >
             {isDone && <Check className="size-3" aria-hidden="true" />}
@@ -90,6 +93,13 @@ export const TicketDetailPage = () => {
 
   const { can } = useAuth();
   const canManage = can(CAPABILITIES.maintenanceManage);
+  const isClosed = ticket?.status === 'closed';
+  const canEdit = canManage && !isClosed;
+
+  const issuePhotos = ticket?.photos.filter((photo) => photo.stage === 'issue') ?? [];
+  const fixPhotos = ticket?.photos.filter((photo) => photo.stage === 'fix') ?? [];
+  const otherPhotos = ticket?.photos.filter((photo) => photo.stage !== 'issue' && photo.stage !== 'fix') ?? [];
+  const hasFixPhoto = fixPhotos.length > 0;
 
   const [notesDraft, setNotesDraft] = useState('');
   useEffect(() => {
@@ -129,9 +139,23 @@ export const TicketDetailPage = () => {
         actions={<Button to={paths.maintenanceTickets} leftIcon={<ArrowLeft className="size-3.5" aria-hidden="true" />}>Back</Button>}
       />
 
+      {isClosed && (
+        <Alert variant="info" title="This ticket is closed">
+          Closed tickets are read only — status, assignment, notes, costs and photos can no longer be changed.
+        </Alert>
+      )}
+
       <Card className="p-4">
         <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Status</p>
-        <StatusStepper status={ticket.status} canManage={canManage} onSelect={(status) => updateTicket(ticket.id, { status })} />
+        <StatusStepper
+          status={ticket.status}
+          canManage={canEdit}
+          blockedSteps={hasFixPhoto ? [] : ['resolved', 'closed']}
+          onSelect={(status) => updateTicket(ticket.id, { status })}
+        />
+        {!hasFixPhoto && (
+          <p className="mt-2 text-[11px] text-ink-muted">Add a fix photo below before this ticket can be resolved or closed.</p>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -142,7 +166,7 @@ export const TicketDetailPage = () => {
 
         <Card className="p-4">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Assigned worker</p>
-          {canManage ? (
+          {canEdit ? (
             <Select
               value={ticket.assignedWorkerId ?? ''}
               onChange={(e) => updateTicket(ticket.id, { assigned_worker_id: e.target.value || null })}
@@ -157,7 +181,7 @@ export const TicketDetailPage = () => {
 
       <Card className="p-4">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">Resolution notes</p>
-        {canManage ? (
+        {canEdit ? (
           <div className="space-y-2">
             <Textarea rows={3} value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="What was done to resolve this — visible once the ticket moves to Resolved or Closed." />
             {notesDirty && (
@@ -174,7 +198,7 @@ export const TicketDetailPage = () => {
       <Card>
         <CardHeader title="Cost log" subtitle={`Total so far: ${ticket.totalCost.toLocaleString()}`} />
         <div className="space-y-3 border-t border-line p-4">
-          {canManage && <CostLogForm ticketId={ticket.id} />}
+          {canEdit && <CostLogForm ticketId={ticket.id} />}
           {ticket.costs.length ? (
             <div className="space-y-1.5">
               {ticket.costs.map((cost) => (
@@ -199,21 +223,56 @@ export const TicketDetailPage = () => {
       </Card>
 
       <Card>
-        <CardHeader title="Photos" />
-        <div className="space-y-3 border-t border-line p-4">
-          {canManage && <FileDropzone accept="image/*" hint="JPG or PNG, up to 20MB" onFileSelected={(file) => file && uploadPhoto({ file })} compact />}
-          {isUploading && <p className="text-[11px] text-ink-muted">Uploading…</p>}
-          {ticket.photos.length > 0 ? (
+        <CardHeader title="Issue photos" subtitle="Proof captured when this ticket was opened — read only" />
+        <div className="border-t border-line p-4">
+          {issuePhotos.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {ticket.photos.map((photo) => (
-                <img key={photo.id} src={photo.url} alt={photo.caption || 'Ticket photo'} className="size-24 rounded-lg border border-line object-cover" />
+              {issuePhotos.map((photo) => (
+                <img key={photo.id} src={photo.url} alt={photo.caption || 'Issue photo'} className="size-24 rounded-lg border border-line object-cover" />
               ))}
             </div>
           ) : (
-            <p className="text-[12px] text-ink-muted">No photos yet.</p>
+            <p className="text-[12px] text-ink-muted">No issue photos recorded.</p>
           )}
         </div>
       </Card>
+
+      <Card>
+        <CardHeader title="Fix photos" subtitle="Required before this ticket can be resolved or closed" />
+        <div className="space-y-3 border-t border-line p-4">
+          {canEdit && (
+            <FileDropzone
+              accept="image/*"
+              hint="JPG or PNG, up to 20MB"
+              onFileSelected={(file) => file && uploadPhoto({ file, stage: 'fix' })}
+              compact
+            />
+          )}
+          {isUploading && <p className="text-[11px] text-ink-muted">Uploading…</p>}
+          {fixPhotos.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {fixPhotos.map((photo) => (
+                <img key={photo.id} src={photo.url} alt={photo.caption || 'Fix photo'} className="size-24 rounded-lg border border-line object-cover" />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-ink-muted">No fix photos yet.</p>
+          )}
+        </div>
+      </Card>
+
+      {otherPhotos.length > 0 && (
+        <Card>
+          <CardHeader title="Other photos" />
+          <div className="border-t border-line p-4">
+            <div className="flex flex-wrap gap-2">
+              {otherPhotos.map((photo) => (
+                <img key={photo.id} src={photo.url} alt={photo.caption || 'Ticket photo'} className="size-24 rounded-lg border border-line object-cover" />
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 };

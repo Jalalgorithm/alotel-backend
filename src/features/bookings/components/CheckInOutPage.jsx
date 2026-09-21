@@ -24,6 +24,7 @@ import { useContractForBooking } from '../hooks/useContracts';
 import { CONTRACT_REQUIRED_MIN_NIGHTS, CONTRACT_STATUS_LABEL } from '@/lib/contractSchema';
 import { ROOM_AREAS } from '@/lib/checkoutSchema';
 import { formatRelative } from '@/utils/format';
+import { RoomPhotoGallery } from './RoomPhotoGallery';
 
 const MIN_PHOTOS = 4;
 const MAX_MB = 10;
@@ -31,43 +32,12 @@ const CHECKIN_STEPS = ['Photograph unit', 'Guest acknowledgement', 'Complete'];
 const CHECKOUT_STEPS = ['Photograph unit', 'Complete'];
 const today = () => new Date().toISOString().slice(0, 10);
 
-const roomLabel = (value) => ROOM_AREAS.find((room) => room.value === value)?.label ?? value;
-
 /** Guess a room area from the file name, the same way the property-photo picker does. */
 const normalise = (value) => value.toLowerCase().replace(/[^a-z]/g, '');
 const guessRoomArea = (name = '') => {
   const flat = normalise(name);
   const match = ROOM_AREAS.find((room) => room.value !== 'other' && flat.includes(normalise(room.label)));
   return match?.value ?? 'other';
-};
-
-/** Room-inspection photos already saved server-side, grouped by area. */
-const UploadedGallery = ({ photosByArea }) => {
-  const areas = Object.entries(photosByArea).filter(([, photos]) => (photos ?? []).length > 0);
-  if (!areas.length) return null;
-
-  return (
-    <div className="mb-4 space-y-3">
-      {areas.map(([area, photos]) => (
-        <div key={area}>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">{roomLabel(area)}</p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {photos.map((photo) => (
-              <a
-                key={photo.id}
-                href={photo.file}
-                target="_blank"
-                rel="noreferrer"
-                className="block overflow-hidden rounded-lg border border-line"
-              >
-                <img src={photo.file} alt={photo.caption || roomLabel(area)} className="aspect-square w-full object-cover" loading="lazy" />
-              </a>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 };
 
 /**
@@ -408,15 +378,30 @@ export const CheckInOutPage = () => {
                       Photograph each area — these are server-timestamped and form the condition record.
                     </p>
 
-                    <UploadedGallery photosByArea={photosByArea} />
+                    <div className="space-y-3">
+                      <Card>
+                        <CardHeader title="Photographed" subtitle={`${capturedCount} of ${ROOM_AREAS.length} areas covered`} />
+                        <div className="border-t border-line p-3">
+                          <RoomPhotoGallery
+                            photos={inspection?.[stage]?.photos ?? []}
+                            emptyLabel="Nothing photographed yet — add photos below."
+                          />
+                        </div>
+                      </Card>
 
-                    <InspectionPhotoStaging
-                      photos={stagedPhotos}
-                      onUpdate={updateStagedPhoto}
-                      onRemove={removeStagedPhoto}
-                      onAddFiles={addStagedFiles}
-                      onUploadAll={uploadAllStaged}
-                    />
+                      <Card>
+                        <CardHeader title="Adding now" subtitle="Staged locally until you tap Upload" />
+                        <div className="border-t border-line p-3">
+                          <InspectionPhotoStaging
+                            photos={stagedPhotos}
+                            onUpdate={updateStagedPhoto}
+                            onRemove={removeStagedPhoto}
+                            onAddFiles={addStagedFiles}
+                            onUploadAll={uploadAllStaged}
+                          />
+                        </div>
+                      </Card>
+                    </div>
 
                     <Alert variant={capturedCount >= MIN_PHOTOS ? 'success' : 'warn'} className="mt-4">
                       {capturedCount} of {ROOM_AREAS.length} areas photographed —{' '}

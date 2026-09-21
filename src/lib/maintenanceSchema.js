@@ -135,6 +135,7 @@ export const toTicketCostPayload = (values) => ({
 export const toTicketPhoto = (raw) => ({
   id: raw.id,
   url: raw.file,
+  stage: raw.stage ?? 'progress',
   caption: raw.caption ?? '',
   uploadedBy: raw.uploaded_by,
   takenAtServer: raw.taken_at_server,

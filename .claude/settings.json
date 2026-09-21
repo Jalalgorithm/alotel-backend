@@ -28,7 +28,23 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('id:', d.get\\('id'\\)\\); print\\('cleaningFee:', d.get\\('cleaningFee'\\)\\); print\\('securityDeposit:', d.get\\('securityDeposit'\\)\\); print\\(d.get\\('error'\\) if 'error' in d else ''\\)\")",
       "Bash(curl -s http://localhost:8000/api/v1/operations/maintenance/tickets/?property=40e65e66-e5b9-4d22-9e10-b68497a30971 -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
       "Bash(curl -s http://localhost:8000/api/v1/bookings/admin/list/?page_size=5 -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
-      "Bash(curl -s http://localhost:8000/api/v1/bookings/admin/b9907ebf-85a7-4e2e-87a3-d34dc042a41f/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')"
+      "Bash(curl -s http://localhost:8000/api/v1/bookings/admin/b9907ebf-85a7-4e2e-87a3-d34dc042a41f/ -H 'Authorization: Bearer __CMDSUB_OUTPUT__')",
+      "Bash(\"C:\\\\Users\\\\dell\\\\Desktop\\\\works\\\\Syntechtic\\\\Alotel\\\\New folder\\\\aotel-backend\\\\.venv\\\\Scripts\\\\python.exe\" --version)",
+      "Bash(\"./.venv/Scripts/python.exe\" manage.py showmigrations --plan)",
+      "Bash(\"./.venv/Scripts/python.exe\" create_staff_user.py --email e2e-test@alotel.local --password \"E2eTest!2026Aa\" --first-name E2E --last-name Test --role super_admin)",
+      "Bash(\"./.venv/Scripts/python.exe\" manage.py runserver 127.0.0.1:8000 --noreload)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(curl -sf http://127.0.0.1:8000/api/v1/health/)",
+      "Bash(npm run *)",
+      "Bash(curl -sf http://127.0.0.1:5174/)",
+      "Bash(tasklist)",
+      "Bash(curl -sf http://localhost:5174/)",
+      "Bash(npx --yes playwright install chromium --with-deps)",
+      "Bash(./.venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(node \"C:\\\\Users\\\\dell\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-dell-Desktop-works-Syntechtic-Alotel-New-folder-alotel\\\\cd15c625-da79-4ee1-ac1e-62ff90a8d29d\\\\scratchpad\\\\e2e.mjs\")",
+      "Bash(node e2e.mjs)",
+      "Bash(\"./.venv/Scripts/python.exe\" manage.py migrate compliance bookings)",
+      "Bash(grep -Hm1 ^description: 'C:\\\\Users\\\\dell\\\\Desktop\\\\works\\\\Syntechtic\\\\Alotel\\\\New folder\\\\alotel/.claude/skills/*/SKILL.md')"
     ],
     "additionalDirectories": [
       "c:\\Users\\dell\\Desktop\\works\\Syntechtic\\Alotel\\New folder\\aotel-backend\\aotel"

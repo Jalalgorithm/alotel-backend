@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertTriangle, Check, FileText, ImageOff, Plus } from 'lucide-react';
+import { AlertTriangle, Check, FileText, Plus } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -25,51 +25,30 @@ import {
   useInspectionState,
   useUpdateDamageAssessment,
 } from '../hooks/useBookings';
+import { RoomPhotoGallery } from './RoomPhotoGallery';
 
 const roomLabel = (value) => ROOM_AREAS.find((r) => r.value === value)?.label ?? value;
 const severityLabel = (value) => DAMAGE_SEVERITIES.find((s) => s.value === value)?.label ?? value;
 
-/** One stage's real inspection photos, grouped by room — replaces the old page's icon-tile placeholders. */
-const PhotoStage = ({ title, stage }) => {
-  const areas = Object.entries(stage?.photosByArea ?? {}).filter(([, photos]) => photos.length);
-
-  return (
-    <Card>
-      <CardHeader
-        title={title}
-        subtitle={stage?.guestAcknowledged ? `Guest acknowledged ${formatDate(stage.guestAcknowledgedAt, 'd MMM, HH:mm')}` : 'Not yet acknowledged by guest'}
-        action={
-          stage?.guestAcknowledged ? (
-            <Badge variant="ok" icon={<Check className="size-3" aria-hidden="true" />}>Acknowledged</Badge>
-          ) : (
-            <Badge variant="neutral">Pending</Badge>
-          )
-        }
-      />
-      <div className="space-y-3 border-t border-line p-4">
-        {areas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-6 text-ink-muted">
-            <ImageOff className="size-5" aria-hidden="true" />
-            <p className="text-[11.5px]">No photos uploaded for this stage.</p>
-          </div>
+/** One stage's real inspection photos — same gallery the check-in/check-out capture flow uses (`CheckInOutPage`), so the review view matches it exactly. */
+const PhotoStage = ({ title, stage }) => (
+  <Card>
+    <CardHeader
+      title={title}
+      subtitle={stage?.guestAcknowledged ? `Guest acknowledged ${formatDate(stage.guestAcknowledgedAt, 'd MMM, HH:mm')}` : 'Not yet acknowledged by guest'}
+      action={
+        stage?.guestAcknowledged ? (
+          <Badge variant="ok" icon={<Check className="size-3" aria-hidden="true" />}>Acknowledged</Badge>
         ) : (
-          areas.map(([area, photos]) => (
-            <div key={area}>
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">{roomLabel(area)}</p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {photos.map((photo) => (
-                  <a key={photo.id} href={photo.file} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-line">
-                    <img src={photo.file} alt={photo.caption || roomLabel(area)} className="aspect-square w-full object-cover" loading="lazy" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </Card>
-  );
-};
+          <Badge variant="neutral">Pending</Badge>
+        )
+      }
+    />
+    <div className="border-t border-line p-4">
+      <RoomPhotoGallery photos={stage?.photos ?? []} emptyLabel="No photos uploaded for this stage." />
+    </div>
+  </Card>
+);
 
 const AddDamageForm = ({ bookingId, currency, onDone }) => {
   const { createDamage, isPending } = useCreateDamageAssessment(bookingId);

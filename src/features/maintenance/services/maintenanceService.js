@@ -89,8 +89,15 @@ const realMaintenance = {
     return toTicket(data);
   },
 
+  /** Multipart, always — `photos` (required proof of the issue, `stage='issue'` server-side) rides in the same request as the ticket fields. */
   async createTicket(values) {
-    const { data } = await apiClient.post('/operations/maintenance/tickets/', toTicketPayload(values));
+    const form = new FormData();
+    Object.entries(toTicketPayload(values)).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') form.append(key, value);
+    });
+    (values.photos ?? []).forEach((photo) => form.append('photos', photo.file));
+
+    const { data } = await apiClient.post('/operations/maintenance/tickets/', form);
     return toTicket(data);
   },
 
@@ -117,10 +124,12 @@ const realMaintenance = {
     return toTicketCost(data);
   },
 
-  async uploadTicketPhoto(ticketId, { file, caption = '' }) {
+  /** `stage` defaults to 'progress' server-side when omitted — pass 'fix' to satisfy the resolve/close proof requirement. */
+  async uploadTicketPhoto(ticketId, { file, caption = '', stage }) {
     const form = new FormData();
     form.append('file', file);
-    form.append('caption', caption);
+    if (stage) form.append('stage', stage);
+    if (caption) form.append('caption', caption);
 
     const { data } = await apiClient.post(`/operations/maintenance/tickets/${ticketId}/photos/`, form);
     return toTicketPhoto(data);

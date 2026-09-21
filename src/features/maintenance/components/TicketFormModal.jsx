@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { StagedPhotoPicker } from '@/components/shared/StagedPhotoPicker';
 import { maintenanceTicketSchema } from '@/utils/validators';
 import { TICKET_PRIORITIES } from '@/lib/maintenanceSchema';
 import { useProperties } from '@/features/properties/hooks/useProperties';
@@ -39,11 +40,33 @@ export const TicketFormModal = ({ isOpen, onClose, propertyId, propertyName, spa
     formState: { errors },
   } = useForm({ resolver: zodResolver(maintenanceTicketSchema), defaultValues: emptyValues(propertyId, spaceId) });
 
+  // Required proof of the reported issue — kept as local staged state (not a
+  // react-hook-form field) the same way the property wizard stages photos,
+  // since it's a list of in-progress `File`s rather than a form value.
+  const [photos, setPhotos] = useState([]);
+  const [photosError, setPhotosError] = useState('');
+
+  const clearPhotos = () => {
+    photos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    setPhotos([]);
+    setPhotosError('');
+  };
+
   useEffect(() => {
-    if (isOpen) reset(emptyValues(propertyId, spaceId));
+    if (isOpen) {
+      reset(emptyValues(propertyId, spaceId));
+      clearPhotos();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-stage when the modal opens for a different target
   }, [isOpen, propertyId, spaceId, reset]);
 
-  const submit = (values) => createTicket(values, { onSuccess: onClose });
+  const submit = (values) => {
+    if (!photos.length) {
+      setPhotosError('At least one photo proving the issue is required.');
+      return;
+    }
+    createTicket({ ...values, photos }, { onSuccess: onClose });
+  };
 
   return (
     <Modal
@@ -86,6 +109,21 @@ export const TicketFormModal = ({ isOpen, onClose, propertyId, propertyName, spa
           options={(workersData?.items ?? []).map((w) => ({ value: w.id, label: w.name }))}
           {...register('assignedWorkerId')}
         />
+
+        <div>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-ink-muted">
+            Proof of the issue
+          </p>
+          <StagedPhotoPicker
+            photos={photos}
+            onChange={(next) => {
+              setPhotos(next);
+              if (next.length) setPhotosError('');
+            }}
+            disabled={isPending}
+          />
+          {photosError && <p className="mt-1.5 text-[11px] text-danger">{photosError}</p>}
+        </div>
       </form>
     </Modal>
   );
