@@ -15,7 +15,7 @@ import { getErrorCode, getErrorMessage } from '@/utils/errors';
 import { useAuth } from '@/features/auth';
 import { CAPABILITIES } from '@/lib/mock/people';
 import { paths } from '@/routes/paths';
-import { cellState } from '@/lib/contractSchema';
+import { cellState, hasSignatureField } from '@/lib/contractSchema';
 import {
   useContractCoverage,
   useDeleteTemplate,
@@ -59,7 +59,9 @@ const CoverageCell = ({ cell, onOpen }) => {
             {cell.published.name} · v{cell.published.version}
           </span>
           <span className="text-[10px] opacity-80">
-            {state === 'published-short' ? 'Looks like a placeholder' : formatDate(cell.published.publishedAt)}
+            {state === 'published-short'
+              ? `Short — ${cell.published.contentLength.toLocaleString()} characters`
+              : formatDate(cell.published.publishedAt)}
           </span>
         </>
       )}
@@ -86,6 +88,14 @@ const CellDetailModal = ({ cell, onClose, canAuthor }) => {
   const published = templates.find((t) => t.status === 'published') ?? null;
   const drafts = templates.filter((t) => t.status === 'draft');
   const retired = templates.filter((t) => t.status === 'retired');
+
+  /**
+   * Long stays are signed for real, and the API refuses to publish one without
+   * a `{{ signature }}` block. Checked here too: publishing straight from this
+   * grid skips the editor, which is the one place that used to warn.
+   */
+  const requiresSignature = cell?.mode === 'signature';
+  const missingSignature = (template) => requiresSignature && !hasSignatureField(template.content);
 
   const startRetire = async (template) => {
     setRetireTarget(template);
@@ -127,6 +137,11 @@ const CellDetailModal = ({ cell, onClose, canAuthor }) => {
           {template.contractsIssued > 0 ? ` · used on ${template.contractsIssued} contract${template.contractsIssued === 1 ? '' : 's'}` : ''}
           {template.publishedAt ? ` · published ${formatDate(template.publishedAt)}` : ''}
         </p>
+        {missingSignature(template) && (
+          <Badge variant="warn" className="mt-1.5">
+            No {'{{ signature }}'} block
+          </Badge>
+        )}
       </div>
       <div className="flex shrink-0 gap-1.5">{actions}</div>
     </div>
@@ -184,7 +199,18 @@ const CellDetailModal = ({ cell, onClose, canAuthor }) => {
                             <Button size="xs" to={paths.contractTemplateEdit(draft.id) + `?region=${cell.region}&stayType=${cell.stayType}`}>
                               Edit
                             </Button>
-                            <Button size="xs" variant="primary" isLoading={isPublishing} onClick={() => setPublishTarget(draft)}>
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              isLoading={isPublishing}
+                              disabled={missingSignature(draft)}
+                              title={
+                                missingSignature(draft)
+                                  ? 'This draft has no {{ signature }} block — open it in the editor and add one first'
+                                  : undefined
+                              }
+                              onClick={() => setPublishTarget(draft)}
+                            >
                               Publish
                             </Button>
                             <Button size="xs" variant="ghost" aria-label={`Delete ${draft.name}`} onClick={() => setDeleteTarget(draft)}>

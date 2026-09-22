@@ -199,7 +199,7 @@ export const CheckInOutPage = () => {
   const list = tab === 'checkin' ? (arrivals?.items ?? []) : departures.items;
 
   const { data: inspection } = useInspectionState(selected?.id);
-  const { uploadPhoto } = useUploadInspectionPhoto();
+  const { uploadPhotoAsync } = useUploadInspectionPhoto();
   const { completeCheckIn, isPending: isCompletingCheckIn } = useCompleteCheckIn();
   const { completeCheckOut, isPending: isCompletingCheckOut } = useCompleteCheckOut();
 
@@ -260,22 +260,32 @@ export const CheckInOutPage = () => {
   const updateStagedPhoto = (id, patch) =>
     setStagedPhotos((current) => current.map((photo) => (photo.id === id ? { ...photo, ...patch } : photo)));
 
-  const uploadStagedPhoto = (photo) => {
-    updateStagedPhoto(photo.id, { status: 'uploading' });
-    uploadPhoto(
-      { bookingId: selected.id, stage, roomArea: photo.roomArea, file: photo.file, caption: photo.caption },
-      {
-        onSuccess: () => {
-          URL.revokeObjectURL(photo.previewUrl);
-          setStagedPhotos((current) => current.filter((entry) => entry.id !== photo.id));
-        },
-        onError: () => updateStagedPhoto(photo.id, { status: 'error' }),
-      },
-    );
-  };
+  /**
+   * One request per photo — the API has no bulk variant — awaited in sequence
+   * rather than fired off in a loop. A batch of `mutate` calls shares one
+   * mutation observer and each call discards the previous call's callbacks, so
+   * firing them together left every row but the last stuck on its spinner
+   * even though the upload itself had succeeded.
+   */
+  const uploadAllStaged = async () => {
+    const queue = stagedPhotos.filter((photo) => photo.status !== 'uploading');
 
-  const uploadAllStaged = () => {
-    stagedPhotos.filter((photo) => photo.status !== 'uploading').forEach(uploadStagedPhoto);
+    for (const photo of queue) {
+      updateStagedPhoto(photo.id, { status: 'uploading' });
+      try {
+        await uploadPhotoAsync({
+          bookingId: selected.id,
+          stage,
+          roomArea: photo.roomArea,
+          file: photo.file,
+          caption: photo.caption,
+        });
+        URL.revokeObjectURL(photo.previewUrl);
+        setStagedPhotos((current) => current.filter((entry) => entry.id !== photo.id));
+      } catch {
+        updateStagedPhoto(photo.id, { status: 'error' });
+      }
+    }
   };
 
   const complete = () => {

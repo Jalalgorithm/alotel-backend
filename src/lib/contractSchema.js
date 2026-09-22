@@ -73,9 +73,9 @@ export const TEMPLATE_STATUS_LABEL = {
 };
 
 /**
- * A published template under this many characters is almost certainly a
- * placeholder rather than real legal text — flagged as a warning on the
- * coverage grid, not blocked. One constant, easy to retune later.
+ * A published template under this many characters is short for real legal
+ * text and worth a second look — flagged as a warning on the coverage grid,
+ * never blocked. One constant, easy to retune later.
  */
 export const SHORT_TEMPLATE_THRESHOLD = 1500;
 
@@ -118,34 +118,42 @@ export const toTemplateEditPayload = ({ name, content }) => {
 };
 
 /** `GET /contracts/templates/coverage/` — the 25-cell grid. */
-export const toCoverage = (raw) => ({
-  contractRequiredMinNights: raw.contract_required_min_nights ?? CONTRACT_REQUIRED_MIN_NIGHTS,
-  // The API's `regions` entries are `{code, label}` descriptors; every consumer
-  // (grid lookups, the Contracts board's region filter) keys off the plain
-  // code string, same as `cells[].region` below — normalize to that shape.
-  regions: (raw.regions ?? TEMPLATE_REGIONS.map((r) => r.value)).map((r) => r?.code ?? r),
-  bands: (raw.bands ?? []).map((band) => ({
+export const toCoverage = (raw) => {
+  const bands = (raw.bands ?? []).map((band) => ({
     stayType: band.stay_type,
     stayTypeLabel: stayTypeLabel(band.stay_type),
     mode: band.mode, // 'click_accept' | 'signature'
-  })),
-  cells: (raw.cells ?? []).map((cell) => ({
-    region: cell.region,
-    regionLabel: regionLabel(cell.region),
-    stayType: cell.stay_type,
-    stayTypeLabel: stayTypeLabel(cell.stay_type),
-    published: cell.published
-      ? {
-          id: cell.published.id,
-          name: cell.published.name,
-          version: cell.published.version,
-          publishedAt: cell.published.published_at,
-          contentLength: cell.published.content_length ?? 0,
-        }
-      : null,
-    draftCount: cell.draft_count ?? 0,
-  })),
-});
+  }));
+
+  return {
+    contractRequiredMinNights: raw.contract_required_min_nights ?? CONTRACT_REQUIRED_MIN_NIGHTS,
+    // The API's `regions` entries are `{code, label}` descriptors; every consumer
+    // (grid lookups, the Contracts board's region filter) keys off the plain
+    // code string, same as `cells[].region` below — normalize to that shape.
+    regions: (raw.regions ?? TEMPLATE_REGIONS.map((r) => r.value)).map((r) => r?.code ?? r),
+    bands,
+    cells: (raw.cells ?? []).map((cell) => ({
+      region: cell.region,
+      regionLabel: regionLabel(cell.region),
+      stayType: cell.stay_type,
+      stayTypeLabel: stayTypeLabel(cell.stay_type),
+      // The API carries `mode` on the band, not the cell, but the grid reads it
+      // per cell — without this every cell claimed to be a tick-box agreement,
+      // including the long stays that legally require a signature.
+      mode: bands.find((band) => band.stayType === cell.stay_type)?.mode ?? null,
+      published: cell.published
+        ? {
+            id: cell.published.id,
+            name: cell.published.name,
+            version: cell.published.version,
+            publishedAt: cell.published.published_at,
+            contentLength: cell.published.content_length ?? 0,
+          }
+        : null,
+      draftCount: cell.draft_count ?? 0,
+    })),
+  };
+};
 
 /** One of the 25 cells' overall state, for the grid's colour/label — matches the doc's four states. */
 export const cellState = (cell) => {

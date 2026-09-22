@@ -151,7 +151,18 @@ export const useUploadInspectionPhoto = () => {
     onError: (error) => toast.error('Could not upload the photo', getErrorMessage(error)),
   });
 
-  return { uploadPhoto: mutation.mutate, isPending: mutation.isPending, pendingVariables: mutation.variables };
+  /**
+   * `uploadPhotoAsync` is the one callers should reach for when uploading more
+   * than one photo: batched `mutate` calls share a single mutation observer, and
+   * each new call drops the previous call's `onSuccess`/`onError`, so only the
+   * last one in a batch ever reports back. Awaiting per photo sidesteps that.
+   */
+  return {
+    uploadPhoto: mutation.mutate,
+    uploadPhotoAsync: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    pendingVariables: mutation.variables,
+  };
 };
 
 /** Transitions a booking `confirmed`/`active` → `active`. */
