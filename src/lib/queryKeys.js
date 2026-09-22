@@ -29,8 +29,6 @@ export const queryKeys = {
     videos: (id) => ['properties', 'videos', id],
     availability: (id) => ['properties', 'availability', id],
     guidebook: (id) => ['properties', 'guidebook', id],
-    units: (filters = {}) => ['properties', 'units', filters],
-    amenities: () => ['properties', 'amenities'],
     reviews: (filters = {}) => ['properties', 'reviews', filters],
     discounts: () => ['properties', 'discounts'],
     pricingConfigs: () => ['properties', 'pricing-configs'],

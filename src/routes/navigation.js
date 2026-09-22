@@ -28,8 +28,6 @@ export const NAV_GROUPS = [
     label: 'Property Management',
     items: [
       { id: 'properties', label: 'Properties', to: paths.properties, icon: 'Building2', capability: C.propertiesView },
-      { id: 'units', label: 'Units & Rooms', to: paths.units, icon: 'DoorOpen', capability: C.unitsView, badge: 'units' },
-      { id: 'amenities', label: 'Amenities', to: paths.amenities, icon: 'Sparkles', capability: C.amenitiesManage },
       { id: 'pricing', label: 'Pricing & Availability', to: paths.pricing, icon: 'Tags', capability: C.pricingManage },
       { id: 'property-review', label: 'Property Review', to: paths.propertyReview, icon: 'Star', capability: C.reviewsModerate },
     ],

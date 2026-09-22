@@ -1,6 +1,6 @@
 /**
- * Property catalogue: listings, units, amenities, guest reviews and the
- * pricing rules that sit on top of them.
+ * Property catalogue: listings, guest reviews and the pricing rules that sit
+ * on top of them.
  */
 
 export const properties = [
@@ -20,52 +20,6 @@ export const PROPERTY_TYPES = ['All', 'Studio', '1-Bed Flat', '2-Bed Flat', '3-B
 export const CLASSIFICATIONS = ['Alotel', 'Third-Party', 'Third-Party Social'];
 export const COUNTRIES = ['Nigeria', 'Spain', 'UK', 'UAE', 'USA'];
 
-/* -------------------------------------------------------------------------- */
-/* Units & rooms                                                               */
-/* -------------------------------------------------------------------------- */
-
-export const units = [
-  { id: 'U-1A', label: 'Unit 1A', propertyId: 'AS-1043', property: 'Studio Apartment', floor: '1st', status: 'Needs Cleaning', note: 'Checkout today 10:00', beds: 1, baths: 1, lastCleaned: '2026-08-02T11:00:00.000Z' },
-  { id: 'U-2B', label: 'Unit 2B', propertyId: 'AS-1049', property: 'VI Luxury Flat', floor: '2nd', status: 'Ready', note: 'Check-in Aug 5, 15:00', beds: 2, baths: 2, lastCleaned: '2026-08-04T07:20:00.000Z' },
-  { id: 'U-3C', label: 'Unit 3C', propertyId: 'AS-1047', property: 'Canary Wharf Studio', floor: '3rd', status: 'Occupied', note: 'Guest until Aug 12', beds: 1, baths: 1, lastCleaned: '2026-08-01T09:30:00.000Z' },
-  { id: 'U-4A', label: 'Unit 4A', propertyId: 'AS-1045', property: 'Gothic Quarter 2-Bed', floor: '4th', status: 'Maintenance', note: 'Blocked — leaking tap', beds: 2, baths: 1, lastCleaned: '2026-07-30T13:00:00.000Z' },
-  { id: 'U-5B', label: 'Unit 5B', propertyId: 'AS-1043', property: 'Studio Apartment', floor: '5th', status: 'Ready', note: 'Available', beds: 1, baths: 1, lastCleaned: '2026-08-03T16:10:00.000Z' },
-  { id: 'U-6D', label: 'Unit 6D', propertyId: 'AS-1046', property: 'Dubai Marina Suite', floor: '6th', status: 'Needs Cleaning', note: 'Checkout today 11:00', beds: 2, baths: 2, lastCleaned: '2026-08-01T12:00:00.000Z' },
-  { id: 'U-7E', label: 'Unit 7E', propertyId: 'AS-1049', property: 'VI Luxury Flat', floor: '7th', status: 'Occupied', note: 'Guest until Aug 9', beds: 2, baths: 2, lastCleaned: '2026-08-02T08:45:00.000Z' },
-  { id: 'U-8F', label: 'Unit 8F', propertyId: 'AS-1048', property: 'Manhattan Studio', floor: '8th', status: 'Ready', note: 'Available', beds: 1, baths: 1, lastCleaned: '2026-08-03T18:20:00.000Z' },
-  { id: 'U-9A', label: 'Unit 9A', propertyId: 'AS-1042', property: '3-Bedroom Penthouse', floor: 'PH', status: 'Ready', note: 'Available', beds: 3, baths: 3, lastCleaned: '2026-08-04T06:00:00.000Z' },
-  { id: 'U-10B', label: 'Unit 10B', propertyId: 'AS-1044', property: '2-Bedroom Apartment', floor: '2nd', status: 'Needs Cleaning', note: 'Checkout today 12:00', beds: 2, baths: 2, lastCleaned: '2026-08-01T10:15:00.000Z' },
-];
-
-export const UNIT_STATUSES = ['Ready', 'Needs Cleaning', 'Occupied', 'Maintenance'];
-
-/* -------------------------------------------------------------------------- */
-/* Amenities                                                                   */
-/* -------------------------------------------------------------------------- */
-
-export const amenityGroups = [
-  {
-    id: 'tech',
-    label: 'Tech & Comfort',
-    items: ['High-speed WiFi', 'Smart TV', 'Air conditioning', 'Central heating', 'Smart thermostat', 'Washing machine', 'Dryer', 'Dishwasher'],
-  },
-  {
-    id: 'kitchen',
-    label: 'Kitchen',
-    items: ['Full kitchen', 'Microwave', 'Coffee machine', 'Dining table', 'Plates & cookware'],
-  },
-  {
-    id: 'security',
-    label: 'Security',
-    items: ['Smart lock / keyless entry', 'Video doorbell', 'Alarm system', 'CCTV (exterior)', 'Safe / lockbox'],
-  },
-  {
-    id: 'building',
-    label: 'Building & Outdoor',
-    items: ['Secure parking', 'Balcony', 'Garden', 'Pool access', 'Gym access', 'Concierge', 'Bike storage'],
-  },
-];
-
 export const accessibilityFeatures = [
   'Step-free / ramped entry',
   'Wheelchair accessible throughout',
@@ -81,20 +35,6 @@ export const accessibilityFeatures = [
   'Lever door handles',
   'Hearing loop',
   'Service animals allowed',
-];
-
-/** Which amenities are currently enabled portfolio-wide. */
-export const enabledAmenities = [
-  'High-speed WiFi',
-  'Smart TV',
-  'Air conditioning',
-  'Washing machine',
-  'Full kitchen',
-  'Coffee machine',
-  'Smart lock / keyless entry',
-  'CCTV (exterior)',
-  'Secure parking',
-  'Concierge',
 ];
 
 /* -------------------------------------------------------------------------- */

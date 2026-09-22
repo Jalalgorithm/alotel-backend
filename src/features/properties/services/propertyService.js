@@ -1,7 +1,6 @@
 import { apiClient } from '@/lib/apiClient';
 import { ApiError } from '@/utils/errors';
-import { clone, createId, delay, paginate } from '@/lib/mock/utils';
-import { jsonStorage } from '@/lib/storage';
+import { createId } from '@/lib/mock/utils';
 import { toApiPayload, toGuidebook, toGuidebookPayload, toPage, toProperty } from '@/lib/propertySchema';
 import {
   toDiscountRule,
@@ -11,75 +10,8 @@ import {
   toPricingRule,
   toPricingRulePayload,
 } from '@/lib/pricingSchema';
-import { amenityGroups, enabledAmenities, units } from '@/lib/mock/catalogue';
 
-/**
- * Property catalogue service — listings, units, amenities, review moderation
- * and pricing rules.
- *
- * Units and Amenities have no backend concept at all yet, so they stay on a
- * localStorage-backed fixture (mutations persist across reloads) while
- * everything else in this file talks to the real API.
- */
-
-const KEYS = {
-  units: 'alotel.admin.mock.units',
-  amenities: 'alotel.admin.mock.amenities',
-};
-
-const seeded = (key, source) => {
-  const rows = jsonStorage.read(key, null);
-  if (rows) return rows;
-  const value = clone(source);
-  jsonStorage.write(key, value);
-  return value;
-};
-
-const readUnits = () => seeded(KEYS.units, units);
-const readAmenities = () => seeded(KEYS.amenities, enabledAmenities);
-
-const mockProperties = {
-  /* ------------------------------------------------------------------- units */
-  async listUnits(params) {
-    await delay(280);
-    return paginate(readUnits(), params, {
-      searchFields: ['label', 'property'],
-      filterFields: ['status'],
-    });
-  },
-
-  async setUnitStatus(id, status) {
-    await delay(350);
-
-    const rows = readUnits();
-    const index = rows.findIndex((entry) => entry.id === id);
-    if (index < 0) throw new ApiError('Unit not found.', 404);
-
-    rows[index] = {
-      ...rows[index],
-      status,
-      lastCleaned: status === 'Ready' ? new Date().toISOString() : rows[index].lastCleaned,
-      note: status === 'Ready' ? 'Available' : status === 'Maintenance' ? 'Blocked by admin' : rows[index].note,
-    };
-    jsonStorage.write(KEYS.units, rows);
-    return clone(rows[index]);
-  },
-
-  /* --------------------------------------------------------------- amenities */
-  async getAmenities() {
-    await delay(200);
-    return { groups: clone(amenityGroups), enabled: clone(readAmenities()) };
-  },
-
-  async toggleAmenity(name) {
-    await delay(250);
-
-    const enabled = readAmenities();
-    const next = enabled.includes(name) ? enabled.filter((item) => item !== name) : [...enabled, name];
-    jsonStorage.write(KEYS.amenities, next);
-    return clone(next);
-  },
-};
+/** Property catalogue service — listings, review moderation and pricing rules. */
 
 /**
  * Translate the portal's filter state into the API's query parameters.
@@ -472,14 +404,6 @@ export const propertyService = {
   updateProperty: (id, patch) => realProperties.update(id, patch),
   deleteProperty: (id) => realProperties.remove(id),
   setPropertyStatus: (id, status) => realProperties.setStatus(id, status),
-
-  /** Units — no backend concept exists yet; stays on the localStorage fixture. */
-  getUnits: (params) => mockProperties.listUnits(params),
-  setUnitStatus: (id, status) => mockProperties.setUnitStatus(id, status),
-
-  /** Amenities — no backend concept exists yet; stays on the localStorage fixture. */
-  getAmenities: () => mockProperties.getAmenities(),
-  toggleAmenity: (name) => mockProperties.toggleAmenity(name),
 
   getPropertyReviews: (propertyId) => realProperties.listPropertyReviews(propertyId),
   respondToReview: (id, body) => realProperties.respondToReview(id, body),

@@ -19,9 +19,6 @@ export const CAPABILITIES = {
 
   propertiesView: 'properties.view',
   propertiesManage: 'properties.manage',
-  unitsView: 'units.view',
-  unitsManage: 'units.manage',
-  amenitiesManage: 'amenities.manage',
   pricingManage: 'pricing.manage',
   reviewsModerate: 'reviews.moderate',
 
@@ -85,9 +82,6 @@ export const ROLES = [
       C.dashboardView,
       C.notificationsView,
       C.propertiesView,
-      C.unitsView,
-      C.unitsManage,
-      C.amenitiesManage,
       C.reviewsModerate,
       C.bookingsView,
       C.bookingsManage,
@@ -118,7 +112,7 @@ export const ROLES = [
     description:
       'Room status only. Sees no guest personal data, no bookings, no financials — the minimum needed to service a unit.',
     color: '#eb6834',
-    capabilities: [C.notificationsView, C.housekeepingView, C.housekeepingManage, C.unitsView, C.helpView],
+    capabilities: [C.notificationsView, C.housekeepingView, C.housekeepingManage, C.helpView],
     // Housekeeping is where the work actually happens, so send cleaners there
     // rather than to whichever permitted screen happens to sit highest in the nav.
     home: '/housekeeping',

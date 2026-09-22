@@ -18,8 +18,6 @@ export const paths = {
   properties: '/properties',
   propertyNew: '/properties/new',
   propertyDetail: (id = ':propertyId') => `/properties/${id}`,
-  units: '/units',
-  amenities: '/amenities',
   pricing: '/pricing',
   propertyReview: '/property-review',
 

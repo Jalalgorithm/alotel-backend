@@ -26,8 +26,6 @@ const NotificationsPage = load(() => import('@/features/notifications'), 'Notifi
 const PropertiesPage = load(() => import('@/features/properties'), 'PropertiesPage');
 const PropertyWizardPage = load(() => import('@/features/properties'), 'PropertyWizardPage');
 const PropertyDetailPage = load(() => import('@/features/properties'), 'PropertyDetailPage');
-const UnitsPage = load(() => import('@/features/properties'), 'UnitsPage');
-const AmenitiesPage = load(() => import('@/features/properties'), 'AmenitiesPage');
 const PricingPage = load(() => import('@/features/properties'), 'PricingPage');
 const PropertyReviewPage = load(() => import('@/features/properties'), 'PropertyReviewPage');
 
@@ -77,8 +75,6 @@ const SCREENS = [
   { path: paths.propertyNew, element: <PropertyWizardPage />, capability: C.propertiesManage },
   // Declared after `/properties/new` so the literal segment always wins the match.
   { path: paths.propertyDetail(), element: <PropertyDetailPage />, capability: C.propertiesView },
-  { path: paths.units, element: <UnitsPage />, capability: C.unitsView },
-  { path: paths.amenities, element: <AmenitiesPage />, capability: C.amenitiesManage },
   { path: paths.pricing, element: <PricingPage />, capability: C.pricingManage },
   { path: paths.propertyReview, element: <PropertyReviewPage />, capability: C.reviewsModerate },
 

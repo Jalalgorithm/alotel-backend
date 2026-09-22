@@ -2,8 +2,6 @@
 export { PropertiesPage } from './components/PropertiesPage';
 export { PropertyWizardPage } from './components/PropertyWizardPage';
 export { PropertyDetailPage } from './components/PropertyDetailPage';
-export { UnitsPage } from './components/UnitsPage';
-export { AmenitiesPage } from './components/AmenitiesPage';
 export { PricingPage } from './components/PricingPage';
 export { PropertyReviewPage } from './components/PropertyReviewPage';
 export { AddressFields } from './components/AddressFields';
@@ -18,10 +16,6 @@ export {
   useDeleteProperty,
 } from './hooks/useProperties';
 export {
-  useUnits,
-  useUnitStatus,
-  useAmenities,
-  useToggleAmenity,
   usePropertyReviews,
   useRespondToReview,
   useFlagReview,
