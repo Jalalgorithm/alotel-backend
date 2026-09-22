@@ -1,7 +1,6 @@
 import { apiClient } from '@/lib/apiClient';
 import { toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
-import { clone, delay } from '@/lib/mock/utils';
-import { invoices, revenueByMonth } from '@/lib/mock/finance';
+import { formatDate } from '@/utils/format';
 
 /** Financial service — payments, payouts, invoices and tax rules. */
 
@@ -53,18 +52,22 @@ const toPayment = (raw) => ({
   createdAt: raw.created_at,
 });
 
-/**
- * Revenue & Invoice screen — no confirmed real endpoint for the invoice
- * ledger or the monthly trend yet, so those two stay on fixture data (unlike
- * everything else in this file). The cost-breakdown chart is real — see
- * `getCostBreakdown` below.
- */
-const mockFinance = {
-  async revenue() {
-    await delay(320);
-    return clone({ invoices, revenueByMonth });
-  },
-};
+/** `GET /bookings/revenue/` row shape — an invoice-shaped view of a booking, not a separate Invoice model. */
+const toInvoice = (raw) => ({
+  id: raw.id,
+  bookingId: raw.booking_id,
+  client: raw.client,
+  issuedAt: raw.issued_at,
+  dueAt: raw.due_at,
+  currency: raw.currency,
+  subtotal: Number(raw.subtotal) || 0,
+  tax: Number(raw.tax) || 0,
+  total: Number(raw.total) || 0,
+  // Raw booking status (pending_payment/confirmed/active/...), not an invoice-paid
+  // state — label/colour it the same way BookingsPage's StatusPill does, via
+  // BOOKING_STATUS_LABELS/BOOKING_STATUS_VARIANT, not a fixed invoice vocabulary.
+  status: raw.status,
+});
 
 /**
  * Payment operations the API actually exposes.
@@ -324,6 +327,48 @@ const realFinance = {
       breakdown: (data?.breakdown ?? []).map((row) => ({ label: row.category, value: Number(row.amount) || 0 })),
     };
   },
+
+  /** `GET /bookings/revenue/` — invoice-shaped booking list for the Revenue & Invoice screen, `IsLevel1Or2`. */
+  listInvoices: async (params = {}) => {
+    const query = { page: params.page ?? 1 };
+    if (params.status) query.status = params.status;
+    if (params.propertyId) query.property_id = params.propertyId;
+    if (params.query) query.q = params.query;
+    if (params.checkInFrom) query.check_in_from = params.checkInFrom;
+    if (params.checkInTo) query.check_in_to = params.checkInTo;
+    if (params.pageSize) query.page_size = params.pageSize;
+
+    const { data } = await apiClient.get('/bookings/revenue/', { params: query });
+    const pageSize = data?.page_size ?? params.pageSize ?? 20;
+    return {
+      items: (data?.results ?? []).map(toInvoice),
+      total: data?.count ?? 0,
+      page: data?.page ?? query.page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil((data?.count ?? 0) / pageSize)),
+    };
+  },
+
+  /**
+   * `GET /admin/dashboard/revenue-overview/?granularity=monthly` — real monthly
+   * trend for the Revenue & Invoice chart, `IsLevel1`. Defaults to GBP (matches
+   * the chart's `£` formatting) since summing across the 5 real settlement
+   * currencies here would be meaningless — pass `currency` to override.
+   */
+  getRevenueByMonth: async ({ startDate, endDate, currency = 'GBP' } = {}) => {
+    const { data } = await apiClient.get('/admin/dashboard/revenue-overview/', {
+      params: {
+        granularity: 'monthly',
+        ...(startDate ? { start_date: startDate } : {}),
+        ...(endDate ? { end_date: endDate } : {}),
+        ...(currency ? { currency } : {}),
+      },
+    });
+    return (data?.series ?? []).map((row) => ({
+      label: formatDate(`${row.month}-01`, 'MMM'),
+      value: Number(row.revenue) || 0,
+    }));
+  },
 };
 
 /** Real payout rows have no free-text search field server-side — filter client-side over the fields the table shows. */
@@ -381,9 +426,9 @@ export const financeService = {
     return data;
   },
 
-  /** Revenue & Invoice — invoice ledger and monthly trend have no confirmed real endpoint yet, stay mocked. */
-  getRevenue: () => mockFinance.revenue(),
-  /** The cost-breakdown chart on the same screen is real — see `realFinance.getCostBreakdown`. */
+  /** Revenue & Invoice screen — all three real now. */
+  getInvoices: (params) => realFinance.listInvoices(params),
+  getRevenueByMonth: (params) => realFinance.getRevenueByMonth(params),
   getCostBreakdown: (params) => realFinance.getCostBreakdown(params),
 
   /* Tax rules. */

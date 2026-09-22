@@ -1,23 +1,79 @@
+import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { ListToolbar } from '@/components/shared/ListToolbar';
+import { Pagination } from '@/components/shared/Pagination';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge, StatusBadge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/Badge';
 import { DataTable } from '@/components/ui/DataTable';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { BarChart, DonutChart } from '@/components/charts';
-import { useCostBreakdown, useRevenue } from '../hooks/useFinance';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useCostBreakdown, useInvoices, useRevenueByMonth } from '../hooks/useFinance';
 import { formatCurrency, formatDate } from '@/utils/format';
+import { BOOKING_STATUSES, BOOKING_STATUS_LABELS, BOOKING_STATUS_VARIANT } from '@/lib/bookingSchema';
+import { paths } from '@/routes/paths';
 
-/**
- * Revenue trend and the invoice ledger are sample data — there's no backend
- * endpoint for either yet (see the recommendation handed to the backend team).
- * The cost-breakdown chart is real, from `GET /admin/dashboard/cost-breakdown/`.
- */
+const STATUS_OPTIONS = [
+  { value: 'All', label: 'All statuses' },
+  ...BOOKING_STATUSES.map((value) => ({ value, label: BOOKING_STATUS_LABELS[value] ?? value })),
+];
+
+/** Builds and downloads a CSV from the currently-loaded page of invoice rows. */
+const downloadInvoicesCsv = (rows) => {
+  const header = ['Invoice', 'Booking ID', 'Client', 'Issued', 'Due', 'Currency', 'Subtotal', 'Tax', 'Total', 'Status'];
+  const csvRow = (values) => values.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',');
+  const lines = [
+    csvRow(header),
+    ...rows.map((row) =>
+      csvRow([
+        row.id,
+        row.bookingId,
+        row.client,
+        row.issuedAt,
+        row.dueAt,
+        row.currency,
+        row.subtotal,
+        row.tax,
+        row.total,
+        BOOKING_STATUS_LABELS[row.status] ?? row.status,
+      ]),
+    ),
+  ];
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `alotel-revenue-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+/** Revenue trend, operating cost split and the invoice ledger — all real. */
 export const RevenuePage = () => {
-  const { data, isLoading } = useRevenue();
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('All');
+  const [page, setPage] = useState(1);
+  const debouncedQuery = useDebouncedValue(query);
+
+  const { data, isFetching } = useInvoices({
+    query: debouncedQuery || undefined,
+    status: status === 'All' ? undefined : status,
+    page,
+    pageSize: 10,
+  });
+  const { data: revenueByMonth, isLoading: isRevenueLoading } = useRevenueByMonth();
   const { data: costBreakdown, isLoading: isCostLoading } = useCostBreakdown();
+
+  const withReset = (setter) => (value) => {
+    setter(value);
+    setPage(1);
+  };
 
   const columns = [
     {
@@ -26,7 +82,7 @@ export const RevenuePage = () => {
       render: (row) => (
         <div className="min-w-0">
           <p className="font-mono text-[11.5px] font-bold text-brand-700">{row.id}</p>
-          <p className="text-[10.5px] text-ink-muted">#{row.bookingId}</p>
+          <p className="text-[10.5px] text-ink-muted">#{row.bookingId.slice(0, 8)}</p>
         </div>
       ),
     },
@@ -63,50 +119,39 @@ export const RevenuePage = () => {
         </span>
       ),
     },
-    { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => (
+        <Badge variant={BOOKING_STATUS_VARIANT[row.status] ?? 'neutral'} dot>
+          {BOOKING_STATUS_LABELS[row.status] ?? row.status}
+        </Badge>
+      ),
+    },
     {
       key: 'actions',
       header: '',
       align: 'right',
-      render: () => (
-        <Button
-          size="xs"
-          variant="ghost"
-          disabled
-          title="Sample data — real downloads will work once the invoice ledger is wired to a live endpoint"
-          leftIcon={<Download className="size-3" aria-hidden="true" />}
-        >
+      render: (row) => (
+        <Button size="xs" variant="ghost" to={paths.bookingInvoice(row.bookingId)} leftIcon={<Download className="size-3" aria-hidden="true" />}>
           PDF
         </Button>
       ),
     },
   ];
 
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <PageHeader title="Revenue & Invoice" />
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <Skeleton className="h-72 rounded-card" />
-          <Skeleton className="h-72 rounded-card" />
-        </div>
-        <Skeleton className="h-80 rounded-card" />
-      </div>
-    );
-  }
-
-  const total = data.revenueByMonth.reduce((sum, month) => sum + month.value, 0);
+  const monthlyTotal = (revenueByMonth ?? []).reduce((sum, month) => sum + month.value, 0);
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Revenue & Invoice"
-        subtitle="Six-month revenue trend, operating cost split and the invoice ledger."
+        subtitle="Trailing 12-month revenue, operating cost split and the invoice ledger."
         actions={
           <Button
-            disabled
-            title="Sample data — export will work once the invoice ledger is wired to a live endpoint"
+            disabled={!data?.items?.length}
             leftIcon={<Download className="size-3.5" aria-hidden="true" />}
+            onClick={() => downloadInvoicesCsv(data.items)}
           >
             Export CSV
           </Button>
@@ -117,16 +162,25 @@ export const RevenuePage = () => {
         <Card>
           <CardHeader
             title="Revenue by month"
-            subtitle={`£${(total / 1000).toFixed(1)}k across the period · hover a column for detail`}
-            action={<Badge variant="neutral">Sample data</Badge>}
+            subtitle={
+              isRevenueLoading
+                ? 'Loading…'
+                : `£${(monthlyTotal / 1000).toFixed(1)}k across the period · hover a column for detail`
+            }
           />
           <div className="px-4 pb-4">
-            <BarChart
-              data={data.revenueByMonth}
-              highlightIndex={data.revenueByMonth.length - 1}
-              height={200}
-              formatValue={(value) => `£${value >= 1000 ? `${(value / 1000).toFixed(value % 1000 ? 1 : 0)}k` : value}`}
-            />
+            {isRevenueLoading ? (
+              <Skeleton className="h-48 w-full" />
+            ) : revenueByMonth?.length ? (
+              <BarChart
+                data={revenueByMonth}
+                highlightIndex={revenueByMonth.length - 1}
+                height={200}
+                formatValue={(value) => `£${value >= 1000 ? `${(value / 1000).toFixed(value % 1000 ? 1 : 0)}k` : value}`}
+              />
+            ) : (
+              <EmptyState title="No revenue in this period" />
+            )}
           </div>
         </Card>
 
@@ -154,15 +208,23 @@ export const RevenuePage = () => {
       </div>
 
       <Card>
-        <CardHeader
-          title="Invoices"
-          subtitle="Issued to guests and corporate clients."
-          action={<Badge variant="neutral">Sample data</Badge>}
-        />
+        <CardHeader title="Invoices" subtitle="Issued to guests and corporate clients." />
+        <div className="p-4 pt-0">
+          <ListToolbar
+            search={query}
+            onSearchChange={withReset(setQuery)}
+            searchPlaceholder="Search by booking ID or guest…"
+            total={data?.total}
+            noun="invoice"
+            filters={[{ id: 'status', value: status, onChange: withReset(setStatus), options: STATUS_OPTIONS, label: 'Status' }]}
+          />
+        </div>
         <div className="border-t border-line">
-          <DataTable columns={columns} rows={data.invoices} emptyTitle="No invoices issued" />
+          <DataTable columns={columns} rows={data?.items ?? []} isLoading={isFetching && !data} emptyTitle="No invoices issued" />
         </div>
       </Card>
+
+      <Pagination page={data?.page ?? 1} totalPages={data?.totalPages ?? 1} onChange={setPage} />
     </div>
   );
 };

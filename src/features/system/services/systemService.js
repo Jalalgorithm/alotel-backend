@@ -75,8 +75,12 @@ const parseConfigValue = (raw, fallback) => {
  */
 const realSystem = {
   async getSettings(userId) {
+    // `/admin/system/config/` is Super Admin only — a Facility Manager 403s here.
+    // Caught the same defensive way as the other two calls so one role-gated
+    // endpoint doesn't reject the whole Promise.all and crash the page; a
+    // Facility Manager simply sees every config field at its default.
     const [{ data: configData }, prefs, integrationsList] = await Promise.all([
-      apiClient.get('/admin/system/config/'),
+      apiClient.get('/admin/system/config/').catch(() => ({ data: null })),
       userId ? realSystem.getNotificationPreferences(userId).catch(() => null) : Promise.resolve(null),
       realSystem.getIntegrations().catch(() => []),
     ]);

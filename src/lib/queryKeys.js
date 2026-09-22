@@ -70,6 +70,7 @@ export const queryKeys = {
     payments: (filters = {}) => ['finance', 'payments', filters],
     payouts: (filters = {}) => ['finance', 'payouts', filters],
     invoices: (filters = {}) => ['finance', 'invoices', filters],
+    revenueByMonth: (filters = {}) => ['finance', 'revenue-by-month', filters],
     taxRules: (filters = {}) => ['finance', 'tax-rules', filters],
     coverageAlerts: () => ['finance', 'coverage-alerts'],
     expenses: (filters = {}) => ['finance', 'expenses', filters],

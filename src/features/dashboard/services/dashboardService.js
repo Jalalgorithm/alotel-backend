@@ -10,12 +10,21 @@ export const dashboardService = {
   /** `GET /admin/dashboard/` */
   getOverview: async () => (await apiClient.get('/admin/dashboard/')).data,
 
-  /** `GET /admin/dashboard/revenue-overview/` — Mon–Sun totals for the given date range. */
-  getRevenueOverview: async ({ startDate, endDate } = {}) => {
+  /**
+   * `GET /admin/dashboard/revenue-overview/` — one endpoint, two shapes via `granularity`:
+   *   'weekday' (default) — Mon–Sun totals for the given date range, summed across currencies.
+   *   'monthly' — one row per calendar month. Never summed across currencies (this system
+   *   settles in 5 real currencies with no conversion anywhere) — pass `currency` to narrow
+   *   to a single reporting currency (`revenue` per row), or omit it for a `by_currency`
+   *   breakdown per row. Super Admin only (`IsLevel1`).
+   */
+  getRevenueOverview: async ({ startDate, endDate, granularity, currency } = {}) => {
     const { data } = await apiClient.get('/admin/dashboard/revenue-overview/', {
       params: {
         ...(startDate ? { start_date: startDate } : {}),
         ...(endDate ? { end_date: endDate } : {}),
+        ...(granularity ? { granularity } : {}),
+        ...(currency ? { currency } : {}),
       },
     });
     return data;

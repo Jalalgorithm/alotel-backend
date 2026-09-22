@@ -56,10 +56,17 @@ export const useSchedulePayout = () => {
   return { schedulePayout: mutation.mutate, isPending: mutation.isPending };
 };
 
-export const useRevenue = () =>
+export const useInvoices = (params = {}) =>
   useQuery({
-    queryKey: queryKeys.finance.invoices(),
-    queryFn: financeService.getRevenue,
+    queryKey: queryKeys.finance.invoices(params),
+    queryFn: () => financeService.getInvoices(params),
+    placeholderData: keepPreviousData,
+  });
+
+export const useRevenueByMonth = (params = {}) =>
+  useQuery({
+    queryKey: queryKeys.finance.revenueByMonth(params),
+    queryFn: () => financeService.getRevenueByMonth(params),
   });
 
 /** Real spend-by-category for the Revenue & Invoice screen's donut chart — defaults to month-to-date, same as the endpoint. */

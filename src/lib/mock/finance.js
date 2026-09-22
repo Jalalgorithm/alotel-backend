@@ -32,28 +32,6 @@ export const payouts = [
 
 export const PAYOUT_STATUSES = ['All', 'Pending', 'Released', 'Failed'];
 
-/* -------------------------------------------------------------------------- */
-/* Invoices                                                                    */
-/* -------------------------------------------------------------------------- */
-
-export const invoices = [
-  { id: 'INV-2026-0412', bookingId: 'AS-8821', client: 'Jamila Amara', issuedAt: '2026-08-01', dueAt: '2026-08-06', currency: 'NGN', subtotal: 1295000, tax: 64750, total: 1359750, status: 'Paid' },
-  { id: 'INV-2026-0413', bookingId: 'AS-8823', client: 'Sana Khan (Corporate)', issuedAt: '2026-08-02', dueAt: '2026-08-08', currency: 'AED', subtotal: 13300, tax: 1330, total: 14630, status: 'Due' },
-  { id: 'INV-2026-0414', bookingId: 'AS-8819', client: 'Sofia Reyes', issuedAt: '2026-08-01', dueAt: '2026-08-15', currency: 'EUR', subtotal: 2700, tax: 270, total: 2970, status: 'Due' },
-  { id: 'INV-2026-0415', bookingId: 'AS-8818', client: 'David Chen', issuedAt: '2026-07-26', dueAt: '2026-07-31', currency: 'USD', subtotal: 1050, tax: 0, total: 1050, status: 'Paid' },
-  { id: 'INV-2026-0416', bookingId: 'AS-8814', client: 'Tom Whitfield (Corporate)', issuedAt: '2026-08-03', dueAt: '2026-08-17', currency: 'GBP', subtotal: 840, tax: 168, total: 1008, status: 'Due' },
-];
-
-/** Monthly revenue series backing the Revenue & Invoice screen. */
-export const revenueByMonth = [
-  { label: 'Feb', value: 14200 },
-  { label: 'Mar', value: 16800 },
-  { label: 'Apr', value: 15400 },
-  { label: 'May', value: 19600 },
-  { label: 'Jun', value: 21300 },
-  { label: 'Jul', value: 24600 },
-];
-
 /** Weekly revenue backing the dashboard's "Revenue Overview" chart. */
 export const revenueByDay = [
   { label: 'Mon', value: 2100 },
