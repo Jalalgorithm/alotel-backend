@@ -1,7 +1,7 @@
 import { apiClient } from '@/lib/apiClient';
 import { toCoverageAlert, toCsvRowPayload, toTaxRule, toTaxRulePayload } from '@/lib/taxSchema';
 import { clone, delay } from '@/lib/mock/utils';
-import { costBreakdown, invoices, revenueByMonth } from '@/lib/mock/finance';
+import { invoices, revenueByMonth } from '@/lib/mock/finance';
 
 /** Financial service — payments, payouts, invoices and tax rules. */
 
@@ -54,13 +54,15 @@ const toPayment = (raw) => ({
 });
 
 /**
- * Revenue & Invoice screen — no confirmed real endpoint for this yet, stays
- * on fixture data (unlike everything else in this file).
+ * Revenue & Invoice screen — no confirmed real endpoint for the invoice
+ * ledger or the monthly trend yet, so those two stay on fixture data (unlike
+ * everything else in this file). The cost-breakdown chart is real — see
+ * `getCostBreakdown` below.
  */
 const mockFinance = {
   async revenue() {
     await delay(320);
-    return clone({ invoices, revenueByMonth, costBreakdown });
+    return clone({ invoices, revenueByMonth });
   },
 };
 
@@ -303,6 +305,25 @@ const realFinance = {
   releasePayout: async (id) => (await apiClient.post(`/payouts/${id}/release/`)).data,
   /** `POST /payouts/` — Super Admin only. */
   createPayout: async (payload) => (await apiClient.post('/payouts/', payload)).data,
+
+  /**
+   * `GET /admin/dashboard/cost-breakdown/` — real spend-by-category for the
+   * Revenue & Invoice screen's donut chart. Super Admin only (`IsLevel1`).
+   * Amounts have no `currency` field server-side — these cost models
+   * (`ExpenseEntry`/`MaintenanceTicketCost`) assume a single reporting
+   * currency by design, unlike the multi-currency payment/booking models.
+   */
+  getCostBreakdown: async (params = {}) => {
+    const query = {};
+    if (params.startDate) query.start_date = params.startDate;
+    if (params.endDate) query.end_date = params.endDate;
+    const { data } = await apiClient.get('/admin/dashboard/cost-breakdown/', { params: query });
+    return {
+      periodStart: data?.period_start ?? null,
+      periodEnd: data?.period_end ?? null,
+      breakdown: (data?.breakdown ?? []).map((row) => ({ label: row.category, value: Number(row.amount) || 0 })),
+    };
+  },
 };
 
 /** Real payout rows have no free-text search field server-side — filter client-side over the fields the table shows. */
@@ -360,8 +381,10 @@ export const financeService = {
     return data;
   },
 
-  /** Revenue & Invoice — no confirmed real endpoint yet, stays mocked. */
+  /** Revenue & Invoice — invoice ledger and monthly trend have no confirmed real endpoint yet, stay mocked. */
   getRevenue: () => mockFinance.revenue(),
+  /** The cost-breakdown chart on the same screen is real — see `realFinance.getCostBreakdown`. */
+  getCostBreakdown: (params) => realFinance.getCostBreakdown(params),
 
   /* Tax rules. */
   getTaxRules: (params) => realTaxes.list(params),

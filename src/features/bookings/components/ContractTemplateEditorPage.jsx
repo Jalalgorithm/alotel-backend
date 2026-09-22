@@ -24,12 +24,12 @@ import {
 import {
   useContractCoverage,
   useCreateTemplateDraft,
+  useDeleteTemplate,
   useDuplicateTemplate,
   useMergeFields,
   usePreviewTemplate,
   usePublishTemplate,
   useTemplatesForCell,
-  useUpdateTemplateDraft,
 } from '../hooks/useContracts';
 import { useBookings } from '../hooks/useBookings';
 
@@ -116,9 +116,14 @@ const BookingPicker = ({ selected, onSelect, onClear }) => {
 /**
  * Full-page template editor — write side (name, fixed region/stay type, content,
  * merge-field palette, unknown-fields list) and preview side (debounced render
- * against a sample or real booking). New drafts go through `useCreateTemplateDraft`;
- * existing ones through `useUpdateTemplateDraft`. Publishing is a separate,
- * explicit confirm step once the draft is saved.
+ * against a sample or real booking). Publishing is a separate, explicit confirm
+ * step once the draft is saved.
+ *
+ * Saving an EXISTING draft does not PATCH it — the backend's update endpoint
+ * unconditionally 500s (a server-side bug, reported upstream; not something
+ * this app can fix). Instead, `save()` deletes the old draft and creates a new
+ * one with the edited content, then lands on that new draft's URL. See `save()`
+ * below for the exact ordering and the failure mode this has to guard against.
  */
 export const ContractTemplateEditorPage = () => {
   const { templateId } = useParams();
@@ -145,7 +150,7 @@ export const ContractTemplateEditorPage = () => {
   const groupedFields = useMemo(() => groupMergeFields(mergeFields), [mergeFields]);
 
   const { createDraftAsync, isCreating } = useCreateTemplateDraft();
-  const { updateDraftAsync, isSaving } = useUpdateTemplateDraft();
+  const { deleteTemplateAsync, isDeleting } = useDeleteTemplate();
   const { publish, isPublishing } = usePublishTemplate();
   const { duplicate, isDuplicating } = useDuplicateTemplate();
   const { preview, result: previewResult, isPreviewing } = usePreviewTemplate();
@@ -154,6 +159,17 @@ export const ContractTemplateEditorPage = () => {
   const [content, setContent] = useState('');
   const [notEditableError, setNotEditableError] = useState(false);
   const [saveError, setSaveError] = useState(null);
+  // Set when a delete-then-recreate save deletes the old draft but then fails
+  // to create its replacement — `templateId` (from the URL) is now a dead
+  // reference, but nothing of the user's is lost, so this is tracked locally
+  // rather than by navigating away (which would remount the page and lose the
+  // in-progress name/content).
+  const [orphaned, setOrphaned] = useState(false);
+  // Drives which save path runs, once a delete-then-recreate has orphaned the
+  // URL's templateId — separate from `isNew` so the rest of the page (title,
+  // Publish/duplicate visibility) still reflects that there's no real saved
+  // row right now.
+  const effectivelyNew = isNew || orphaned;
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [publishError, setPublishError] = useState(null);
@@ -212,15 +228,36 @@ export const ContractTemplateEditorPage = () => {
     setSaveError(null);
     setNotEditableError(false);
     try {
-      if (isNew) {
+      if (effectivelyNew) {
         const created = await createDraftAsync({ name, region, stayType, content });
+        setOrphaned(false);
         navigate(`${paths.contractTemplateEdit(created.id)}?region=${region}&stayType=${stayType}`, { replace: true });
-      } else {
-        await updateDraftAsync({ id: templateId, patch: { name, content } });
+        return true;
       }
-      return true;
+
+      // Delete-then-recreate, not PATCH — see the module docstring. Deleting
+      // first is required: creating while the old draft still exists collides
+      // with the backend's own (also broken) uniqueness check on new drafts.
+      await deleteTemplateAsync({ id: templateId, region, stayType });
+
+      try {
+        const created = await createDraftAsync({ name, region, stayType, content });
+        setOrphaned(false);
+        navigate(`${paths.contractTemplateEdit(created.id)}?region=${region}&stayType=${stayType}`, { replace: true });
+        return true;
+      } catch (createError) {
+        // The old draft is already gone — nothing of the user's is lost
+        // (name/content stay in this component's state), but `templateId`
+        // (from the URL) no longer points at a real row. Stay on this page —
+        // navigating would remount it and lose that state — and flip to the
+        // create path so pressing Save again (the cell is now empty) succeeds.
+        setOrphaned(true);
+        setSaveError(createError);
+        return false;
+      }
     } catch (error) {
-      if (getErrorCode(error) === 'not_editable') setNotEditableError(true);
+      const code = getErrorCode(error);
+      if (code === 'not_editable' || code === 'not_deletable') setNotEditableError(true);
       else setSaveError(error);
       return false;
     }
@@ -237,7 +274,7 @@ export const ContractTemplateEditorPage = () => {
   };
 
   const readOnly = !canAuthor;
-  const isBusy = isCreating || isSaving;
+  const isBusy = isCreating || isDeleting;
   // The server rejects publish without this block, and the preview endpoint
   // doesn't check — so surface it while the template is still being written.
   const signatureMissing = requiresSignature && !hasSignatureField(content);
@@ -245,7 +282,7 @@ export const ContractTemplateEditorPage = () => {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={isNew ? 'New contract template' : existing?.name || 'Edit template'}
+        title={effectivelyNew ? 'New contract template' : existing?.name || 'Edit template'}
         subtitle={`${regionLabel(region)} · ${stayTypeLabel(stayType)}`}
         actions={
           <>
@@ -255,9 +292,9 @@ export const ContractTemplateEditorPage = () => {
             {!readOnly && (
               <>
                 <Button variant="primary" isLoading={isBusy} disabled={!isDirty} onClick={save}>
-                  {isNew ? 'Create draft' : 'Save changes'}
+                  {effectivelyNew ? 'Create draft' : 'Save changes'}
                 </Button>
-                {!isNew && existing?.status === 'draft' && (
+                {!effectivelyNew && existing?.status === 'draft' && (
                   <Button
                     variant="dangerSoft"
                     isLoading={isPublishing}
@@ -268,7 +305,7 @@ export const ContractTemplateEditorPage = () => {
                     Publish
                   </Button>
                 )}
-                {!isNew && existing?.status !== 'draft' && (
+                {!effectivelyNew && existing?.status !== 'draft' && (
                   <Button isLoading={isDuplicating} onClick={() => duplicate({ id: templateId })}>
                     New draft from this
                   </Button>
@@ -285,6 +322,12 @@ export const ContractTemplateEditorPage = () => {
       {notEditableError && (
         <Alert variant="error" title="Can't save">
           Published templates can&apos;t be changed. Create a new draft from it instead.
+        </Alert>
+      )}
+      {orphaned && (
+        <Alert variant="warn" title="Save failed, but nothing is lost">
+          The previous draft was removed but the new one couldn&apos;t be created. Your text below is untouched — press{' '}
+          <strong>Create draft</strong> again to save it.
         </Alert>
       )}
       {saveError && <Alert variant="error">{getErrorMessage(saveError)}</Alert>}

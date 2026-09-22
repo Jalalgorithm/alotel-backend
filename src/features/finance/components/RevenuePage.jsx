@@ -2,17 +2,22 @@ import { Download } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { StatusBadge } from '@/components/ui/Badge';
+import { Badge, StatusBadge } from '@/components/ui/Badge';
 import { DataTable } from '@/components/ui/DataTable';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { BarChart, DonutChart } from '@/components/charts';
-import { useRevenue } from '../hooks/useFinance';
+import { useCostBreakdown, useRevenue } from '../hooks/useFinance';
 import { formatCurrency, formatDate } from '@/utils/format';
-import { toast } from '@/stores/uiStore';
 
-/** Revenue trend, cost split and the invoice ledger. */
+/**
+ * Revenue trend and the invoice ledger are sample data — there's no backend
+ * endpoint for either yet (see the recommendation handed to the backend team).
+ * The cost-breakdown chart is real, from `GET /admin/dashboard/cost-breakdown/`.
+ */
 export const RevenuePage = () => {
   const { data, isLoading } = useRevenue();
+  const { data: costBreakdown, isLoading: isCostLoading } = useCostBreakdown();
 
   const columns = [
     {
@@ -63,12 +68,13 @@ export const RevenuePage = () => {
       key: 'actions',
       header: '',
       align: 'right',
-      render: (row) => (
+      render: () => (
         <Button
           size="xs"
           variant="ghost"
+          disabled
+          title="Sample data — real downloads will work once the invoice ledger is wired to a live endpoint"
           leftIcon={<Download className="size-3" aria-hidden="true" />}
-          onClick={() => toast.success('Invoice downloaded', row.id)}
         >
           PDF
         </Button>
@@ -97,7 +103,11 @@ export const RevenuePage = () => {
         title="Revenue & Invoice"
         subtitle="Six-month revenue trend, operating cost split and the invoice ledger."
         actions={
-          <Button leftIcon={<Download className="size-3.5" aria-hidden="true" />} onClick={() => toast.success('Export started')}>
+          <Button
+            disabled
+            title="Sample data — export will work once the invoice ledger is wired to a live endpoint"
+            leftIcon={<Download className="size-3.5" aria-hidden="true" />}
+          >
             Export CSV
           </Button>
         }
@@ -108,6 +118,7 @@ export const RevenuePage = () => {
           <CardHeader
             title="Revenue by month"
             subtitle={`£${(total / 1000).toFixed(1)}k across the period · hover a column for detail`}
+            action={<Badge variant="neutral">Sample data</Badge>}
           />
           <div className="px-4 pb-4">
             <BarChart
@@ -120,15 +131,34 @@ export const RevenuePage = () => {
         </Card>
 
         <Card>
-          <CardHeader title="Operating cost breakdown" subtitle="Share of total operating spend" />
+          <CardHeader title="Operating cost breakdown" subtitle="Month-to-date, by category" />
           <div className="px-4 pb-4">
-            <DonutChart data={data.costBreakdown} centerValue="100%" centerLabel="Operating spend" size={150} />
+            {isCostLoading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : costBreakdown?.breakdown?.some((row) => row.value > 0) ? (
+              <DonutChart
+                data={costBreakdown.breakdown}
+                centerValue={formatCurrency(
+                  costBreakdown.breakdown.reduce((sum, row) => sum + row.value, 0),
+                  'GBP',
+                  { compact: true },
+                )}
+                centerLabel="Operating spend"
+                size={150}
+              />
+            ) : (
+              <EmptyState title="No spend logged yet this month" />
+            )}
           </div>
         </Card>
       </div>
 
       <Card>
-        <CardHeader title="Invoices" subtitle="Issued to guests and corporate clients." />
+        <CardHeader
+          title="Invoices"
+          subtitle="Issued to guests and corporate clients."
+          action={<Badge variant="neutral">Sample data</Badge>}
+        />
         <div className="border-t border-line">
           <DataTable columns={columns} rows={data.invoices} emptyTitle="No invoices issued" />
         </div>

@@ -19,7 +19,14 @@ export const useClickOutside = (handler, enabled = true) => {
     if (!enabled) return undefined;
 
     const onPointerDown = (event) => {
-      if (ref.current && !ref.current.contains(event.target)) savedHandler.current(event);
+      if (!ref.current || ref.current.contains(event.target)) return;
+      // A click inside a DIFFERENT dialog (e.g. a confirmation modal portaled on
+      // top of this one) isn't "outside" — it's inside another modal, which is a
+      // DOM sibling rather than a descendant once portaled. Without this check, a
+      // nested modal closes its parent on mousedown before its own onClick can
+      // fire, since the parent's "outside" check can't see through portals.
+      if (event.target.closest?.('[role="dialog"]')) return;
+      savedHandler.current(event);
     };
     const onKeyDown = (event) => {
       if (event.key === 'Escape') savedHandler.current(event);

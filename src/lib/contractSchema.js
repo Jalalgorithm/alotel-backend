@@ -97,6 +97,10 @@ export const toTemplate = (raw) => ({
   retiredAt: raw.retired_at ?? null,
   acceptedBookings: raw.accepted_bookings ?? 0,
   contractsIssued: raw.contracts ?? raw.issued_contracts ?? 0,
+  // Server-authoritative — a draft can still fail to edit/delete (e.g. it's
+  // already referenced elsewhere) even though `status === 'draft'` looks safe.
+  isEditable: raw.is_editable ?? raw.status === 'draft',
+  isDeletable: raw.is_deletable ?? raw.status === 'draft',
   createdAt: raw.created_at,
   updatedAt: raw.updated_at,
 });

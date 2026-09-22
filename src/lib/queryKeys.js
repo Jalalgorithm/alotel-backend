@@ -75,6 +75,7 @@ export const queryKeys = {
     taxRules: (filters = {}) => ['finance', 'tax-rules', filters],
     coverageAlerts: () => ['finance', 'coverage-alerts'],
     expenses: (filters = {}) => ['finance', 'expenses', filters],
+    costBreakdown: (filters = {}) => ['finance', 'cost-breakdown', filters],
     deposit: (bookingId) => ['finance', 'deposit', bookingId],
     fxRates: (base) => ['finance', 'fx-rates', base],
   },

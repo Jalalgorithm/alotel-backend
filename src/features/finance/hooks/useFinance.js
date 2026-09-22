@@ -62,6 +62,13 @@ export const useRevenue = () =>
     queryFn: financeService.getRevenue,
   });
 
+/** Real spend-by-category for the Revenue & Invoice screen's donut chart — defaults to month-to-date, same as the endpoint. */
+export const useCostBreakdown = (params = {}) =>
+  useQuery({
+    queryKey: queryKeys.finance.costBreakdown(params),
+    queryFn: () => financeService.getCostBreakdown(params),
+  });
+
 /* -------------------------------------------------------------------------- */
 /* Expenses (Cost Breakdown's manual categories)                              */
 /* -------------------------------------------------------------------------- */
