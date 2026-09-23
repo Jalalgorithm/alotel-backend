@@ -4,7 +4,7 @@ Operations portal for the Alotel Spaces property platform, built from the Figma 
 
 **Vite · React 19 (JavaScript/JSX) · React Router v6 · TanStack Query v5 · Zustand · Tailwind CSS v4 · Axios**
 
-Runs entirely on a mocked backend out of the box — `npm install && npm run dev` is all you need. It is the sibling of [`alotel-frontend`](../alotel-frontend) (the guest-facing site) and mirrors its structure and conventions exactly.
+Every feature runs against the live Django API — point `VITE_API_URL` at a backend and sign in. It is the sibling of [`alotel-frontend`](../alotel-frontend) (the guest-facing site) and mirrors its structure and conventions exactly.
 
 ---
 
@@ -12,7 +12,7 @@ Runs entirely on a mocked backend out of the box — `npm install && npm run dev
 
 ```bash
 npm install
-cp .env.example .env      # optional: the defaults already work
+cp .env.example .env      # then point VITE_API_URL at your backend
 npm run dev               # http://localhost:5174
 ```
 
@@ -52,7 +52,7 @@ Sign in as each to see the sidebar and permissions change.
 | **Users & roles** | Staff Management · Roles & Permissions · Audit Log |
 | **System** | Settings · Help |
 
-Everything is interactive against the mock backend — the property wizard, the tax-rule builder with its live calculation preview, the check-out damage/deposit maths, the check-in photo flow, review moderation, staff CRUD and the housekeeping board all mutate real (localStorage-backed) state that survives a reload.
+All of it is wired to the API — the property wizard, the tax-rule builder with its live calculation preview, the check-out damage/deposit maths, the check-in photo flow, review moderation, staff CRUD and the housekeeping board all read and write real server state. The only locally-served content left is the Help Centre's articles.
 
 ---
 
@@ -114,20 +114,17 @@ Identical to the guest frontend:
 
 ---
 
-## Mock mode vs. a real backend
+## Talking to the backend
 
-`VITE_USE_MOCK` decides which implementation each service uses. Both live side by side in the same file with an identical public surface, so **no component or hook changes** when you switch:
-
-```js
-const backend = env.useMock ? mockProperties : realProperties;
-```
+One variable decides which API the portal uses:
 
 ```dotenv
-VITE_API_URL=https://api.your-backend.com
-VITE_USE_MOCK=false
+VITE_API_URL=https://api.your-backend.com/api/v1
 ```
 
-`src/lib/apiClient.js` attaches the bearer token, sends cookies, and on a 401 refreshes once and replays the original request — with concurrent 401s queued behind that single refresh.
+Services are plain modules around `apiClient` — there is no mock/real switch any more. The portal used to carry a family of `VITE_USE_MOCK*` flags for features that hadn't been integrated; all of them now are, so the flags were removed rather than left to rot into a badge that claimed the app was on mock data when it wasn't.
+
+`src/lib/apiClient.js` attaches the bearer token, sends cookies, and on a 401 refreshes once and replays the original request — with concurrent 401s queued behind that single refresh. Refresh tokens rotate, so it persists whichever refresh token comes back rather than reusing the original; the API treats a reused one as theft and ends the session.
 
 ---
 

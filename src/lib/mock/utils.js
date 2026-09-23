@@ -1,12 +1,10 @@
-import { env } from '../env';
-
 /**
- * Helpers shared by every mocked service.
- * They exist purely to make the mock layer *feel* like a network boundary.
+ * Helpers shared by the remaining locally-served data (the Help Centre
+ * articles) and by real services that just want `clone`/`paginate`.
  */
 
 /** Resolve after a realistic amount of latency. */
-export const delay = (ms = env.mockLatency) => new Promise((resolve) => setTimeout(resolve, ms));
+export const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Deep clone so callers can never mutate the in-memory "database". */
 export const clone = (value) =>

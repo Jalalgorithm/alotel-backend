@@ -3,7 +3,10 @@ import { authService } from '../services/authService';
 import { queryKeys } from '@/lib/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from '@/stores/uiStore';
-import { getErrorMessage } from '@/utils/errors';
+import { getErrorMessage, getRetryAfterMessage } from '@/utils/errors';
+
+/** Rate-limit responses carry a machine-worded wait; prefer the human one. */
+const authErrorMessage = (error, fallback) => getRetryAfterMessage(error) ?? getErrorMessage(error, fallback);
 
 /**
  * Sign-in mutation.
@@ -25,7 +28,7 @@ export const useLogin = () => {
       setUser(result.user);
       toast.success('Signed in', `Welcome back, ${result.user.name.split(' ')[0]}.`);
     },
-    onError: (error) => toast.error('Sign in failed', getErrorMessage(error)),
+    onError: (error) => toast.error('Sign in failed', authErrorMessage(error)),
   });
 
   return {
@@ -33,6 +36,8 @@ export const useLogin = () => {
     loginAsync: mutation.mutateAsync,
     isPending: mutation.isPending,
     error: mutation.error,
+    /** Drops a rate-limit or lockout rejection once the credentials change. */
+    reset: mutation.reset,
   };
 };
 
@@ -46,10 +51,15 @@ export const useResendTwoFactor = () => {
   const mutation = useMutation({
     mutationFn: authService.resendTwoFactor,
     onSuccess: () => toast.success('Code sent', 'A new verification code is on its way.'),
-    onError: (error) => toast.error('Could not resend code', getErrorMessage(error)),
+    onError: (error) => toast.error('Could not resend code', authErrorMessage(error)),
   });
 
-  return { resendCode: mutation.mutate, isPending: mutation.isPending, isSuccess: mutation.isSuccess };
+  return {
+    resendCode: mutation.mutate,
+    isPending: mutation.isPending,
+    isSuccess: mutation.isSuccess,
+    error: mutation.error,
+  };
 };
 
 /** Second leg of a 2FA sign-in: exchange the emailed code for a session. */
@@ -64,12 +74,14 @@ export const useConfirmTwoFactor = () => {
       setUser(result.user);
       toast.success('Signed in', `Welcome back, ${result.user.name.split(' ')[0]}.`);
     },
-    onError: (error) => toast.error('Verification failed', getErrorMessage(error)),
+    onError: (error) => toast.error('Verification failed', authErrorMessage(error)),
   });
 
   return {
     confirmCode: mutation.mutate,
     isPending: mutation.isPending,
     error: mutation.error,
+    /** Clears a stale rejection once a fresh code has been sent. */
+    reset: mutation.reset,
   };
 };

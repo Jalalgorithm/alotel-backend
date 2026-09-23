@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Alert } from '@/components/ui/Alert';
 import { cn } from '@/utils/classNames';
-import { getErrorMessage } from '@/utils/errors';
+import { getErrorMessage, getRetryAfterMessage } from '@/utils/errors';
 import { AuthShell } from './AuthShell';
 import { useLogin } from '../hooks/useLogin';
 import { loginSchema } from '@/utils/validators';
@@ -23,22 +23,43 @@ const DEV_ACCOUNTS = [
   { role: ROLES[2], email: 'hk@alotelspaces.com', password: 'Password123' },
 ];
 
+/**
+ * Repeated failures lock the *address* out for a doubling delay, so retrying
+ * with the same credentials makes the wait longer rather than shorter.
+ */
+const IS_LOCKED_OUT = /too many failed sign-in attempts/i;
+
 /** Admin sign-in. */
 export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isPending, error } = useLogin();
+  const { login, isPending, error, reset } = useLogin();
   const [showDev, setShowDev] = useState(false);
 
   const {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: '', password: '', remember: true },
   });
+
+  const typedEmail = watch('email');
+  const typedPassword = watch('password');
+
+  // Clear a rejection as soon as the credentials change: without this the
+  // lockout/rate-limit block below would outlive the attempt that caused it
+  // and strand someone who has since corrected their email.
+  useEffect(() => {
+    if (error) reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typedEmail, typedPassword]);
+
+  const loginMessage = error ? getRetryAfterMessage(error) ?? getErrorMessage(error, 'We could not sign you in.') : null;
+  const isBlocked = Boolean(error) && (error.response?.status === 429 || IS_LOCKED_OUT.test(loginMessage ?? ''));
 
   const onSubmit = (values) =>
     login(
@@ -46,10 +67,17 @@ export const LoginPage = () => {
       {
         onSuccess: (result) => {
           // 2FA accounts get a code instead of tokens. Carry the password
-          // through so the code screen can re-send without a second sign-in.
+          // through so the code screen can re-send without a second sign-in,
+          // and the login ticket so the code can be confirmed as a credential
+          // that came from a real password check.
           if (result.status === '2fa_required') {
             navigate(paths.twoFactor, {
-              state: { email: result.email, password: values.password, from: location.state?.from },
+              state: {
+                email: result.email,
+                password: values.password,
+                loginTicket: result.loginTicket,
+                from: location.state?.from,
+              },
             });
             return;
           }
@@ -98,7 +126,16 @@ export const LoginPage = () => {
           {...register('password')}
         />
 
-        {error && <Alert variant="error">{getErrorMessage(error, 'We could not sign you in.')}</Alert>}
+        {loginMessage && (
+          <Alert variant="error">
+            {loginMessage}
+            {isBlocked && (
+              <span className="mt-1 block text-[12px] opacity-90">
+                Trying again before then will only extend the wait.
+              </span>
+            )}
+          </Alert>
+        )}
 
         <div className="flex justify-end">
           <Link to={paths.forgotPassword} className="text-[12px] font-semibold text-brand-700 hover:underline">
@@ -106,7 +143,7 @@ export const LoginPage = () => {
           </Link>
         </div>
 
-        <Button type="submit" variant="primary" size="lg" fullWidth isLoading={isPending}>
+        <Button type="submit" variant="primary" size="lg" fullWidth isLoading={isPending} disabled={isBlocked}>
           {isPending ? 'Signing in…' : 'Sign in'}
         </Button>
       </form>

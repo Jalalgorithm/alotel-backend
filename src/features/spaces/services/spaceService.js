@@ -19,8 +19,7 @@ import {
 /**
  * Spaces now has a real backend (`spaces` app, `/api/v1/spaces/...`) —
  * confirmed by reading `spaces/{models,serializers,views}.py` in full.
- * `realSpaces` below is the primary path (`env.useMockSpaces` defaults
- * false). A few real capabilities are narrower than the module originally
+ * A few real capabilities are narrower than the module originally
  * mocked: no delete-space endpoint, no update endpoint for layouts/add-ons
  * (create+delete only), and operating hours are one row per open weekday
  * with no bulk-update endpoint (create+delete only, no PATCH) — the

@@ -9,8 +9,17 @@ import { getInitials } from '@/utils/format';
  *
  * ── Login is a two-outcome operation ────────────────────────────────────────
  * `/auth/admin/login/` returns tokens when 2FA is off, but `{detail: "2FA code
- * sent"}` when it is on. `login()` therefore resolves to a tagged result so the
- * caller can route to the code screen rather than infer it from a missing key.
+ * sent", login_ticket: "…"}` when it is on. `login()` therefore resolves to a
+ * tagged result so the caller can route to the code screen rather than infer it
+ * from a missing key.
+ *
+ * ── The login ticket ────────────────────────────────────────────────────────
+ * That `login_ticket` proves the code screen was reached by passing the
+ * password, so a leaked six-digit code is not a credential on its own. The API
+ * still accepts a confirm without one today, but only because
+ * `TWOFA_REQUIRE_LOGIN_TICKET` defaults off — the server is built to have that
+ * switched on. We therefore carry the ticket through the flow now, so the
+ * switch is a server-side config change and not a sign-in outage.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -61,14 +70,21 @@ const realAuth = {
     const { data } = await apiClient.post('/auth/admin/login/', { email, password });
 
     // 2FA enabled: no tokens yet, a code has been emailed instead.
-    if (!data.access) return { status: '2fa_required', email };
+    if (!data.access) return { status: '2fa_required', email, loginTicket: data.login_ticket ?? null };
 
     authStorage.setSession({ token: data.access, refreshToken: data.refresh });
     return { status: 'authenticated' };
   },
 
-  async confirmTwoFactor({ email, code }) {
-    const { data } = await apiClient.post('/auth/admin/2fa/confirm/', { email, code });
+  async confirmTwoFactor({ email, code, loginTicket }) {
+    // Only send the ticket when we actually have one. The API rejects a
+    // *mismatched* ticket outright, so an empty string or null would turn a
+    // currently-working sign-in into a hard failure.
+    const { data } = await apiClient.post('/auth/admin/2fa/confirm/', {
+      email,
+      code,
+      ...(loginTicket ? { login_ticket: loginTicket } : {}),
+    });
     authStorage.setSession({ token: data.access, refreshToken: data.refresh });
     return { status: 'authenticated' };
   },
@@ -79,6 +95,9 @@ const realAuth = {
    * Uses the dedicated resend endpoint rather than replaying the login call —
    * that would mean holding the password in router state just to get a new
    * code, and would re-run the password hasher for no reason.
+   *
+   * No ticket is passed or returned: resending extends the pending ticket's
+   * life server-side, so the one captured at login stays the valid one.
    */
   async resendTwoFactor({ email }) {
     await apiClient.post('/auth/admin/2fa/resend/', { email });
@@ -123,7 +142,7 @@ export const authService = {
    * Authenticate a staff account. Persists the session on success.
    *
    * @param {{ email: string, password: string }} credentials
-   * @returns {Promise<{ status: 'authenticated', user: object } | { status: '2fa_required', email: string }>}
+   * @returns {Promise<{ status: 'authenticated', user: object } | { status: '2fa_required', email: string, loginTicket: string|null }>}
    */
   async login(credentials) {
     const result = await realAuth.login(credentials);
